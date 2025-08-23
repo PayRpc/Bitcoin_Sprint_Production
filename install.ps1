@@ -46,7 +46,8 @@ param(
     [string] $ServiceName = "BitcoinSprint",
     [int] $DashboardPort = 8080,
     [string] $VerifyApiUrl = $null,
-    [switch] $Force
+    [switch] $Force,
+    [switch] $JsonOutput
 )
 
 Set-StrictMode -Version Latest
@@ -72,7 +73,7 @@ function ExitSuccess([string]$msg, [hashtable]$details = @{}) {
     } else {
         Write-Host "✓ $msg"
     }
-    ExitSuccess "Install complete" @{ installDir = $InstallDir; serviceName = $ServiceName; dashboardPort = $DashboardPort; logPath = $logPath }
+    Exit 0
 }
 
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
@@ -220,5 +221,11 @@ LogMsg "Install complete. Log written to $logPath"
 # cleanup
 try { Remove-Item -Path $tmpDir -Recurse -Force } catch {}
 
-ExitSuccess "Install complete" @{ installDir = $InstallDir; serviceName = $ServiceName; dashboardPort = $DashboardPort; logPath = $logPath }
-
+# Exit with success message
+$details = @{ 
+    installDir = $InstallDir
+    serviceName = $ServiceName
+    dashboardPort = $DashboardPort
+    logPath = $logPath 
+}
+ExitSuccess -msg "Install complete" -details $details

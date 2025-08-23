@@ -1,0 +1,3 @@
+@echo off
+echo Running Bitcoin Sprint Service Installer with elevated privileges...
+powershell.exe -ExecutionPolicy Bypass -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy Bypass -File \"%~dp0install-verbose.ps1\"' -Verb RunAs"
