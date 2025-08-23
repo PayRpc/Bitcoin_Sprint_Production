@@ -1,0 +1,16 @@
+{
+    \ go.toolsManagement.checkForUpdates\: \local\,
+    \go.useLanguageServer\: true,
+    \go.formatTool\: \goimports\,
+    \go.lintTool\: \golint\,
+    \go.testFlags\: [\-v\],
+    \go.testTimeout\: \30s\,
+    \go.coverOnSave\: false,
+    \go.coverOnSingleTest\: true,
+    \go.coverageDecorator\: {
+        \type\: \gutter\
+    },
+    \go.buildOnSave\: \package\,
+    \go.vetOnSave\: \package\,
+    \go.lintOnSave\: \package\
+}
