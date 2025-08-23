@@ -1,59 +1,142 @@
 {
-    \ version\: \2.0.0\,
-    \tasks\: [
+    "version": "2.0.0",
+    "tasks": [
         {
-            \label\: \go: build\,
-            \type\: \shell\,
-            \command\: \go\,
-            \args\: [\build\, \.\],
-            \group\: \build\,
-            \presentation\: {
-                \echo\: true,
-                \reveal\: \always\,
-                \focus\: false,
-                \panel\: \shared\
+            "label": "🚀 Build Bitcoin Sprint (Optimized)",
+            "type": "shell",
+            "command": "go",
+            "args": [
+                "build",
+                "-ldflags=-s -w -extldflags=-static",
+                "-trimpath",
+                "-o", "bitcoin-sprint.exe",
+                "."
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
             },
-            \problemMatcher\: [\\\]
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": ["$go"]
         },
         {
-            \label\: \go: test\,
-            \type\: \shell\,
-            \command\: \go\,
-            \args\: [\test\, \-v\],
-            \group\: \test\,
-            \presentation\: {
-                \echo\: true,
-                \reveal\: \always\,
-                \focus\: false,
-                \panel\: \shared\
+            "label": "⚡ Build Release (Maximum Optimization)",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-ExecutionPolicy", "Bypass",
+                "-File", "./build-optimized.ps1",
+                "-Release"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared"
             },
-            \problemMatcher\: [\\\]
+            "problemMatcher": []
         },
         {
-            \label\: \go: test with coverage\,
-            \type\: \shell\,
-            \command\: \go\,
-            \args\: [\test\, \-v\, \-cover\],
-            \group\: \test\,
-            \presentation\: {
-                \echo\: true,
-                \reveal\: \always\,
-                \focus\: false,
-                \panel\: \shared\
+            "label": "🔧 Build Development",
+            "type": "shell",
+            "command": "go",
+            "args": [
+                "build",
+                "-race",
+                "-o", "bitcoin-sprint-dev.exe",
+                "."
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
             },
-            \problemMatcher\: [\\\]
+            "problemMatcher": ["$go"]
         },
         {
-            \label\: \go: install tools\,
-            \type\: \shell\,
-            \command\: \go\,
-            \args\: [\install\, \-a\, \golang.org/x/tools/gopls@latest\],
-            \group\: \build\,
-            \presentation\: {
-                \echo\: true,
-                \reveal\: \always\,
-                \focus\: false,
-                \panel\: \shared\
+            "label": "🧹 Clean Build Artifacts",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-Command",
+                "Remove-Item -Path '*.exe', '*.log', 'debug' -ErrorAction SilentlyContinue; Write-Host '✅ Clean complete' -ForegroundColor Green"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "📊 Benchmark Build",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-ExecutionPolicy", "Bypass",
+                "-File", "./build-optimized.ps1",
+                "-Benchmark"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "🔍 Go Vet (Code Analysis)",
+            "type": "shell",
+            "command": "go",
+            "args": ["vet", "./..."],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": ["$go"]
+        },
+        {
+            "label": "📝 Go Format",
+            "type": "shell",
+            "command": "gofmt",
+            "args": ["-s", "-w", "."],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "🔧 Install Go Tools",
+            "type": "shell",
+            "command": "go",
+            "args": [
+                "install",
+                "golang.org/x/tools/gopls@latest",
+                "honnef.co/go/tools/cmd/staticcheck@latest",
+                "mvdan.cc/gofumpt@latest"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
             }
         }
     ]

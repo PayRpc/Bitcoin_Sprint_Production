@@ -1,2 +1,47 @@
+# Bitcoin Sprint - Git Attributes File
+# Updated for cross-platform development and proper file handling
+
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Go source files
+*.go text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf
+
+# Configuration files
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+
+# Documentation
+*.md text eol=lf
+*.txt text eol=lf
+README* text eol=lf
+LICENSE* text eol=lf
+
+# Scripts
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.sh text eol=lf
+
+# Binary files (don't normalize line endings)
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+
+# Git files
+.gitignore text eol=lf
+.gitattributes text eol=lf

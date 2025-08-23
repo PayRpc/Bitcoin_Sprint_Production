@@ -1,1 +1,60 @@
+# Bitcoin Sprint - Git Ignore File
+# Updated for clean source-only repository
+
+# Compiled binaries
+*.exe
+*.dll
+*.so
+*.dylib
 bin/
+dist/
+
+# Go build cache
+go.sum
+vendor/
+
+# Log files
+*.log
+logs/
+
+# Configuration with sensitive data
+config-local.json
+*.env
+.env
+
+# IDE and editor files
+.vscode/settings.json
+.vscode/launch.json
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Test coverage
+*.out
+coverage.html
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+
+# Debug files
+debug
+*.pdb
+
+# Performance profiling
+*.prof
+*.pprof
+
+# Backup files
+*.bak
+*.backup

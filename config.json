@@ -4,10 +4,11 @@
   "metrics_url": "https://api.bitcoinsprint.com/metrics",
   "rpc_nodes": [
     "http://127.0.0.1:8332",
-    "http://backup-node:8332"
+    "http://127.0.0.1:8333",
+    "http://127.0.0.1:8334"
   ],
   "api_base": "https://api.bitcoinsprint.com",
   "rpc_user": "bitcoin",
-  "rpc_pass": "password123",
+  "rpc_pass": "sprint123benchmark",
   "poll_interval": 5
 }

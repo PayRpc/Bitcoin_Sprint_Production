@@ -64,9 +64,15 @@ type Sprint struct {
 	client      *http.Client
 	nodeBackoff map[string]time.Time
 
-	mu     sync.RWMutex
-	ctx    context.Context
-	cancel context.CancelFunc
+	// HOT PATH OPTIMIZATIONS: Pre-marshaled requests
+	getBlockchainInfoReq []byte
+	preEncodedPayload    []byte
+
+	// PERFORMANCE: Reduce lock contention
+	blocksSentMu sync.RWMutex
+
+	mu  sync.RWMutex
+	ctx context.Context
 }
 
 // ───────────────────────── Main ─────────────────────────
@@ -83,23 +89,44 @@ func main() {
 		peers:   make(map[string]net.Conn),
 		metrics: make(chan Metrics, 500),
 		client: &http.Client{
-			Timeout: 5 * time.Second, // faster overall timeout
+			Timeout: 2 * time.Second, // OPTIMIZED: Faster timeout for hot path
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
 					MinVersion:         tls.VersionTLS12,
 					InsecureSkipVerify: false, // Enforce certificate validation
 				},
-				DialContext:           (&net.Dialer{Timeout: 2 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
-				ForceAttemptHTTP2:     true,            // Enable HTTP/2 for better performance
-				ResponseHeaderTimeout: 2 * time.Second, // faster response
-				MaxIdleConns:          10,
-				MaxIdleConnsPerHost:   5,
-				IdleConnTimeout:       30 * time.Second,
+				DialContext:           (&net.Dialer{Timeout: 1 * time.Second, KeepAlive: 60 * time.Second}).DialContext,
+				ForceAttemptHTTP2:     false,           // OPTIMIZED: HTTP/1.1 for lower latency
+				ResponseHeaderTimeout: 1 * time.Second, // OPTIMIZED: Ultra-fast response
+				MaxIdleConns:          100,             // OPTIMIZED: Large connection pool
+				MaxIdleConnsPerHost:   50,              // OPTIMIZED: High per-host limit
+				IdleConnTimeout:       60 * time.Second,
 			},
 		},
 		nodeBackoff: make(map[string]time.Time),
 	}
-	s.ctx, s.cancel = context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	s.ctx = ctx
+
+	// HOT PATH OPTIMIZATION: Pre-marshal common requests at startup
+	s.getBlockchainInfoReq = []byte(`{"jsonrpc":"1.0","id":"sprint","method":"getblockchaininfo","params":[]}`)
+
+	// Pre-encode sprint payload template with placeholders
+	payload := struct {
+		Type     string `json:"type"`
+		Hash     string `json:"hash"`
+		Ts       string `json:"ts"`
+		Version  string `json:"version"`
+		Protocol int    `json:"protocol"`
+	}{
+		Type:     "block",
+		Hash:     "HASH_PLACEHOLDER",
+		Ts:       "TS_PLACEHOLDER",
+		Version:  "1.0.3",
+		Protocol: 1,
+	}
+	payloadBytes, _ := json.Marshal(payload)
+	s.preEncodedPayload = append(payloadBytes, '\n') // Add newline for framing
 
 	if err := s.LoadConfig(); err != nil {
 		log.Fatal("Config error:", err)
@@ -119,7 +146,7 @@ func main() {
 	go func() {
 		<-sigCh
 		log.Println("Shutting down Bitcoin Sprint RPC edition...")
-		s.cancel()
+		cancel()
 		os.Exit(0)
 	}()
 
@@ -185,40 +212,59 @@ func (s *Sprint) StartBlockPoller() {
 				s.OnNewBlock(hash, height, node)
 				lastBlockTime = time.Now()
 
-				// Ultra-tight polling after new block (1s)
-				interval = 1 * time.Second
+				// ULTRA-AGGRESSIVE: 250ms polling after new block
+				interval = 250 * time.Millisecond
 				ticker.Reset(interval)
-				log.Printf("New block detected - tightening poll interval to %v", interval)
+				log.Printf("New block detected - ULTRA-AGGRESSIVE polling: %v", interval)
+
+				// BURST PROBE: Immediate rapid detection for next block
+				go func(currentHash string) {
+					if nextHash, nextHeight, nextNode, err := s.burstProbe(currentHash); err == nil {
+						s.OnNewBlock(nextHash, nextHeight, nextNode)
+					}
+				}(hash)
 
 				// Prefetch block details in background
 				go s.prefetchBlock(hash, node)
+
+				// Start parallel multi-node monitoring
+				go s.startParallelMonitoring(hash, height)
+
+				// Start predictive block monitoring
+				go s.startPredictiveMonitoring()
 			} else {
-				// Adaptive polling based on time since last block
+				// AGGRESSIVE adaptive polling based on time since last block
 				elapsed := time.Since(lastBlockTime)
 
 				switch {
-				case elapsed < 30*time.Second:
-					// Stay tight for 30s after block
+				case elapsed < 45*time.Second:
+					// HYPER-TIGHT polling for 45s after block (250ms)
+					if interval != 250*time.Millisecond {
+						interval = 250 * time.Millisecond
+						ticker.Reset(interval)
+					}
+				case elapsed < 2*time.Minute:
+					// AGGRESSIVE polling for normal periods (500ms)
+					if interval != 500*time.Millisecond {
+						interval = 500 * time.Millisecond
+						ticker.Reset(interval)
+					}
+				case elapsed < 5*time.Minute:
+					// TIGHT polling during medium periods (1s)
 					if interval != 1*time.Second {
 						interval = 1 * time.Second
 						ticker.Reset(interval)
 					}
-				case elapsed < 2*time.Minute:
-					// Medium polling for normal periods
+				case elapsed < 10*time.Minute:
+					// STANDARD polling during quiet periods (2s)
 					if interval != 2*time.Second {
 						interval = 2 * time.Second
 						ticker.Reset(interval)
 					}
-				case elapsed < 10*time.Minute:
-					// Wider polling during likely quiet periods
+				default:
+					// MINIMUM relaxation during long quiet periods (5s)
 					if interval != 5*time.Second {
 						interval = 5 * time.Second
-						ticker.Reset(interval)
-					}
-				default:
-					// Maximum relaxation during long quiet periods
-					if interval != 10*time.Second {
-						interval = 10 * time.Second
 						ticker.Reset(interval)
 					}
 				}
@@ -235,71 +281,119 @@ func (s *Sprint) getBestBlock() (string, int, string, error) {
 		log.Printf("No RPC nodes configured, using fallback: %s", s.config.RPCNodes[0])
 	}
 
-	reqBody := []byte(`{"jsonrpc":"1.0","id":"sprint","method":"getblockchaininfo","params":[]}`)
+	// OPTIMIZATION: Parallel fan-out for first-response-wins
+	if len(s.config.RPCNodes) > 1 {
+		return s.getBestBlockParallel()
+	}
 
-	// Track errors for better reporting
-	errors := make([]error, 0, len(s.config.RPCNodes))
+	// Single node fallback
+	return s.getBestBlockSingle()
+}
 
+// getBestBlockParallel implements parallel fan-out for multiple nodes
+func (s *Sprint) getBestBlockParallel() (string, int, string, error) {
+	type result struct {
+		hash   string
+		height int
+		node   string
+		err    error
+	}
+
+	results := make(chan result, len(s.config.RPCNodes))
+	ctx, cancel := context.WithTimeout(s.ctx, 2*time.Second)
+	defer cancel()
+
+	// Fire all requests simultaneously
+	activeNodes := 0
 	for _, node := range s.config.RPCNodes {
-		// Skip nodes in backoff period
+		// Skip nodes in backoff
 		if t, ok := s.nodeBackoff[node]; ok && time.Now().Before(t) {
 			continue
 		}
 
-		// Try RPC call
-		hash, height, err := s.tryRPC(node, reqBody)
-		if err == nil {
-			// Clear backoff on success
-			delete(s.nodeBackoff, node)
-			return hash, height, node, nil
-		}
-
-		// Track error for detailed reporting
-		errors = append(errors, fmt.Errorf("%s: %w", node, err))
-		log.Printf("RPC node failed %s: %v", node, err)
-
-		// Smart backoff with jitter
-		baseDelay := 5 * time.Second
-		if prevTime, ok := s.nodeBackoff[node]; ok {
-			// Exponential backoff up to 30 seconds
-			sinceErr := time.Since(prevTime)
-			if sinceErr < 30*time.Second {
-				baseDelay = time.Duration(math.Min(30, float64(baseDelay.Seconds()*2))) * time.Second
+		activeNodes++
+		go func(nodeURL string) {
+			hash, height, err := s.tryRPCOptimized(nodeURL, s.getBlockchainInfoReq)
+			select {
+			case results <- result{hash, height, nodeURL, err}:
+			case <-ctx.Done():
 			}
-		}
-		jitter := time.Duration(rand.Intn(3000)) * time.Millisecond
-		s.nodeBackoff[node] = time.Now().Add(baseDelay + jitter)
+		}(node)
 	}
 
-	// Detailed error when all nodes fail
-	if len(errors) > 0 {
-		errorMsg := "All RPC nodes failed:\n"
-		for i, err := range errors {
-			errorMsg += fmt.Sprintf("  [%d] %v\n", i+1, err)
-		}
-		return "", 0, "", fmt.Errorf(errorMsg)
+	if activeNodes == 0 {
+		return "", 0, "", fmt.Errorf("no RPC nodes available (all in backoff)")
 	}
 
-	return "", 0, "", fmt.Errorf("no RPC nodes available")
+	// Return first successful response
+	for i := 0; i < activeNodes; i++ {
+		select {
+		case res := <-results:
+			if res.err == nil {
+				// Clear backoff on success
+				delete(s.nodeBackoff, res.node)
+				return res.hash, res.height, res.node, nil
+			}
+			// Set backoff on failure
+			s.setNodeBackoff(res.node, res.err)
+		case <-ctx.Done():
+			return "", 0, "", fmt.Errorf("parallel RPC timeout")
+		}
+	}
+
+	return "", 0, "", fmt.Errorf("all parallel RPC calls failed")
 }
 
-func (s *Sprint) tryRPC(node string, body []byte) (string, int, error) {
-	// Use a shorter timeout for faster detection
-	ctx, cancel := context.WithTimeout(s.ctx, 3*time.Second)
+// getBestBlockSingle handles single node requests
+func (s *Sprint) getBestBlockSingle() (string, int, string, error) {
+	node := s.config.RPCNodes[0]
+
+	// Skip if in backoff
+	if t, ok := s.nodeBackoff[node]; ok && time.Now().Before(t) {
+		return "", 0, "", fmt.Errorf("node %s in backoff until %v", node, t)
+	}
+
+	hash, height, err := s.tryRPCOptimized(node, s.getBlockchainInfoReq)
+	if err != nil {
+		s.setNodeBackoff(node, err)
+		return "", 0, "", err
+	}
+
+	delete(s.nodeBackoff, node)
+	return hash, height, node, nil
+}
+
+// setNodeBackoff implements smart backoff with jitter
+func (s *Sprint) setNodeBackoff(node string, err error) {
+	baseDelay := 3 * time.Second // OPTIMIZED: Faster recovery
+	if prevTime, ok := s.nodeBackoff[node]; ok {
+		sinceErr := time.Since(prevTime)
+		if sinceErr < 20*time.Second { // OPTIMIZED: Faster max backoff
+			baseDelay = time.Duration(math.Min(20, float64(baseDelay.Seconds()*1.5))) * time.Second
+		}
+	}
+	jitter := time.Duration(rand.Intn(2000)) * time.Millisecond // OPTIMIZED: Less jitter
+	s.nodeBackoff[node] = time.Now().Add(baseDelay + jitter)
+}
+
+// tryRPCOptimized is the hot path optimized version of tryRPC
+func (s *Sprint) tryRPCOptimized(node string, reqBody []byte) (string, int, error) {
+	// OPTIMIZATION: Ultra-short timeout for hot path
+	ctx, cancel := context.WithTimeout(s.ctx, 1*time.Second)
 	defer cancel()
 
-	// Create request with proper error handling
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, node, bytes.NewReader(body))
+	// Create request with pre-allocated body
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, node, bytes.NewReader(reqBody))
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set authentication and headers
+	// Set authentication and headers (optimized)
 	if s.config.RPCUser != "" || s.config.RPCPass != "" {
 		req.SetBasicAuth(s.config.RPCUser, s.config.RPCPass)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Connection", "keep-alive") // Optimize connection reuse
+	req.Header.Set("Connection", "keep-alive")
 
 	// Execute request with timing
 	start := time.Now()
@@ -311,63 +405,57 @@ func (s *Sprint) tryRPC(node string, body []byte) (string, int, error) {
 	}
 	defer resp.Body.Close()
 
-	// Check HTTP status
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		// Read error body for better diagnostics
-		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return "", 0, fmt.Errorf("bad status: %d, body: %s", resp.StatusCode, string(bodyBytes))
+	// Check HTTP status (fast path)
+	if resp.StatusCode != 200 {
+		return "", 0, fmt.Errorf("bad status: %d", resp.StatusCode)
 	}
 
-	// Parse response
+	// OPTIMIZATION: Direct decode to target struct
 	var envelope struct {
-		Result json.RawMessage `json:"result"`
-		Error  *struct {
+		Result struct {
+			BestHash string `json:"bestblockhash"`
+			Height   int    `json:"blocks"`
+		} `json:"result"`
+		Error *struct {
 			Code    int    `json:"code"`
 			Message string `json:"message"`
 		} `json:"error"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
-		return "", 0, fmt.Errorf("failed to decode response: %w", err)
+		return "", 0, fmt.Errorf("decode failed: %w", err)
 	}
 
 	// Check for RPC error
-	if envelope.Error != nil && envelope.Error.Message != "" {
+	if envelope.Error != nil {
 		return "", 0, fmt.Errorf("rpc error: %d %s", envelope.Error.Code, envelope.Error.Message)
 	}
 
-	// Try to parse in primary format
-	var result struct {
-		BestHash string `json:"bestblockhash"`
-		Height   int    `json:"blocks"`
+	if envelope.Result.BestHash != "" {
+		log.Printf("RPC call successful to %s in %dms", node, latency)
+		return envelope.Result.BestHash, envelope.Result.Height, nil
 	}
 
-	if err := json.Unmarshal(envelope.Result, &result); err == nil {
-		// Track successful RPC call latency for metrics
-		if result.BestHash != "" {
-			log.Printf("RPC call successful to %s in %dms", node, latency)
-			return result.BestHash, result.Height, nil
+	return "", 0, fmt.Errorf("no valid block hash in response")
+}
+
+// burstProbe implements burst probing for immediate block detection
+func (s *Sprint) burstProbe(currentHash string) (string, int, string, error) {
+	log.Printf("🚀 BURST PROBE: 5 rapid calls in 50ms intervals")
+
+	for i := 0; i < 5; i++ {
+		hash, height, node, err := s.getBestBlock()
+		if err == nil && hash != currentHash {
+			log.Printf("🎯 BURST SUCCESS: New block %s detected on probe %d", hash[:8], i+1)
+			return hash, height, node, nil
+		}
+
+		if i < 4 { // Don't sleep after last probe
+			time.Sleep(50 * time.Millisecond)
 		}
 	}
 
-	// Try alternate response format (some nodes wrap differently)
-	var nested struct {
-		Result struct {
-			BestHash string `json:"bestblockhash"`
-			Height   int    `json:"blocks"`
-		} `json:"result"`
-	}
-
-	if err := json.Unmarshal(envelope.Result, &nested); err != nil {
-		return "", 0, fmt.Errorf("failed to parse response in any known format")
-	}
-
-	if nested.Result.BestHash != "" {
-		log.Printf("RPC call successful (alternate format) to %s in %dms", node, latency)
-		return nested.Result.BestHash, nested.Result.Height, nil
-	}
-
-	return "", 0, fmt.Errorf("response contained no valid block hash")
+	return "", 0, "", fmt.Errorf("burst probe failed to detect new block")
 }
 
 func (s *Sprint) prefetchBlock(hash, node string) {
@@ -820,7 +908,6 @@ func (s *Sprint) SprintBlock(hash string) int {
 	s.mu.RUnlock()
 
 	if len(peers) == 0 {
-		// No connected peers
 		return 0
 	}
 
@@ -835,52 +922,38 @@ func (s *Sprint) SprintBlock(hash string) int {
 	results := make(chan peerResult, len(peers))
 	start := time.Now()
 
-	// Prepare payload with metadata to optimize validation
-	payload := struct {
-		Type     string `json:"type"`
-		Hash     string `json:"hash"`
-		Ts       int64  `json:"ts"`
-		Version  string `json:"version"`
-		Protocol int    `json:"protocol"`
-	}{
-		Type:     "block",
-		Hash:     hash,
-		Ts:       time.Now().UnixNano() / int64(time.Millisecond), // millisecond precision
-		Version:  "1.0.3",
-		Protocol: 1, // Protocol version for future compatibility
-	}
+	// OPTIMIZATION: Use pre-encoded template with hot path substitution
+	message := s.preEncodedPayload
+	// Replace placeholder hash in pre-encoded JSON
+	hashBytes := []byte(hash)
+	message = bytes.Replace(message, []byte("HASH_PLACEHOLDER"), hashBytes, 1)
 
-	b, err := json.Marshal(payload)
-	if err != nil {
-		log.Printf("Failed to marshal block notification: %v", err)
-		return 0
-	}
+	// Add timestamp for real-time update (minimal overhead)
+	ts := time.Now().UnixNano() / int64(time.Millisecond)
+	tsBytes := []byte(fmt.Sprintf("%d", ts))
+	message = bytes.Replace(message, []byte("TS_PLACEHOLDER"), tsBytes, 1)
 
-	// Add newline for message framing
-	message := append(b, '\n')
-
-	// Send to all peers concurrently with individual timeouts
+	// Send to all peers concurrently with ultra-fast timeouts
 	for i, conn := range peers {
 		addr := peerAddrs[i]
 		wg.Add(1)
 		go func(conn net.Conn, addr string) {
 			defer wg.Done()
 
-			// Ultra-fast deadline for optimal performance
+			// HOT PATH OPTIMIZATION: 200ms deadline for maximum speed
 			peerStart := time.Now()
-			conn.SetWriteDeadline(time.Now().Add(500 * time.Millisecond))
+			conn.SetWriteDeadline(time.Now().Add(200 * time.Millisecond))
 
-			// TCP_NODELAY for immediate transmission without buffering
+			// TCP_NODELAY for immediate transmission
 			if tcpConn, ok := conn.(*net.TCPConn); ok {
 				_ = tcpConn.SetNoDelay(true)
 			}
 
-			// Write the message
+			// Single write operation (optimized)
 			n, err := conn.Write(message)
 			latency := time.Since(peerStart)
 
 			if err != nil || n != len(message) {
-				// Record failure
 				results <- peerResult{
 					addr:    addr,
 					success: false,
@@ -888,10 +961,9 @@ func (s *Sprint) SprintBlock(hash string) int {
 					err:     err,
 				}
 
-				// Drop connection on write error
+				// Fast connection cleanup
 				s.mu.Lock()
 				if peerConn, exists := s.peers[addr]; exists && peerConn == conn {
-					log.Printf("Dropping peer connection to %s: %v", addr, err)
 					_ = peerConn.Close()
 					delete(s.peers, addr)
 				}
@@ -899,7 +971,6 @@ func (s *Sprint) SprintBlock(hash string) int {
 				return
 			}
 
-			// Record success
 			results <- peerResult{
 				addr:    addr,
 				success: true,
@@ -909,22 +980,21 @@ func (s *Sprint) SprintBlock(hash string) int {
 		}(conn, addr)
 	}
 
-	// Wait for all goroutines with a timeout
+	// HOT PATH: Faster timeout for maximum responsiveness
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
 		close(done)
 	}()
 
-	// Use timeout to ensure we don't wait too long
 	select {
 	case <-done:
-		// All done normally
-	case <-time.After(750 * time.Millisecond):
-		log.Printf("Some peer notifications timed out")
+		// All completed
+	case <-time.After(300 * time.Millisecond): // Reduced from 750ms
+		// Continue processing partial results
 	}
 
-	// Collect results
+	// Fast results collection
 	close(results)
 	success := 0
 	totalLatency := int64(0)
@@ -935,12 +1005,201 @@ func (s *Sprint) SprintBlock(hash string) int {
 		}
 	}
 
-	// Calculate average latency if any successful
+	// Optimized logging (reduce contention)
 	if success > 0 {
-		avgLatency := float64(totalLatency) / float64(success)
-		log.Printf("Block %s sprinted to %d peers in avg %.1fms (total %.1fms)",
-			hash[:8], success, avgLatency, float64(time.Since(start).Milliseconds()))
+		s.blocksSentMu.Lock()
+		s.blocksSent++
+		s.blocksSentMu.Unlock()
+
+		if success > 0 {
+			avgLatency := float64(totalLatency) / float64(success)
+			log.Printf("⚡ SPRINT: Block %s → %d peers in %.1fms avg (%.1fms total)",
+				hash[:8], success, avgLatency, float64(time.Since(start).Milliseconds()))
+		}
 	}
 
 	return success
+}
+
+// startParallelMonitoring starts aggressive parallel monitoring across all RPC nodes
+// to maximize block detection speed and achieve claimed performance advantages
+func (s *Sprint) startParallelMonitoring(currentHash string, currentHeight int) {
+	if len(s.config.RPCNodes) <= 1 {
+		return // Need multiple nodes for parallel monitoring
+	}
+
+	log.Printf("Starting PARALLEL monitoring across %d nodes for ultra-fast detection", len(s.config.RPCNodes))
+
+	// Monitor all nodes simultaneously for 30 seconds after block detection
+	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	results := make(chan struct {
+		node    string
+		hash    string
+		height  int
+		latency time.Duration
+	}, len(s.config.RPCNodes))
+
+	// ULTRA-AGGRESSIVE: Poll all nodes every 100ms simultaneously
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for _, node := range s.config.RPCNodes {
+		wg.Add(1)
+		go func(nodeURL string) {
+			defer wg.Done()
+
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					start := time.Now()
+					reqBody := []byte(`{"jsonrpc":"1.0","id":"parallel","method":"getblockchaininfo","params":[]}`)
+
+					hash, height, err := s.tryRPCOptimized(nodeURL, reqBody)
+					latency := time.Since(start)
+
+					if err == nil && hash != currentHash && height > currentHeight {
+						// NEW BLOCK DETECTED BY PARALLEL MONITORING!
+						results <- struct {
+							node    string
+							hash    string
+							height  int
+							latency time.Duration
+						}{nodeURL, hash, height, latency}
+
+						log.Printf(" PARALLEL DETECTION: New block %s at height %d via %s in %v",
+							hash[:8], height, nodeURL, latency)
+
+						// Trigger immediate main detection
+						s.OnNewBlock(hash, height, nodeURL)
+						return
+					}
+				}
+			}
+		}(node)
+	}
+
+	// Wait for completion or timeout
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Process any results
+	for result := range results {
+		log.Printf("Parallel node %s detected block %s in %v",
+			result.node, result.hash[:8], result.latency)
+	}
+}
+
+// startPredictiveMonitoring uses mempool analysis to predict when blocks are likely
+// and increases polling frequency accordingly for maximum speed advantage
+func (s *Sprint) startPredictiveMonitoring() {
+	if len(s.config.RPCNodes) == 0 {
+		return
+	}
+
+	log.Printf("Starting PREDICTIVE monitoring for mempool-based block prediction")
+
+	// Monitor mempool every 2 seconds to predict blocks
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	var lastMempoolSize int
+	highActivityThreshold := 50 // transactions
+
+	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Minute)
+	defer cancel()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Get mempool info from primary node
+			node := s.config.RPCNodes[0]
+			reqBody := []byte(`{"jsonrpc":"1.0","id":"predictive","method":"getmempoolinfo","params":[]}`)
+
+			ctx, cancel := context.WithTimeout(s.ctx, 2*time.Second)
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, node, bytes.NewReader(reqBody))
+			if err != nil {
+				cancel()
+				continue
+			}
+
+			req.SetBasicAuth(s.config.RPCUser, s.config.RPCPass)
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := s.client.Do(req)
+			if err != nil {
+				cancel()
+				continue
+			}
+
+			var result struct {
+				Result struct {
+					Size int `json:"size"`
+				} `json:"result"`
+			}
+
+			if json.NewDecoder(resp.Body).Decode(&result) == nil {
+				mempoolSize := result.Result.Size
+				resp.Body.Close()
+				cancel()
+
+				// Detect high mempool activity indicating likely block soon
+				if mempoolSize > highActivityThreshold && mempoolSize > lastMempoolSize*2 {
+					log.Printf(" PREDICTIVE: High mempool activity detected (%d txs), expecting block soon - BOOSTING polling", mempoolSize)
+
+					// Start HYPER-AGGRESSIVE polling for 60 seconds
+					go s.hyperAggressivePolling(60 * time.Second)
+				}
+
+				lastMempoolSize = mempoolSize
+			} else {
+				resp.Body.Close()
+				cancel()
+			}
+		}
+	}
+}
+
+// hyperAggressivePolling starts extremely fast polling (100ms) for a specified duration
+// to catch blocks immediately when high activity is detected
+func (s *Sprint) hyperAggressivePolling(duration time.Duration) {
+	log.Printf(" HYPER-AGGRESSIVE POLLING: 100ms intervals for %v", duration)
+
+	ctx, cancel := context.WithTimeout(s.ctx, duration)
+	defer cancel()
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	var lastHash string
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("HYPER-AGGRESSIVE polling completed")
+			return
+		case <-ticker.C:
+			if len(s.config.RPCNodes) == 0 {
+				continue
+			}
+
+			reqBody := []byte(`{"jsonrpc":"1.0","id":"hyper","method":"getblockchaininfo","params":[]}`)
+			hash, height, err := s.tryRPCOptimized(s.config.RPCNodes[0], reqBody)
+
+			if err == nil && hash != "" && hash != lastHash {
+				log.Printf(" HYPER-AGGRESSIVE DETECTION: Block %s at height %d", hash[:8], height)
+				s.OnNewBlock(hash, height, s.config.RPCNodes[0])
+				lastHash = hash
+				return // Block found, mission accomplished
+			}
+		}
+	}
 }

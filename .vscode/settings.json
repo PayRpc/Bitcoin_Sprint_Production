@@ -1,16 +1,79 @@
 {
-    \ go.toolsManagement.checkForUpdates\: \local\,
-    \go.useLanguageServer\: true,
-    \go.formatTool\: \goimports\,
-    \go.lintTool\: \golint\,
-    \go.testFlags\: [\-v\],
-    \go.testTimeout\: \30s\,
-    \go.coverOnSave\: false,
-    \go.coverOnSingleTest\: true,
-    \go.coverageDecorator\: {
-        \type\: \gutter\
+    // Bitcoin Sprint - VS Code Settings (Optimized for Performance Development)
+    
+    // Go Language Configuration
+    "go.toolsManagement.checkForUpdates": "local",
+    "go.useLanguageServer": true,
+    "go.formatTool": "gofumpt",
+    "go.lintTool": "staticcheck",
+    "go.buildOnSave": "workspace",
+    "go.vetOnSave": "workspace",
+    "go.lintOnSave": "workspace",
+    
+    // Build and Performance Optimization
+    "go.buildFlags": [
+        "-ldflags=-s -w",
+        "-trimpath"
+    ],
+    "go.testFlags": [
+        "-v",
+        "-race",
+        "-timeout=60s"
+    ],
+    
+    // Code Quality and Formatting
+    "go.formatFlags": [
+        "-s"
+    ],
+    "go.addTags": {
+        "tags": "json",
+        "options": "json=omitempty",
+        "promptForTags": false,
+        "transform": "camelcase"
     },
-    \go.buildOnSave\: \package\,
-    \go.vetOnSave\: \package\,
-    \go.lintOnSave\: \package\
+    
+    // Editor Configuration for Go
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+    },
+    "editor.rulers": [120],
+    "editor.tabSize": 4,
+    "editor.insertSpaces": false,
+    
+    // File Associations
+    "files.associations": {
+        "*.go": "go",
+        "go.mod": "go.mod",
+        "config.json": "jsonc"
+    },
+    
+    // Terminal Configuration
+    "terminal.integrated.defaultProfile.windows": "PowerShell",
+    "terminal.integrated.env.windows": {
+        "GOMAXPROCS": "4",
+        "GOPROXY": "https://proxy.golang.org,direct"
+    },
+    
+    // Git Configuration
+    "git.autofetch": true,
+    "git.confirmSync": false,
+    "git.enableSmartCommit": true,
+    
+    // Performance Monitoring
+    "go.coverOnSave": false,
+    "go.coverOnSingleTest": false,
+    "go.testExplorer.enable": false,
+    
+    // Bitcoin Sprint Specific
+    "files.exclude": {
+        "**/*.exe": true,
+        "**/*.log": true,
+        "**/debug": true
+    },
+    
+    // Development Experience
+    "explorer.confirmDelete": false,
+    "explorer.confirmDragAndDrop": false,
+    "problems.decorations.enabled": true
 }
