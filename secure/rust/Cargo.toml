@@ -1,0 +1,16 @@
+[package]
+name = "secure_buffer"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["BitcoinCab.inc <dev@bitcoincab.inc>"]
+
+[lib]
+name = "secure_buffer"
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+zeroize = "1.8"
+lazy_static = "1.5"
+thiserror = "1.0"
+libc = "0.2"
