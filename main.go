@@ -32,6 +32,62 @@ var (
 	Commit  = "unknown"
 )
 
+// NewRateLimiter creates a rate limiter with tier-based limits
+func NewRateLimiter() *RateLimiter {
+	return &RateLimiter{
+		requests: make(map[string][]int64),
+		standardLimits: map[string]int{
+			"/latest":  4, // 4 req/sec
+			"/metrics": 1, // 1 req/sec
+			"/status":  1, // 0.2 req/sec (rounded up)
+		},
+		turboLimits: map[string]int{
+			"/latest":     20, // 20 req/sec
+			"/metrics":    5,  // 5 req/sec
+			"/status":     1,  // 1 req/sec
+			"/stream":     1,  // 1 connection
+			"/predictive": 1,  // 1 req/sec
+		},
+	}
+}
+
+// Allow checks if a request is allowed under rate limits
+func (rl *RateLimiter) Allow(clientIP, endpoint string, isTurbo bool) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now().Unix()
+	key := clientIP + ":" + endpoint
+
+	// Clean old requests (older than 1 second)
+	if requests, exists := rl.requests[key]; exists {
+		var validRequests []int64
+		for _, timestamp := range requests {
+			if now-timestamp < 1 {
+				validRequests = append(validRequests, timestamp)
+			}
+		}
+		rl.requests[key] = validRequests
+	}
+
+	// Get limit for this endpoint and tier
+	var limit int
+	if isTurbo {
+		limit = rl.turboLimits[endpoint]
+	} else {
+		limit = rl.standardLimits[endpoint]
+	}
+
+	// Check if under limit
+	if len(rl.requests[key]) >= limit {
+		return false
+	}
+
+	// Add this request
+	rl.requests[key] = append(rl.requests[key], now)
+	return true
+}
+
 // ───────────────────────── Types ─────────────────────────
 
 type Config struct {
@@ -63,14 +119,46 @@ type Metrics struct {
 	RPCNode    string  `json:"rpc_node"`
 }
 
+// API Response Types for Enhanced Endpoints
+type StatusResponse struct {
+	Tier             string `json:"tier"`
+	LicenseKey       string `json:"license_key"`
+	Valid            bool   `json:"valid"`
+	BlocksSentToday  int    `json:"blocks_sent_today"`
+	BlockLimit       int    `json:"block_limit"`
+	PeersConnected   int    `json:"peers_connected"`
+	UptimeSeconds    int64  `json:"uptime_seconds"`
+	Version          string `json:"version"`
+	TurboModeEnabled bool   `json:"turbo_mode_enabled"`
+}
+
+type PredictiveResponse struct {
+	MempoolSize             int     `json:"mempool_size"`
+	Trend                   string  `json:"trend"`
+	ProbabilityNextBlock60s float64 `json:"probability_next_block_60s"`
+	LastUpdate              int64   `json:"last_update"`
+}
+
+// Rate limiting state
+type RateLimiter struct {
+	requests       map[string][]int64
+	mu             sync.RWMutex
+	standardLimits map[string]int // endpoint -> requests per second
+	turboLimits    map[string]int
+}
+
 type Sprint struct {
-	config      Config
-	license     License
-	peers       map[string]net.Conn
-	metrics     chan Metrics
-	blocksSent  int
-	client      *http.Client
-	nodeBackoff map[string]time.Time
+	config       Config
+	license      License
+	peers        map[string]net.Conn
+	metrics      chan Metrics
+	blocksSent   int
+	client       *http.Client
+	nodeBackoff  map[string]time.Time
+	rateLimiter  *RateLimiter
+	startTime    time.Time
+	lastMempool  int
+	latestMetric *Metrics // Store latest metric for /latest endpoint
 
 	// HOT PATH OPTIMIZATIONS: Pre-marshaled requests
 	getBlockchainInfoReq []byte
@@ -93,6 +181,7 @@ func main() {
 			return
 		}
 	}
+
 	// Modern Go 1.20+ uses automatic random seeding
 	// No need for explicit rand.Seed() call
 
@@ -119,6 +208,8 @@ func main() {
 			},
 		},
 		nodeBackoff: make(map[string]time.Time),
+		rateLimiter: NewRateLimiter(),
+		startTime:   time.Now(),
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s.ctx = ctx
@@ -187,128 +278,6 @@ func main() {
 }
 
 // ───────────────────────── Block Poller ─────────────────────────
-
-func (s *Sprint) StartBlockPoller() {
-	var lastHash string
-	var consecutiveErrors int
-
-	// Default to 1s interval if not specified for optimal performance
-	interval := time.Duration(s.config.PollInterval) * time.Second
-	if interval == 0 {
-		interval = 1 * time.Second // ultra-fast default for better performance
-	}
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	// Track last block time to optimize polling
-	lastBlockTime := time.Now()
-
-	for {
-		select {
-		case <-s.ctx.Done():
-			return
-		case <-ticker.C:
-			var (
-				hash   string
-				height int
-				node   string
-				err    error
-			)
-
-			if s.config.TurboMode {
-				hash, height, node, err = s.getBestBlockTurbo()
-			} else {
-				hash, height, node, err = s.getBestBlock()
-			}
-			if err != nil {
-				log.Printf("RPC poll error: %v", err)
-				consecutiveErrors++
-
-				// Smart exponential backoff with jitter
-				if consecutiveErrors > 3 {
-					backoff := time.Duration(math.Min(float64(consecutiveErrors*2), 30)) * time.Second
-					jitter := time.Duration(rand.Intn(1000)) * time.Millisecond
-					interval = backoff + jitter
-					ticker.Reset(interval)
-					log.Printf("Backing off for %v due to errors", interval)
-				}
-				continue
-			}
-
-			// Reset error counter on success
-			consecutiveErrors = 0
-
-			if hash != "" && hash != lastHash {
-				lastHash = hash
-				s.OnNewBlock(hash, height, node)
-				lastBlockTime = time.Now()
-
-				// ULTRA-AGGRESSIVE: 250ms polling after new block
-				interval = 250 * time.Millisecond
-				ticker.Reset(interval)
-				log.Printf("New block detected - ULTRA-AGGRESSIVE polling: %v", interval)
-
-				// BURST PROBE: Immediate rapid detection for next block
-				go func(currentHash string) {
-					if nextHash, nextHeight, nextNode, err := s.burstProbe(currentHash); err == nil {
-						s.OnNewBlock(nextHash, nextHeight, nextNode)
-					}
-				}(hash)
-
-				// Prefetch block details in background
-				go s.prefetchBlock(hash, node)
-
-				// Start parallel multi-node monitoring
-				go s.startParallelMonitoring(hash, height)
-
-				// Start predictive block monitoring
-				if s.config.TurboMode {
-					// Turbo: faster mempool predictor cadence
-					go s.startPredictiveMonitoringTurbo()
-				} else {
-					go s.startPredictiveMonitoring()
-				}
-			} else {
-				// AGGRESSIVE adaptive polling based on time since last block
-				elapsed := time.Since(lastBlockTime)
-
-				switch {
-				case elapsed < 45*time.Second:
-					// HYPER-TIGHT polling for 45s after block (250ms)
-					if interval != 250*time.Millisecond {
-						interval = 250 * time.Millisecond
-						ticker.Reset(interval)
-					}
-				case elapsed < 2*time.Minute:
-					// AGGRESSIVE polling for normal periods (500ms)
-					if interval != 500*time.Millisecond {
-						interval = 500 * time.Millisecond
-						ticker.Reset(interval)
-					}
-				case elapsed < 5*time.Minute:
-					// TIGHT polling during medium periods (1s)
-					if interval != 1*time.Second {
-						interval = 1 * time.Second
-						ticker.Reset(interval)
-					}
-				case elapsed < 10*time.Minute:
-					// STANDARD polling during quiet periods (2s)
-					if interval != 2*time.Second {
-						interval = 2 * time.Second
-						ticker.Reset(interval)
-					}
-				default:
-					// MINIMUM relaxation during long quiet periods (5s)
-					if interval != 5*time.Second {
-						interval = 5 * time.Second
-						ticker.Reset(interval)
-					}
-				}
-			}
-		}
-	}
-}
 
 func (s *Sprint) getBestBlock() (string, int, string, error) {
 	// Ensure we have at least one RPC node
@@ -547,6 +516,11 @@ func (s *Sprint) OnNewBlock(hash string, height int, node string) {
 		LicenseKey: s.config.LicenseKey,
 		RPCNode:    node,
 	}
+
+	// Store latest metric for /latest endpoint
+	s.mu.Lock()
+	s.latestMetric = &m
+	s.mu.Unlock()
 
 	select {
 	case s.metrics <- m:
@@ -907,33 +881,184 @@ func getSystemIdentifier() string {
 	return fmt.Sprintf("node-%06d", sum)
 }
 
-// StartWebDashboard launches a small HTTP dashboard showing recent metrics.
-// It runs in its own goroutine and returns immediately.
+// StartWebDashboard launches the enhanced API server with rate limiting and tier-based features
 func (s *Sprint) StartWebDashboard() {
 	mux := http.NewServeMux()
 
+	// Rate limiting middleware
+	rateLimitedHandler := func(endpoint string, handler http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			clientIP := r.RemoteAddr
+			if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
+				clientIP = ip
+			}
+
+			isTurbo := s.config.TurboMode
+			if !s.rateLimiter.Allow(clientIP, endpoint, isTurbo) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusTooManyRequests)
+				json.NewEncoder(w).Encode(map[string]string{
+					"error": "Rate limit exceeded",
+					"tier":  s.getTierName(),
+				})
+				return
+			}
+			handler(w, r)
+		}
+	}
+
+	// Enhanced dashboard with real-time metrics
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write([]byte(`<html><head><title>Bitcoin Sprint</title></head><body><h1>Bitcoin Sprint</h1><p>Metrics endpoint: <a href="/metrics">/metrics</a></p></body></html>`))
+		html := fmt.Sprintf(`
+		<html>
+		<head><title>Bitcoin Sprint v%s</title>
+		<style>body{font-family:Arial;margin:20px}table{border-collapse:collapse;width:100%%}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background-color:#f2f2f2}</style>
+		</head>
+		<body>
+		<h1>Bitcoin Sprint v%s ⚡</h1>
+		<p><strong>Mode:</strong> %s | <strong>Tier:</strong> %s</p>
+		<h2>API Endpoints</h2>
+		<table>
+		<tr><th>Endpoint</th><th>Method</th><th>Description</th><th>Tier</th></tr>
+		<tr><td><a href="/latest">/latest</a></td><td>GET</td><td>Most recent block only</td><td>All</td></tr>
+		<tr><td><a href="/metrics">/metrics</a></td><td>GET</td><td>Batch of recent blocks</td><td>All</td></tr>
+		<tr><td><a href="/status">/status</a></td><td>GET</td><td>System & license status</td><td>All</td></tr>
+		<tr><td>/stream</td><td>GET</td><td>Server-Sent Events</td><td>Turbo Only</td></tr>
+		<tr><td>/predictive</td><td>GET</td><td>Mempool predictions</td><td>Turbo Only</td></tr>
+		</table>
+		<script>setInterval(()=>fetch('/status').then(r=>r.json()).then(d=>console.log('Status:',d)),5000)</script>
+		</body></html>`, Version, Version, s.getModeName(), s.getTierName())
+		w.Write([]byte(html))
 	})
 
-	// metrics endpoint returns last N metrics from the channel without blocking
-	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+	// /latest - Returns most recent block only (optimized for speed)
+	mux.HandleFunc("/latest", rateLimitedHandler("/latest", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		// drain available metrics non-blocking (up to 100)
-		var batch []Metrics
-		for i := 0; i < 100; i++ {
-			select {
-			case m := <-s.metrics:
-				batch = append(batch, m)
-			default:
-				i = 100
+
+		// Get latest stored metric
+		s.mu.RLock()
+		latest := s.latestMetric
+		s.mu.RUnlock()
+
+		if latest != nil {
+			json.NewEncoder(w).Encode(latest)
+		} else {
+			// No metrics available yet
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}))
+
+	// /metrics - Returns batch of recent blocks with query params
+	mux.HandleFunc("/metrics", rateLimitedHandler("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Parse query parameters
+		limitStr := r.URL.Query().Get("limit")
+		sinceStr := r.URL.Query().Get("since")
+
+		limit := 100 // default
+		if s.config.TurboMode {
+			limit = 500 // turbo gets more
+		}
+		if limitStr != "" {
+			if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+				if s.config.TurboMode && parsed <= 500 {
+					limit = parsed
+				} else if !s.config.TurboMode && parsed <= 100 {
+					limit = parsed
+				}
 			}
 		}
-		_ = json.NewEncoder(w).Encode(batch)
-	})
 
-	// choose port from env (SPRINT_DASH_PORT or PORT) or default to 8080
+		var since int64
+		if sinceStr != "" {
+			if parsed, err := strconv.ParseInt(sinceStr, 10, 64); err == nil {
+				since = parsed
+			}
+		}
+
+		// Drain available metrics non-blocking
+		var batch []Metrics
+		for i := 0; i < limit; i++ {
+			select {
+			case m := <-s.metrics:
+				if since == 0 || m.Timestamp >= since {
+					batch = append(batch, m)
+				}
+			default:
+				i = limit // break loop
+			}
+		}
+		json.NewEncoder(w).Encode(batch)
+	}))
+
+	// /status - System and license information
+	mux.HandleFunc("/status", rateLimitedHandler("/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		status := StatusResponse{
+			Tier:             s.getTierName(),
+			LicenseKey:       s.maskLicenseKey(),
+			Valid:            s.license.Valid,
+			BlocksSentToday:  s.blocksSent,
+			BlockLimit:       s.license.BlockLimit,
+			PeersConnected:   len(s.peers),
+			UptimeSeconds:    int64(time.Since(s.startTime).Seconds()),
+			Version:          Version,
+			TurboModeEnabled: s.config.TurboMode,
+		}
+		json.NewEncoder(w).Encode(status)
+	}))
+
+	// Turbo-only endpoints
+	if s.config.TurboMode {
+		// /stream - Server-Sent Events for real-time block notifications
+		mux.HandleFunc("/stream", rateLimitedHandler("/stream", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Connection", "keep-alive")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+
+			// Send initial connection event
+			fmt.Fprintf(w, "event: connected\ndata: {\"status\":\"connected\",\"turbo\":true}\n\n")
+			w.(http.Flusher).Flush()
+
+			// Stream metrics in real-time
+			for {
+				select {
+				case m := <-s.metrics:
+					data, _ := json.Marshal(m)
+					fmt.Fprintf(w, "event: new_block\ndata: %s\n\n", data)
+					w.(http.Flusher).Flush()
+				case <-r.Context().Done():
+					return
+				}
+			}
+		}))
+
+		// /predictive - Mempool analysis and block predictions
+		mux.HandleFunc("/predictive", rateLimitedHandler("/predictive", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+
+			// Simple mempool-based prediction (this would be enhanced with real mempool data)
+			trend := "stable"
+			if s.lastMempool > 0 {
+				// This is a placeholder - real implementation would analyze mempool growth
+				trend = "increasing"
+			}
+
+			prediction := PredictiveResponse{
+				MempoolSize:             s.lastMempool,
+				Trend:                   trend,
+				ProbabilityNextBlock60s: 0.72, // Placeholder probability
+				LastUpdate:              time.Now().Unix(),
+			}
+			json.NewEncoder(w).Encode(prediction)
+		}))
+	}
+
+	// Start server
 	port := os.Getenv("SPRINT_DASH_PORT")
 	if port == "" {
 		port = os.Getenv("PORT")
@@ -947,10 +1072,37 @@ func (s *Sprint) StartWebDashboard() {
 
 	srv := &http.Server{Addr: port, Handler: mux}
 	go func() {
+		log.Printf("Enhanced API server starting on %s (Turbo: %v)", port, s.config.TurboMode)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("dashboard server: %v", err)
+			log.Printf("Dashboard server error: %v", err)
 		}
 	}()
+}
+
+// Helper methods for API
+func (s *Sprint) getTierName() string {
+	if s.license.Valid {
+		return s.license.Tier
+	}
+	return "free"
+}
+
+func (s *Sprint) getModeName() string {
+	if s.config.TurboMode {
+		return "Turbo"
+	}
+	return "Standard"
+}
+
+func (s *Sprint) maskLicenseKey() string {
+	if s.config.LicenseKey == "" {
+		return ""
+	}
+	key := s.config.LicenseKey
+	if len(key) > 8 {
+		return key[:4] + "-****"
+	}
+	return "****"
 }
 
 // ConnectToPeers maintains TCP connections to peers listed in the license. It
@@ -1408,10 +1560,9 @@ func (s *Sprint) hyperAggressivePolling(duration time.Duration) {
 			hash, height, err := s.tryRPCOptimized(s.config.RPCNodes[0], reqBody)
 
 			if err == nil && hash != "" && hash != lastHash {
-				log.Printf(" HYPER-AGGRESSIVE DETECTION: Block %s at height %d", hash[:8], height)
+				log.Printf("🔥 HYPER-AGGRESSIVE DETECTION: Block %s at height %d", hash[:8], height)
 				s.OnNewBlock(hash, height, s.config.RPCNodes[0])
 				lastHash = hash
-				return // Block found, mission accomplished
 			}
 		}
 	}
