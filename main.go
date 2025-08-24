@@ -1,4 +1,3 @@
-```go
 // SPDX-License-Identifier: MIT
 // Bitcoin Sprint - RPC Edition (Enterprise-Ready)
 // Copyright (c) 2025 BitcoinCab.inc
@@ -44,29 +43,30 @@ var (
 // ───────────────────────── Types ─────────────────────────
 
 type Config struct {
-	LicenseKey   string         `json:"license_key"`
-	Tier         string         `json:"tier"`
-	MetricsURL   string         `json:"metrics_url"`
-	RPCNodes     []string       `json:"rpc_nodes"`
-	APIBase      string         `json:"api_base"`
-	RPCUser      string         `json:"rpc_user"`
-	RPCPass      string         `json:"rpc_pass"`
-	PollInterval int            `json:"poll_interval"` // seconds, default 5
-	TurboMode    bool           `json:"turbo_mode"`    // enable ultra-aggressive fan-out
-	MaxPeers     int            `json:"max_peers"`     // maximum peer connections
-	LogLevel     string         `json:"log_level"`     // debug, info, warn, error
-	RateLimits   map[string]int `json:"rate_limits"`   // e.g., {"/latest": 5}
-	PeerSecret   string         `json:"peer_secret"`   // shared secret for peer auth
+	LicenseKey     string         `json:"license_key"`
+	Tier           string         `json:"tier"`
+	MetricsURL     string         `json:"metrics_url"`
+	RPCNodes       []string       `json:"rpc_nodes"`
+	APIBase        string         `json:"api_base"`
+	RPCUser        string         `json:"rpc_user"`
+	RPCPass        string         `json:"rpc_pass"`
+	PollInterval   int            `json:"poll_interval"`    // seconds, default 5
+	TurboMode      bool           `json:"turbo_mode"`       // enable ultra-aggressive fan-out
+	MaxPeers       int            `json:"max_peers"`        // maximum peer connections
+	LogLevel       string         `json:"log_level"`        // debug, info, warn, error
+	RateLimits     map[string]int `json:"rate_limits"`      // e.g., {"/latest": 5}
+	PeerSecret     string         `json:"peer_secret"`      // shared secret for peer auth
+	PeerListenPort int            `json:"peer_listen_port"` // port for peer mesh networking, default 8335
 }
 
 type License struct {
-	Valid       bool     `json:"valid"`
-	LicenseKey  string   `json:"license_key"`
-	Tier        string   `json:"tier"`
-	BlockLimit  int      `json:"block_limit"`
-	Peers       []string `json:"peers"`
-	ExpiresAt   int64    `json:"expires_at"`
-	DailyReset  int64    `json:"daily_reset"` // Unix timestamp of last reset
+	Valid      bool     `json:"valid"`
+	LicenseKey string   `json:"license_key"`
+	Tier       string   `json:"tier"`
+	BlockLimit int      `json:"block_limit"`
+	Peers      []string `json:"peers"`
+	ExpiresAt  int64    `json:"expires_at"`
+	DailyReset int64    `json:"daily_reset"` // Unix timestamp of last reset
 }
 
 type Metrics struct {
@@ -110,13 +110,23 @@ type PeerHandshake struct {
 	Signature  string `json:"signature"` // HMAC-SHA256 of LicenseKey+Timestamp
 }
 
+// Block message for gossip relay
+type BlockMessage struct {
+	Type      string `json:"type"`
+	Hash      string `json:"hash"`
+	Ts        string `json:"ts"`
+	Version   string `json:"version"`
+	Protocol  int    `json:"protocol"`
+	MessageID string `json:"message_id"` // Unique ID to prevent relay loops
+}
+
 // Enhanced rate limiter with token bucket
 type RateLimiter struct {
-	mu            sync.RWMutex
-	limiters      map[string]*rate.Limiter
+	mu             sync.RWMutex
+	limiters       map[string]*rate.Limiter
 	standardLimits map[string]int
-	turboLimits   map[string]int
-	cleanupTicker *time.Ticker
+	turboLimits    map[string]int
+	cleanupTicker  *time.Ticker
 }
 
 // Performance monitoring
@@ -131,19 +141,21 @@ type PerformanceMetrics struct {
 }
 
 type Sprint struct {
-	config           Config
-	license          License
-	peers            map[string]*PeerConnection
-	metrics          chan Metrics
-	blocksSent       int64
-	client           *http.Client
-	nodeBackoff      map[string]*BackoffState
-	rateLimiter      *RateLimiter
-	startTime        time.Time
-	lastMempool      int
-	latestMetric     *Metrics
-	perfMetrics      *PerformanceMetrics
-	circuitBreaker   *CircuitBreaker
+	config         Config
+	license        License
+	peers          map[string]*PeerConnection
+	metrics        chan Metrics
+	blocksSent     int64
+	client         *http.Client
+	nodeBackoff    map[string]*BackoffState
+	rateLimiter    *RateLimiter
+	startTime      time.Time
+	lastMempool    int
+	latestMetric   *Metrics
+	perfMetrics    *PerformanceMetrics
+	circuitBreaker *CircuitBreaker
+	seenMessages   map[string]time.Time // Tracks relayed message IDs
+	seenMessagesMu sync.RWMutex
 
 	// Hot path optimizations
 	getBlockchainInfoReq []byte
@@ -163,13 +175,13 @@ type Sprint struct {
 }
 
 type PeerConnection struct {
-	conn       net.Conn
-	addr       string
-	connected  time.Time
-	lastSent   time.Time
-	failures   int64
-	successes  int64
-	authed     bool
+	conn      net.Conn
+	addr      string
+	connected time.Time
+	lastSent  time.Time
+	failures  int64
+	successes int64
+	authed    bool
 }
 
 type BackoffState struct {
@@ -189,9 +201,9 @@ type CircuitBreaker struct {
 
 func NewRateLimiter(config Config) *RateLimiter {
 	rl := &RateLimiter{
-		limiters:      make(map[string]*rate.Limiter),
+		limiters:       make(map[string]*rate.Limiter),
 		standardLimits: config.RateLimits,
-		turboLimits:   make(map[string]int),
+		turboLimits:    make(map[string]int),
 	}
 
 	// Apply turbo mode multiplier (5x standard limits)
@@ -218,6 +230,26 @@ func NewRateLimiter(config Config) *RateLimiter {
 	go rl.cleanupWorker()
 
 	return rl
+}
+
+func (s *Sprint) cleanupSeenMessages() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			s.seenMessagesMu.Lock()
+			for id, ts := range s.seenMessages {
+				if time.Since(ts) > 1*time.Hour {
+					delete(s.seenMessages, id)
+				}
+			}
+			s.seenMessagesMu.Unlock()
+		}
+	}
 }
 
 func (rl *RateLimiter) cleanupWorker() {
@@ -332,10 +364,11 @@ func NewSprint() (*Sprint, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	s := &Sprint{
-		peers:          make(map[string]*PeerConnection),
-		metrics:        make(chan Metrics, 5000), // Large buffer
-		nodeBackoff:    make(map[string]*BackoffState),
-		startTime:      time.Now(),
+		peers:        make(map[string]*PeerConnection),
+		metrics:      make(chan Metrics, 5000), // Large buffer
+		nodeBackoff:  make(map[string]*BackoffState),
+		seenMessages: make(map[string]time.Time), // Initialize seen messages
+		startTime:    time.Now(),
 		perfMetrics: &PerformanceMetrics{
 			startTime:     time.Now(),
 			nodeLatencies: make(map[string]time.Duration),
@@ -371,18 +404,13 @@ func NewSprint() (*Sprint, error) {
 	s.getMempoolInfoReq = []byte(`{"jsonrpc":"1.0","id":"sprint","method":"getmempoolinfo","params":[]}`)
 
 	// Pre-encode sprint payload template
-	payload := struct {
-		Type     string `json:"type"`
-		Hash     string `json:"hash"`
-		Ts       string `json:"ts"`
-		Version  string `json:"version"`
-		Protocol int    `json:"protocol"`
-	}{
-		Type:     "block",
-		Hash:     "HASH_PLACEHOLDER",
-		Ts:       "TS_PLACEHOLDER",
-		Version:  Version,
-		Protocol: 2, // Updated protocol version
+	payload := BlockMessage{
+		Type:      "block",
+		Hash:      "HASH_PLACEHOLDER",
+		Ts:        "TS_PLACEHOLDER",
+		Version:   Version,
+		Protocol:  2, // Updated protocol version
+		MessageID: "MESSAGE_ID_PLACEHOLDER",
 	}
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -406,6 +434,8 @@ func (s *Sprint) Start() error {
 	go s.StartMetricsReporter()
 	go s.StartPerformanceMonitor()
 	go s.StartLicenseMonitor()
+	go s.StartPeerListener(":" + strconv.Itoa(s.config.PeerListenPort)) // Start inbound listener for peer mesh networking
+	go s.cleanupSeenMessages()                                          // Start cleanup for seen messages
 
 	// Start advanced monitoring if turbo mode enabled
 	if s.config.TurboMode {
@@ -464,13 +494,14 @@ func (s *Sprint) Shutdown() {
 func (s *Sprint) LoadConfig() error {
 	// Default configuration
 	s.config = Config{
-		PollInterval: 5,
-		Tier:         "free",
-		LogLevel:     "info",
-		MaxPeers:     100,
-		MetricsURL:   "https://api.bitcoincab.inc/metrics",
-		APIBase:      "http://localhost:8080",
-		RateLimits:   make(map[string]int),
+		PollInterval:   5,
+		Tier:           "free",
+		LogLevel:       "info",
+		MaxPeers:       100,
+		PeerListenPort: 8335,
+		MetricsURL:     "https://api.bitcoincab.inc/metrics",
+		APIBase:        "http://localhost:8080",
+		RateLimits:     make(map[string]int),
 	}
 
 	// Override with env vars for sensitive fields
@@ -497,6 +528,11 @@ func (s *Sprint) LoadConfig() error {
 	// Unmarshal JSON into config
 	if err := json.Unmarshal(data, &s.config); err != nil {
 		return fmt.Errorf("failed to parse config.json: %w", err)
+	}
+
+	// Set default peer listen port if not specified
+	if s.config.PeerListenPort == 0 {
+		s.config.PeerListenPort = 8335
 	}
 
 	// Validate required fields
@@ -719,12 +755,7 @@ func (s *Sprint) pollForNewBlocks() {
 			zap.String("hash_prefix", hash[:8]),
 			zap.Int("height", height),
 			zap.String("node", node))
-		s.OnNewBlock(hash, height, node)
-
-		// Start burst monitoring if turbo mode
-		if s.config.TurboMode {
-			go s.startBurstMonitoring(hash, height)
-		}
+		s.OnNewBlock(hash, height, node, "") // Empty messageID for locally detected blocks
 	}
 }
 
@@ -996,7 +1027,7 @@ func (s *Sprint) clearNodeBackoff(node string) {
 
 // ───────────────────────── Block Broadcasting ─────────────────────────
 
-func (s *Sprint) OnNewBlock(hash string, height int, node string) {
+func (s *Sprint) OnNewBlock(hash string, height int, node string, messageID string) {
 	start := time.Now()
 
 	// Check license limits
@@ -1007,11 +1038,28 @@ func (s *Sprint) OnNewBlock(hash string, height int, node string) {
 		return
 	}
 
+	// Generate a unique message ID if not provided (for locally detected blocks)
+	if messageID == "" {
+		messageID = hex.EncodeToString([]byte(hash + strconv.FormatInt(time.Now().UnixNano(), 16)))
+	}
+
+	// Check if message was already processed
+	s.seenMessagesMu.Lock()
+	if _, exists := s.seenMessages[messageID]; exists {
+		s.seenMessagesMu.Unlock()
+		zap.L().Debug("Skipping already processed block message",
+			zap.String("hash_prefix", hash[:8]),
+			zap.String("message_id", messageID))
+		return
+	}
+	s.seenMessages[messageID] = time.Now()
+	s.seenMessagesMu.Unlock()
+
 	var sent int
 	if s.config.TurboMode {
-		sent = s.SprintBlockTurbo(hash)
+		sent = s.SprintBlockTurbo(hash, messageID)
 	} else {
-		sent = s.SprintBlock(hash)
+		sent = s.SprintBlock(hash, messageID)
 	}
 
 	latency := float64(time.Since(start).Milliseconds())
@@ -1055,7 +1103,7 @@ func (s *Sprint) OnNewBlock(hash string, height int, node string) {
 		s.perfMetrics.avgBlockDetection = time.Since(s.lastBlockTime)
 	} else {
 		alpha := 0.1
-		s.perfMetrics.avgSprintTime = time.Duration(float64(s.perfMetrics.avgSprintTime)*(1-alpha) + float64(latency*int64(time.Millisecond))*alpha)
+		s.perfMetrics.avgSprintTime = time.Duration(float64(s.perfMetrics.avgSprintTime)*(1-alpha) + latency*float64(time.Millisecond)*alpha)
 		s.perfMetrics.avgBlockDetection = time.Duration(float64(s.perfMetrics.avgBlockDetection)*(1-alpha) + float64(time.Since(s.lastBlockTime))*alpha)
 	}
 	s.perfMetrics.mu.Unlock()
@@ -1065,7 +1113,8 @@ func (s *Sprint) OnNewBlock(hash string, height int, node string) {
 		zap.Int("height", height),
 		zap.Float64("latency_ms", latency),
 		zap.Int("peers", sent),
-		zap.String("node", node))
+		zap.String("node", node),
+		zap.String("message_id", messageID))
 }
 
 func (s *Sprint) isBlockLimitReached() bool {
@@ -1083,15 +1132,15 @@ func (s *Sprint) isBlockLimitReached() bool {
 	}
 }
 
-func (s *Sprint) SprintBlock(hash string) int {
-	return s.sprintBlockInternal(hash, false)
+func (s *Sprint) SprintBlock(hash string, messageID string) int {
+	return s.sprintBlockInternal(hash, messageID, false)
 }
 
-func (s *Sprint) SprintBlockTurbo(hash string) int {
-	return s.sprintBlockInternal(hash, true)
+func (s *Sprint) SprintBlockTurbo(hash string, messageID string) int {
+	return s.sprintBlockInternal(hash, messageID, true)
 }
 
-func (s *Sprint) sprintBlockInternal(hash string, turbo bool) int {
+func (s *Sprint) sprintBlockInternal(hash string, messageID string, turbo bool) int {
 	s.peersMu.RLock()
 	peers := make([]*PeerConnection, 0, len(s.peers))
 	for _, peer := range s.peers {
@@ -1106,7 +1155,7 @@ func (s *Sprint) sprintBlockInternal(hash string, turbo bool) int {
 	}
 
 	// Prepare message
-	message := s.prepareMessage(hash)
+	message := s.prepareMessage(hash, messageID)
 
 	var wg sync.WaitGroup
 	var successCount atomic.Int32
@@ -1141,10 +1190,11 @@ func (s *Sprint) sprintBlockInternal(hash string, turbo bool) int {
 	return int(successCount.Load())
 }
 
-func (s *Sprint) prepareMessage(hash string) []byte {
+func (s *Sprint) prepareMessage(hash string, messageID string) []byte {
 	ts := strconv.FormatInt(time.Now().Unix(), 10)
 	msg := bytes.ReplaceAll(s.preEncodedPayload, []byte("HASH_PLACEHOLDER"), []byte(hash))
 	msg = bytes.ReplaceAll(msg, []byte("TS_PLACEHOLDER"), []byte(ts))
+	msg = bytes.ReplaceAll(msg, []byte("MESSAGE_ID_PLACEHOLDER"), []byte(messageID))
 	return msg
 }
 
@@ -1168,34 +1218,6 @@ func (s *Sprint) sendToPeer(peer *PeerConnection, message []byte) bool {
 	}
 
 	return true
-}
-
-func (s *Sprint) startBurstMonitoring(hash string, height int) {
-	ctx, cancel := context.WithTimeout(s.ctx, 10*time.Second)
-	defer cancel()
-
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			newHash, newHeight, node, err := s.getBestBlock()
-			if err != nil {
-				continue
-			}
-			if newHash != hash && newHeight > height {
-				zap.L().Info("Burst detected",
-					zap.String("new_hash_prefix", newHash[:8]),
-					zap.Int("new_height", newHeight),
-					zap.String("node", node))
-				s.OnNewBlock(newHash, newHeight, node)
-				return
-			}
-		}
-	}
 }
 
 // ───────────────────────── Peers ─────────────────────────
@@ -1327,6 +1349,189 @@ func (s *Sprint) performPeerHandshake(peer *PeerConnection) error {
 	return nil
 }
 
+// StartPeerListener starts a TCP server that accepts inbound peer connections.
+func (s *Sprint) StartPeerListener(listenAddr string) {
+	ln, err := net.Listen("tcp", listenAddr)
+	if err != nil {
+		zap.L().Fatal("Failed to start peer listener", zap.String("addr", listenAddr), zap.Error(err))
+	}
+
+	zap.L().Info("Peer listener started", zap.String("addr", listenAddr))
+
+	go func() {
+		defer ln.Close()
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				select {
+				case <-s.ctx.Done():
+					return
+				default:
+					zap.L().Warn("Failed to accept peer connection", zap.Error(err))
+					continue
+				}
+			}
+
+			go s.handleInboundPeer(conn)
+		}
+	}()
+}
+
+func (s *Sprint) handleInboundPeer(conn net.Conn) {
+	defer func() {
+		if r := recover(); r != nil {
+			zap.L().Error("Recovered from panic in inbound peer handler", zap.Any("err", r))
+		}
+		conn.Close()
+	}()
+
+	peerAddr := conn.RemoteAddr().String()
+
+	// Read handshake
+	if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		zap.L().Error("Failed to set read deadline", zap.Error(err))
+		return
+	}
+
+	data, err := io.ReadAll(io.LimitReader(conn, 1024))
+	if err != nil {
+		zap.L().Warn("Failed to read handshake", zap.String("peer", peerAddr), zap.Error(err))
+		return
+	}
+
+	var hs PeerHandshake
+	if err := json.Unmarshal(data, &hs); err != nil {
+		zap.L().Warn("Invalid handshake JSON", zap.String("peer", peerAddr), zap.Error(err))
+		return
+	}
+
+	// Verify signature
+	sigData := []byte(hs.LicenseKey + strconv.FormatInt(hs.Timestamp, 10))
+	mac := hmac.New(sha256.New, []byte(s.config.PeerSecret))
+	mac.Write(sigData)
+	expectedSig := hex.EncodeToString(mac.Sum(nil))
+
+	if hs.Signature != expectedSig || time.Now().Unix()-hs.Timestamp > 30 {
+		zap.L().Warn("Invalid handshake signature", zap.String("peer", peerAddr))
+		return
+	}
+
+	// Send handshake response
+	resp := PeerHandshake{
+		LicenseKey: s.config.LicenseKey,
+		Timestamp:  time.Now().Unix(),
+	}
+	respSigData := []byte(resp.LicenseKey + strconv.FormatInt(resp.Timestamp, 10))
+	mac = hmac.New(sha256.New, []byte(s.config.PeerSecret))
+	mac.Write(respSigData)
+	resp.Signature = hex.EncodeToString(mac.Sum(nil))
+
+	respData, _ := json.Marshal(resp)
+	respData = append(respData, '\n')
+
+	if err := conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		zap.L().Error("Failed to set write deadline", zap.Error(err))
+		return
+	}
+	if _, err := conn.Write(respData); err != nil {
+		zap.L().Warn("Failed to send handshake response", zap.String("peer", peerAddr), zap.Error(err))
+		return
+	}
+
+	// Add peer
+	peer := &PeerConnection{
+		conn:      conn,
+		addr:      peerAddr,
+		connected: time.Now(),
+		authed:    true,
+	}
+
+	s.peersMu.Lock()
+	if len(s.peers) < s.config.MaxPeers {
+		s.peers[peer.addr] = peer
+		zap.L().Info("Inbound peer authenticated", zap.String("addr", peer.addr))
+	} else {
+		zap.L().Warn("Max peers reached, closing connection", zap.String("addr", peer.addr))
+		s.peersMu.Unlock()
+		return
+	}
+	s.peersMu.Unlock()
+
+	// Start reading block messages for gossip relay
+	for {
+		if err := conn.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil {
+			zap.L().Error("Failed to set read deadline for block message", zap.String("peer", peerAddr), zap.Error(err))
+			s.removePeer(peerAddr)
+			return
+		}
+
+		data, err := io.ReadAll(io.LimitReader(conn, 1024))
+		if err != nil {
+			if err == io.EOF || strings.Contains(err.Error(), "closed") {
+				zap.L().Info("Peer disconnected", zap.String("peer", peerAddr))
+			} else {
+				zap.L().Warn("Failed to read block message", zap.String("peer", peerAddr), zap.Error(err))
+			}
+			s.removePeer(peerAddr)
+			return
+		}
+
+		var msg BlockMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			zap.L().Warn("Invalid block message JSON", zap.String("peer", peerAddr), zap.Error(err))
+			continue
+		}
+
+		if msg.Type != "block" || msg.Protocol != 2 {
+			zap.L().Warn("Invalid block message", zap.String("peer", peerAddr), zap.String("type", msg.Type), zap.Int("protocol", msg.Protocol))
+			continue
+		}
+
+		// Check if message was already processed
+		s.seenMessagesMu.Lock()
+		if _, exists := s.seenMessages[msg.MessageID]; exists {
+			s.seenMessagesMu.Unlock()
+			zap.L().Debug("Skipping already processed block message",
+				zap.String("hash_prefix", msg.Hash[:8]),
+				zap.String("message_id", msg.MessageID),
+				zap.String("peer", peerAddr))
+			continue
+		}
+		s.seenMessages[msg.MessageID] = time.Now()
+		s.seenMessagesMu.Unlock()
+
+		// Validate timestamp
+		ts, err := strconv.ParseInt(msg.Ts, 10, 64)
+		if err != nil || time.Now().Unix()-ts > 60 {
+			zap.L().Warn("Invalid or stale block message timestamp",
+				zap.String("peer", peerAddr),
+				zap.String("ts", msg.Ts))
+			continue
+		}
+
+		// Log received block
+		zap.L().Info("Received block from peer",
+			zap.String("hash_prefix", msg.Hash[:8]),
+			zap.String("peer", peerAddr),
+			zap.String("message_id", msg.MessageID))
+
+		// Trigger OnNewBlock for relay (height and node are unknown for relayed blocks)
+		s.OnNewBlock(msg.Hash, 0, peerAddr, msg.MessageID)
+	}
+}
+
+func (s *Sprint) removePeer(addr string) {
+	s.peersMu.Lock()
+	defer s.peersMu.Unlock()
+	if peer, exists := s.peers[addr]; exists {
+		if peer.conn != nil {
+			peer.conn.Close()
+		}
+		delete(s.peers, addr)
+		zap.L().Info("Removed peer", zap.String("addr", addr))
+	}
+}
+
 // ───────────────────────── Dashboard ─────────────────────────
 
 func (s *Sprint) StartWebDashboard() {
@@ -1432,7 +1637,7 @@ func (s *Sprint) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		case m := <-s.metrics:
 			metrics = append(metrics, m)
 		default:
-			break
+			return // Exit the loop when no more metrics available
 		}
 	}
 
@@ -1611,17 +1816,18 @@ func (s *Sprint) StartMetricsReporter() {
 
 func (s *Sprint) reportMetrics() {
 	var metrics []Metrics
-	for {
+
+	// Collect up to 100 metrics or until no more available
+	for len(metrics) < 100 {
 		select {
 		case m := <-s.metrics:
 			metrics = append(metrics, m)
-			if len(metrics) >= 100 {
-				break
-			}
 		default:
+			// No more metrics available
 			if len(metrics) == 0 {
 				return
 			}
+			// Process what we have
 			break
 		}
 	}
@@ -1707,4 +1913,3 @@ func min(a, b int) int {
 	}
 	return b
 }
-```
