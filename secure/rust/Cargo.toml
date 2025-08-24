@@ -1,9 +1,9 @@
 [package]
 name = "secure_buffer"
 version = "0.1.0"
-edition = "2021"
+edition = "2025"
 license = "MIT"
-authors = ["BitcoinCab.inc <dev@bitcoincab.inc>"]
+authors = "BitcoinCab.inc"
 
 [lib]
 name = "secure_buffer"

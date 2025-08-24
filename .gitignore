@@ -13,6 +13,12 @@ dist/
 # Go build cache
 vendor/
 
+# Rust build artifacts
+target/
+Cargo.lock
+*.rlib
+*.pdb
+
 # Log files
 *.log
 logs/
@@ -74,3 +80,12 @@ start-bitcoin-testnet4.ps1
 start-sprint-testnet4.ps1
 Start-MockServer.ps1
 zmq-config.json
+
+# Application-specific build outputs
+cmd/sprint/bitcoin-sprint
+cmd/sprint/bitcoin-sprint.exe
+cmd/sprint/config-local.json
+
+# Rust secure module artifacts  
+secure/rust/target/
+secure/rust/Cargo.lock

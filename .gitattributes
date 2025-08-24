@@ -9,6 +9,11 @@
 go.mod text eol=lf
 go.sum text eol=lf
 
+# Rust source files
+*.rs text eol=lf
+Cargo.toml text eol=lf
+Cargo.lock text eol=lf
+
 # Configuration files
 *.json text eol=lf
 *.yaml text eol=lf
@@ -32,6 +37,7 @@ LICENSE* text eol=lf
 *.dll binary
 *.so binary
 *.dylib binary
+*.rlib binary
 *.png binary
 *.jpg binary
 *.jpeg binary
@@ -45,3 +51,9 @@ LICENSE* text eol=lf
 # Git files
 .gitignore text eol=lf
 .gitattributes text eol=lf
+
+# Project structure specific patterns
+cmd/**/*.go text eol=lf
+internal/**/*.go text eol=lf
+secure/rust/**/*.rs text eol=lf
+secure/rust/**/Cargo.toml text eol=lf
