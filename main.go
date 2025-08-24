@@ -21,8 +21,15 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
+)
+
+// Versioning - populated at build time via -ldflags
+var (
+	Version = "dev"
+	Commit  = "unknown"
 )
 
 // ───────────────────────── Types ─────────────────────────
@@ -36,6 +43,7 @@ type Config struct {
 	RPCUser      string   `json:"rpc_user"`
 	RPCPass      string   `json:"rpc_pass"`
 	PollInterval int      `json:"poll_interval"` // seconds, default 5
+	TurboMode    bool     `json:"turbo_mode"`    // enable ultra-aggressive fan-out
 }
 
 type License struct {
@@ -78,11 +86,18 @@ type Sprint struct {
 // ───────────────────────── Main ─────────────────────────
 
 func main() {
+	// Quick version switch: print and exit if requested to avoid spinning the build script
+	if len(os.Args) > 1 {
+		if os.Args[1] == "--version" || os.Args[1] == "-v" {
+			fmt.Printf("Bitcoin Sprint v%s (commit %s)\n", Version, Commit)
+			return
+		}
+	}
 	// Modern Go 1.20+ uses automatic random seeding
 	// No need for explicit rand.Seed() call
 
 	// Print application banner
-	log.Printf("Bitcoin Sprint v1.0.3 - Enterprise Bitcoin Block Detection")
+	log.Printf("Bitcoin Sprint v%s - Enterprise Bitcoin Block Detection", Version)
 	log.Printf("Copyright © 2025 BitcoinCab.inc")
 
 	s := &Sprint{
@@ -122,7 +137,7 @@ func main() {
 		Type:     "block",
 		Hash:     "HASH_PLACEHOLDER",
 		Ts:       "TS_PLACEHOLDER",
-		Version:  "1.0.3",
+		Version:  Version,
 		Protocol: 1,
 	}
 	payloadBytes, _ := json.Marshal(payload)
@@ -162,6 +177,12 @@ func main() {
 	log.Printf("Dashboard: http://localhost:%s", strings.TrimPrefix(dashPort, ":"))
 	log.Printf("Tier: %s", s.license.Tier)
 
+	mode := "SAFE"
+	if s.config.TurboMode {
+		mode = "TURBO"
+	}
+	log.Printf("⚡ Bitcoin Sprint running in %s mode", mode)
+
 	<-s.ctx.Done()
 }
 
@@ -188,7 +209,18 @@ func (s *Sprint) StartBlockPoller() {
 		case <-s.ctx.Done():
 			return
 		case <-ticker.C:
-			hash, height, node, err := s.getBestBlock()
+			var (
+				hash   string
+				height int
+				node   string
+				err    error
+			)
+
+			if s.config.TurboMode {
+				hash, height, node, err = s.getBestBlockTurbo()
+			} else {
+				hash, height, node, err = s.getBestBlock()
+			}
 			if err != nil {
 				log.Printf("RPC poll error: %v", err)
 				consecutiveErrors++
@@ -231,7 +263,12 @@ func (s *Sprint) StartBlockPoller() {
 				go s.startParallelMonitoring(hash, height)
 
 				// Start predictive block monitoring
-				go s.startPredictiveMonitoring()
+				if s.config.TurboMode {
+					// Turbo: faster mempool predictor cadence
+					go s.startPredictiveMonitoringTurbo()
+				} else {
+					go s.startPredictiveMonitoring()
+				}
 			} else {
 				// AGGRESSIVE adaptive polling based on time since last block
 				elapsed := time.Since(lastBlockTime)
@@ -492,7 +529,12 @@ func (s *Sprint) OnNewBlock(hash string, height int, node string) {
 	}
 
 	start := time.Now()
-	sent := s.SprintBlock(hash)
+	var sent int
+	if s.config.TurboMode {
+		sent = s.SprintBlockTurbo(hash)
+	} else {
+		sent = s.SprintBlock(hash)
+	}
 	lat := float64(time.Since(start).Milliseconds())
 
 	s.blocksSent++
@@ -514,6 +556,110 @@ func (s *Sprint) OnNewBlock(hash string, height int, node string) {
 
 	log.Printf("Block %s (h=%d) sprinted in %.1fms to %d peers via %s",
 		hash[:8], height, lat, sent, node)
+}
+
+// getBestBlockTurbo queries all nodes in parallel and returns the fastest valid response.
+func (s *Sprint) getBestBlockTurbo() (string, int, string, error) {
+	if len(s.config.RPCNodes) == 0 {
+		return "", 0, "", fmt.Errorf("no RPC nodes configured")
+	}
+
+	ctx, cancel := context.WithTimeout(s.ctx, 2*time.Second) // shorter timeout
+	defer cancel()
+
+	type result struct {
+		hash   string
+		height int
+		node   string
+		err    error
+	}
+	results := make(chan result, len(s.config.RPCNodes))
+
+	reqBody := []byte(`{"jsonrpc":"1.0","id":"sprint","method":"getblockchaininfo","params":[]}`)
+
+	for _, node := range s.config.RPCNodes {
+		go func(n string) {
+			h, height, err := s.tryRPCOptimized(n, reqBody)
+			select {
+			case results <- result{hash: h, height: height, node: n, err: err}:
+			case <-ctx.Done():
+			}
+		}(node)
+	}
+
+	// take first valid response, or timeout
+	for range s.config.RPCNodes {
+		select {
+		case r := <-results:
+			if r.err == nil && r.hash != "" {
+				return r.hash, r.height, r.node, nil
+			}
+		case <-ctx.Done():
+			return "", 0, "", fmt.Errorf("turbo poll timeout")
+		}
+	}
+	return "", 0, "", fmt.Errorf("all turbo RPC calls failed")
+}
+
+// SprintBlockTurbo sends a pre-encoded notification to peers with tight deadlines and async logging.
+func (s *Sprint) SprintBlockTurbo(hash string) int {
+	s.mu.RLock()
+	peers := make([]net.Conn, 0, len(s.peers))
+	peerAddrs := make([]string, 0, len(s.peers))
+	for addr, c := range s.peers {
+		peers = append(peers, c)
+		peerAddrs = append(peerAddrs, addr)
+	}
+	s.mu.RUnlock()
+	if len(peers) == 0 {
+		return 0
+	}
+
+	// Pre-encode payload once per sprint
+	payload := struct {
+		Type     string `json:"type"`
+		Hash     string `json:"hash"`
+		Ts       int64  `json:"ts"`
+		Version  string `json:"version"`
+		Protocol int    `json:"protocol"`
+	}{
+		Type: "block", Hash: hash, Ts: time.Now().UnixMilli(),
+		Version: Version, Protocol: 1,
+	}
+	b, _ := json.Marshal(payload)
+	message := append(b, '\n')
+
+	var wg sync.WaitGroup
+	var success int32
+
+	for i, conn := range peers {
+		addr := peerAddrs[i]
+		wg.Add(1)
+		go func(c net.Conn, a string) {
+			defer wg.Done()
+			_ = c.SetWriteDeadline(time.Now().Add(200 * time.Millisecond))
+			if tcp, ok := c.(*net.TCPConn); ok {
+				_ = tcp.SetNoDelay(true)
+			}
+			if _, err := c.Write(message); err == nil {
+				atomic.AddInt32(&success, 1)
+			} else {
+				// drop slow/broken peer
+				s.mu.Lock()
+				if pc, exists := s.peers[a]; exists && pc == c {
+					_ = pc.Close()
+					delete(s.peers, a)
+				}
+				s.mu.Unlock()
+			}
+		}(conn, addr)
+	}
+
+	wg.Wait()
+	succ := int(atomic.LoadInt32(&success))
+	// Async non-blocking log
+	go log.Printf("⚡ TURBO block %s sprinted to %d peers", hash[:8], succ)
+	return succ
 }
 
 // ───────────────────────── Stubs / Helpers ─────────────────────────
@@ -589,6 +735,14 @@ func (s *Sprint) LoadConfig() error {
 		}
 	}
 
+	// Turbo mode env override
+	if v := os.Getenv("SPRINT_TURBO"); v != "" {
+		lv := strings.ToLower(strings.TrimSpace(v))
+		if lv == "1" || lv == "true" || lv == "yes" || lv == "on" {
+			cfg.TurboMode = true
+		}
+	}
+
 	// Fallback to local node if no nodes were specified
 	if len(cfg.RPCNodes) == 0 {
 		cfg.RPCNodes = []string{"http://127.0.0.1:8332"}
@@ -596,8 +750,8 @@ func (s *Sprint) LoadConfig() error {
 	}
 
 	// Log configuration summary (excluding sensitive information)
-	log.Printf("Configuration loaded: Tier=%s, Nodes=%d, PollInterval=%ds",
-		cfg.Tier, len(cfg.RPCNodes), cfg.PollInterval)
+	log.Printf("Configuration loaded: Tier=%s, Nodes=%d, PollInterval=%ds, Turbo=%v",
+		cfg.Tier, len(cfg.RPCNodes), cfg.PollInterval, cfg.TurboMode)
 
 	s.config = cfg
 	return nil
@@ -650,7 +804,7 @@ func (s *Sprint) validateRemoteLicense() error {
 	url := strings.TrimRight(s.config.APIBase, "/") + "/v1/license/validate"
 	body := map[string]string{
 		"license_key": s.config.LicenseKey,
-		"version":     "1.0.3", // Include version for compatibility checking
+		"version":     Version, // Include version for compatibility checking
 		"client_id":   getSystemIdentifier(),
 	}
 
@@ -681,8 +835,8 @@ func (s *Sprint) validateRemoteLicense() error {
 
 	// Set secure headers
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "BitcoinSprint/1.0.3")
-	req.Header.Set("X-Client-Version", "1.0.3")
+	req.Header.Set("User-Agent", fmt.Sprintf("BitcoinSprint/%s", Version))
+	req.Header.Set("X-Client-Version", Version)
 
 	// Execute request with timeout
 	resp, err := s.client.Do(req)
@@ -1163,6 +1317,65 @@ func (s *Sprint) startPredictiveMonitoring() {
 			} else {
 				resp.Body.Close()
 				cancel()
+			}
+		}
+	}
+}
+
+// startPredictiveMonitoringTurbo is a faster mempool-based predictor used in Turbo mode.
+func (s *Sprint) startPredictiveMonitoringTurbo() {
+	if len(s.config.RPCNodes) == 0 {
+		return
+	}
+
+	log.Printf("Starting PREDICTIVE monitoring (Turbo) with 500ms cadence")
+
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	var lastSize int
+	spike := 40 // lower threshold in turbo
+
+	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Minute)
+	defer cancel()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			node := s.config.RPCNodes[0]
+			reqBody := []byte(`{"jsonrpc":"1.0","id":"predictive","method":"getmempoolinfo","params":[]}`)
+			cctx, ccancel := context.WithTimeout(s.ctx, 1*time.Second)
+			req, err := http.NewRequestWithContext(cctx, http.MethodPost, node, bytes.NewReader(reqBody))
+			if err != nil {
+				ccancel()
+				continue
+			}
+			req.SetBasicAuth(s.config.RPCUser, s.config.RPCPass)
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := s.client.Do(req)
+			if err != nil {
+				ccancel()
+				continue
+			}
+			var out struct {
+				Result struct {
+					Size int `json:"size"`
+				} `json:"result"`
+			}
+			if json.NewDecoder(resp.Body).Decode(&out) == nil {
+				resp.Body.Close()
+				ccancel()
+				size := out.Result.Size
+				if size > spike && (lastSize == 0 || size > lastSize*2) {
+					log.Printf(" PREDICTIVE (Turbo): mempool spike %d → BOOST 100ms", size)
+					go s.hyperAggressivePolling(60 * time.Second)
+				}
+				lastSize = size
+			} else {
+				resp.Body.Close()
+				ccancel()
 			}
 		}
 	}

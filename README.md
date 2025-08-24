@@ -4,18 +4,72 @@ Fast, reliable Bitcoin block sprinting with RPC polling and enterprise features.
 
 ## Quick Start
 
-1. **Build the binary:**
-   ```powershell
-   go mod init bitcoin-sprint
-   go build -ldflags="-s -w" -o sprint.exe
-   ```
+### Building
 
-2. **Install on Windows (as Administrator):**
+#### Local Developer Build
+
+For local builds, the script will automatically detect your Git commit:
+
+```powershell
+# Standard local build
+.\build-optimized.ps1 -OutputName "sprint.exe" -Release -Turbo -Version "1.0.3"
+
+# Example output
+# Bitcoin Sprint v1.0.3 (commit 29c554f)
+```
+
+No need to pass `-Commit`; the script runs `git rev-parse --short HEAD`.
+
+#### CI/CD Deterministic Build
+
+When `.git` isn't available (e.g., CI pipelines building from source tarballs), pass the commit manually:
+
+```powershell
+# Deterministic CI build
+.\build-optimized.ps1 -OutputName "sprint-ci.exe" -Release -Turbo `
+    -Version "1.0.3" -Commit "ci-abcdef"
+```
+
+✅ Output is guaranteed to embed exactly what you provide:
+
+```text
+Bitcoin Sprint v1.0.3 (commit ci-abcdef)
+```
+
+#### Build Verification
+
+Every build runs `--version` immediately after compile to verify metadata was embedded correctly:
+
+```powershell
+.\sprint.exe --version
+# Bitcoin Sprint v1.0.3 (commit ci-abcdef)
+```
+
+#### Build Parameters
+
+| Parameter     | Description                                               | Example       |
+| ------------- | --------------------------------------------------------- | ------------- |
+| `-OutputName` | Name of output binary                                     | `sprint.exe`  |
+| `-Release`    | Apply release optimizations                               | `-Release`    |
+| `-Turbo`      | Enable turbo optimizations (aggressive mode)              | `-Turbo`      |
+| `-Version`    | Version string to embed                                   | `"1.0.3"`     |
+| `-Commit`     | Commit/ref to embed (optional, defaults to git rev-parse) | `"ci-abcdef"` |
+
+With this setup:
+
+- Local builds stay automatic
+- CI builds stay deterministic & reproducible  
+- Every binary can be traced to version + commit without ambiguity
+
+### Installation
+
+1. **Install on Windows (as Administrator):**
+
    ```powershell
    .\install.ps1 -BinaryUrl "https://your-cdn.com/sprint.exe" -BinarySha256 "YOUR_SHA256_HERE"
    ```
 
-3. **Access dashboard:** http://localhost:8080
+2. **Access dashboard:** <http://localhost:8080>
 
 ## Configuration
 
@@ -29,7 +83,8 @@ Edit `config.json` or set environment variables:
 ## Bitcoin Core Setup
 
 Add to your `bitcoin.conf`:
-```
+
+```ini
 rpcuser=bitcoin
 rpcpassword=password123
 rpcbind=127.0.0.1
@@ -71,12 +126,14 @@ go test ./... -v
 
 ### Time Savings Breakdown
 
-**Typical Block Propagation (Without Sprint)**
+#### Typical Block Propagation (Without Sprint)
+
 - Bitcoin Core receives block: 0ms (baseline)
 - P2P network propagation: 200-800ms average
 - Your node gets notified: 200-800ms after block creation
 
-**With Bitcoin Sprint (Optimized)**
+#### With Bitcoin Sprint (Optimized)
+
 - Sprint API detects block: 20-50ms (1-2s ultra-tight polling)
 - Sprint to premium peers: 5-25ms (500ms write deadlines)
 - **Your competitive advantage: 175-775ms faster than peers**
@@ -95,6 +152,7 @@ Our optimized RPC polling implementation achieves these speeds through:
 ### Verified Timings
 
 Based on our optimized implementation:
+
 - RPC call latency: ~3ms (with 3s timeout, 2s dial)
 - Peer notification: ~5-25ms per peer (500ms write deadline)
 - Total sprint time: **20-75ms typical**
