@@ -1,3 +1,4 @@
+```go
 // SPDX-License-Identifier: MIT
 // Bitcoin Sprint - RPC Edition (Enterprise-Ready)
 // Copyright (c) 2025 BitcoinCab.inc
@@ -7,7 +8,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,14 +20,19 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 // Versioning - populated at build time via -ldflags
@@ -32,81 +41,32 @@ var (
 	Commit  = "unknown"
 )
 
-// NewRateLimiter creates a rate limiter with tier-based limits
-func NewRateLimiter() *RateLimiter {
-	return &RateLimiter{
-		requests: make(map[string][]int64),
-		standardLimits: map[string]int{
-			"/latest":  4, // 4 req/sec
-			"/metrics": 1, // 1 req/sec
-			"/status":  1, // 0.2 req/sec (rounded up)
-		},
-		turboLimits: map[string]int{
-			"/latest":     20, // 20 req/sec
-			"/metrics":    5,  // 5 req/sec
-			"/status":     1,  // 1 req/sec
-			"/stream":     1,  // 1 connection
-			"/predictive": 1,  // 1 req/sec
-		},
-	}
-}
-
-// Allow checks if a request is allowed under rate limits
-func (rl *RateLimiter) Allow(clientIP, endpoint string, isTurbo bool) bool {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
-	now := time.Now().Unix()
-	key := clientIP + ":" + endpoint
-
-	// Clean old requests (older than 1 second)
-	if requests, exists := rl.requests[key]; exists {
-		var validRequests []int64
-		for _, timestamp := range requests {
-			if now-timestamp < 1 {
-				validRequests = append(validRequests, timestamp)
-			}
-		}
-		rl.requests[key] = validRequests
-	}
-
-	// Get limit for this endpoint and tier
-	var limit int
-	if isTurbo {
-		limit = rl.turboLimits[endpoint]
-	} else {
-		limit = rl.standardLimits[endpoint]
-	}
-
-	// Check if under limit
-	if len(rl.requests[key]) >= limit {
-		return false
-	}
-
-	// Add this request
-	rl.requests[key] = append(rl.requests[key], now)
-	return true
-}
-
 // ───────────────────────── Types ─────────────────────────
 
 type Config struct {
-	LicenseKey   string   `json:"license_key"`
-	Tier         string   `json:"tier"`
-	MetricsURL   string   `json:"metrics_url"`
-	RPCNodes     []string `json:"rpc_nodes"`
-	APIBase      string   `json:"api_base"`
-	RPCUser      string   `json:"rpc_user"`
-	RPCPass      string   `json:"rpc_pass"`
-	PollInterval int      `json:"poll_interval"` // seconds, default 5
-	TurboMode    bool     `json:"turbo_mode"`    // enable ultra-aggressive fan-out
+	LicenseKey   string         `json:"license_key"`
+	Tier         string         `json:"tier"`
+	MetricsURL   string         `json:"metrics_url"`
+	RPCNodes     []string       `json:"rpc_nodes"`
+	APIBase      string         `json:"api_base"`
+	RPCUser      string         `json:"rpc_user"`
+	RPCPass      string         `json:"rpc_pass"`
+	PollInterval int            `json:"poll_interval"` // seconds, default 5
+	TurboMode    bool           `json:"turbo_mode"`    // enable ultra-aggressive fan-out
+	MaxPeers     int            `json:"max_peers"`     // maximum peer connections
+	LogLevel     string         `json:"log_level"`     // debug, info, warn, error
+	RateLimits   map[string]int `json:"rate_limits"`   // e.g., {"/latest": 5}
+	PeerSecret   string         `json:"peer_secret"`   // shared secret for peer auth
 }
 
 type License struct {
-	Valid      bool     `json:"valid"`
-	Tier       string   `json:"tier"`
-	BlockLimit int      `json:"block_limit"`
-	Peers      []string `json:"peers"`
+	Valid       bool     `json:"valid"`
+	LicenseKey  string   `json:"license_key"`
+	Tier        string   `json:"tier"`
+	BlockLimit  int      `json:"block_limit"`
+	Peers       []string `json:"peers"`
+	ExpiresAt   int64    `json:"expires_at"`
+	DailyReset  int64    `json:"daily_reset"` // Unix timestamp of last reset
 }
 
 type Metrics struct {
@@ -117,19 +77,22 @@ type Metrics struct {
 	LicenseKey string  `json:"license_key"`
 	Height     int     `json:"height"`
 	RPCNode    string  `json:"rpc_node"`
+	Success    bool    `json:"success"`
 }
 
 // API Response Types for Enhanced Endpoints
 type StatusResponse struct {
-	Tier             string `json:"tier"`
-	LicenseKey       string `json:"license_key"`
-	Valid            bool   `json:"valid"`
-	BlocksSentToday  int    `json:"blocks_sent_today"`
-	BlockLimit       int    `json:"block_limit"`
-	PeersConnected   int    `json:"peers_connected"`
-	UptimeSeconds    int64  `json:"uptime_seconds"`
-	Version          string `json:"version"`
-	TurboModeEnabled bool   `json:"turbo_mode_enabled"`
+	Tier             string    `json:"tier"`
+	LicenseKey       string    `json:"license_key"`
+	Valid            bool      `json:"valid"`
+	BlocksSentToday  int64     `json:"blocks_sent_today"`
+	BlockLimit       int       `json:"block_limit"`
+	PeersConnected   int       `json:"peers_connected"`
+	UptimeSeconds    int64     `json:"uptime_seconds"`
+	Version          string    `json:"version"`
+	TurboModeEnabled bool      `json:"turbo_mode_enabled"`
+	LastBlockTime    time.Time `json:"last_block_time"`
+	RPCNodesActive   int       `json:"rpc_nodes_active"`
 }
 
 type PredictiveResponse struct {
@@ -137,44 +100,175 @@ type PredictiveResponse struct {
 	Trend                   string  `json:"trend"`
 	ProbabilityNextBlock60s float64 `json:"probability_next_block_60s"`
 	LastUpdate              int64   `json:"last_update"`
+	AverageBlockTime        float64 `json:"average_block_time_minutes"`
 }
 
-// Rate limiting state
+// Peer handshake message
+type PeerHandshake struct {
+	LicenseKey string `json:"license_key"`
+	Timestamp  int64  `json:"timestamp"`
+	Signature  string `json:"signature"` // HMAC-SHA256 of LicenseKey+Timestamp
+}
+
+// Enhanced rate limiter with token bucket
 type RateLimiter struct {
-	requests       map[string][]int64
-	mu             sync.RWMutex
-	standardLimits map[string]int // endpoint -> requests per second
-	turboLimits    map[string]int
+	mu            sync.RWMutex
+	limiters      map[string]*rate.Limiter
+	standardLimits map[string]int
+	turboLimits   map[string]int
+	cleanupTicker *time.Ticker
+}
+
+// Performance monitoring
+type PerformanceMetrics struct {
+	mu                sync.RWMutex
+	avgBlockDetection time.Duration
+	avgSprintTime     time.Duration
+	totalBlocks       int64
+	failedConnections int64
+	startTime         time.Time
+	nodeLatencies     map[string]time.Duration
 }
 
 type Sprint struct {
-	config       Config
-	license      License
-	peers        map[string]net.Conn
-	metrics      chan Metrics
-	blocksSent   int
-	client       *http.Client
-	nodeBackoff  map[string]time.Time
-	rateLimiter  *RateLimiter
-	startTime    time.Time
-	lastMempool  int
-	latestMetric *Metrics // Store latest metric for /latest endpoint
+	config           Config
+	license          License
+	peers            map[string]*PeerConnection
+	metrics          chan Metrics
+	blocksSent       int64
+	client           *http.Client
+	nodeBackoff      map[string]*BackoffState
+	rateLimiter      *RateLimiter
+	startTime        time.Time
+	lastMempool      int
+	latestMetric     *Metrics
+	perfMetrics      *PerformanceMetrics
+	circuitBreaker   *CircuitBreaker
 
-	// HOT PATH OPTIMIZATIONS: Pre-marshaled requests
+	// Hot path optimizations
 	getBlockchainInfoReq []byte
+	getMempoolInfoReq    []byte
 	preEncodedPayload    []byte
 
-	// PERFORMANCE: Reduce lock contention
-	blocksSentMu sync.RWMutex
+	// Current state
+	currentBlockHash   string
+	currentBlockHeight int
+	lastBlockTime      time.Time
 
-	mu  sync.RWMutex
-	ctx context.Context
+	// Synchronization
+	mu       sync.RWMutex
+	peersMu  sync.RWMutex
+	ctx      context.Context
+	cancelFn context.CancelFunc
+}
+
+type PeerConnection struct {
+	conn       net.Conn
+	addr       string
+	connected  time.Time
+	lastSent   time.Time
+	failures   int64
+	successes  int64
+	authed     bool
+}
+
+type BackoffState struct {
+	until     time.Time
+	attempts  int
+	lastError error
+}
+
+type CircuitBreaker struct {
+	mu          sync.RWMutex
+	failures    int
+	maxFailures int
+	breakUntil  time.Time
+}
+
+// ───────────────────────── Rate Limiter Implementation ─────────────────────────
+
+func NewRateLimiter(config Config) *RateLimiter {
+	rl := &RateLimiter{
+		limiters:      make(map[string]*rate.Limiter),
+		standardLimits: config.RateLimits,
+		turboLimits:   make(map[string]int),
+	}
+
+	// Apply turbo mode multiplier (5x standard limits)
+	for endpoint, limit := range rl.standardLimits {
+		rl.turboLimits[endpoint] = limit * 5
+	}
+
+	// Fallback defaults if not configured
+	defaultStandards := map[string]int{
+		"/latest":     4,
+		"/metrics":    2,
+		"/status":     1,
+		"/predictive": 2,
+		"/stream":     1,
+	}
+	for endpoint, limit := range defaultStandards {
+		if _, exists := rl.standardLimits[endpoint]; !exists {
+			rl.standardLimits[endpoint] = limit
+			rl.turboLimits[endpoint] = limit * 5
+		}
+	}
+
+	rl.cleanupTicker = time.NewTicker(30 * time.Second)
+	go rl.cleanupWorker()
+
+	return rl
+}
+
+func (rl *RateLimiter) cleanupWorker() {
+	for range rl.cleanupTicker.C {
+		rl.mu.Lock()
+		for key, limiter := range rl.limiters {
+			if limiter.Tokens() == float64(limiter.Limit()) {
+				delete(rl.limiters, key)
+			}
+		}
+		rl.mu.Unlock()
+	}
+}
+
+func (rl *RateLimiter) Allow(clientIP, endpoint string, isTurbo bool) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	key := clientIP + ":" + endpoint
+	limiter, exists := rl.limiters[key]
+	if !exists {
+		limitVal := 1.0
+		if isTurbo {
+			if l, ok := rl.turboLimits[endpoint]; ok {
+				limitVal = float64(l)
+			} else {
+				limitVal = 5.0
+			}
+		} else {
+			if l, ok := rl.standardLimits[endpoint]; ok {
+				limitVal = float64(l)
+			}
+		}
+		// Burst up to 2x limit
+		limiter = rate.NewLimiter(rate.Limit(limitVal), int(limitVal*2))
+		rl.limiters[key] = limiter
+	}
+
+	return limiter.Allow()
+}
+
+func (rl *RateLimiter) Stop() {
+	if rl.cleanupTicker != nil {
+		rl.cleanupTicker.Stop()
+	}
 }
 
 // ───────────────────────── Main ─────────────────────────
 
 func main() {
-	// Quick version switch: print and exit if requested to avoid spinning the build script
+	// Version check
 	if len(os.Args) > 1 {
 		if os.Args[1] == "--version" || os.Args[1] == "-v" {
 			fmt.Printf("Bitcoin Sprint v%s (commit %s)\n", Version, Commit)
@@ -182,42 +276,101 @@ func main() {
 		}
 	}
 
-	// Modern Go 1.20+ uses automatic random seeding
-	// No need for explicit rand.Seed() call
-
 	// Print application banner
 	log.Printf("Bitcoin Sprint v%s - Enterprise Bitcoin Block Detection", Version)
 	log.Printf("Copyright © 2025 BitcoinCab.inc")
 
-	s := &Sprint{
-		peers:   make(map[string]net.Conn),
-		metrics: make(chan Metrics, 500),
-		client: &http.Client{
-			Timeout: 2 * time.Second, // OPTIMIZED: Faster timeout for hot path
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					MinVersion:         tls.VersionTLS12,
-					InsecureSkipVerify: false, // Enforce certificate validation
-				},
-				DialContext:           (&net.Dialer{Timeout: 1 * time.Second, KeepAlive: 60 * time.Second}).DialContext,
-				ForceAttemptHTTP2:     false,           // OPTIMIZED: HTTP/1.1 for lower latency
-				ResponseHeaderTimeout: 1 * time.Second, // OPTIMIZED: Ultra-fast response
-				MaxIdleConns:          100,             // OPTIMIZED: Large connection pool
-				MaxIdleConnsPerHost:   50,              // OPTIMIZED: High per-host limit
-				IdleConnTimeout:       60 * time.Second,
-			},
-		},
-		nodeBackoff: make(map[string]time.Time),
-		rateLimiter: NewRateLimiter(),
-		startTime:   time.Now(),
+	// Create main sprint instance
+	s, err := NewSprint()
+	if err != nil {
+		log.Fatal("Failed to create Sprint instance:", err)
 	}
+
+	// Load configuration and validate license
+	if err := s.LoadConfig(); err != nil {
+		log.Fatal("Configuration error:", err)
+	}
+
+	if err := s.ValidateLicense(); err != nil {
+		log.Fatal("License error:", err)
+	}
+
+	// Initialize logger
+	logger, err := initLogger(s.config.LogLevel)
+	if err != nil {
+		log.Fatal("Logger initialization error:", err)
+	}
+	zap.ReplaceGlobals(logger)
+
+	// Start all services
+	if err := s.Start(); err != nil {
+		log.Fatal("Failed to start Sprint:", err)
+	}
+
+	// Setup graceful shutdown
+	s.WaitForShutdown()
+}
+
+func initLogger(logLevel string) (*zap.Logger, error) {
+	cfg := zap.NewProductionConfig()
+	switch strings.ToLower(logLevel) {
+	case "debug":
+		cfg.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+	case "info":
+		cfg.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
+	case "warn":
+		cfg.Level = zap.NewAtomicLevelAt(zap.WarnLevel)
+	case "error":
+		cfg.Level = zap.NewAtomicLevelAt(zap.ErrorLevel)
+	default:
+		return nil, fmt.Errorf("invalid log_level: %s", logLevel)
+	}
+	return cfg.Build()
+}
+
+func NewSprint() (*Sprint, error) {
 	ctx, cancel := context.WithCancel(context.Background())
-	s.ctx = ctx
 
-	// HOT PATH OPTIMIZATION: Pre-marshal common requests at startup
+	s := &Sprint{
+		peers:          make(map[string]*PeerConnection),
+		metrics:        make(chan Metrics, 5000), // Large buffer
+		nodeBackoff:    make(map[string]*BackoffState),
+		startTime:      time.Now(),
+		perfMetrics: &PerformanceMetrics{
+			startTime:     time.Now(),
+			nodeLatencies: make(map[string]time.Duration),
+		},
+		circuitBreaker: &CircuitBreaker{maxFailures: 10},
+		ctx:            ctx,
+		cancelFn:       cancel,
+	}
+
+	// Create optimized HTTP client
+	s.client = &http.Client{
+		Timeout: 3 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				MinVersion:         tls.VersionTLS12,
+				InsecureSkipVerify: false,
+			},
+			DialContext: (&net.Dialer{
+				Timeout:   2 * time.Second,
+				KeepAlive: 60 * time.Second,
+			}).DialContext,
+			ForceAttemptHTTP2:     false,
+			ResponseHeaderTimeout: 2 * time.Second,
+			MaxIdleConns:          200,
+			MaxIdleConnsPerHost:   50,
+			MaxConnsPerHost:       100,
+			IdleConnTimeout:       90 * time.Second,
+		},
+	}
+
+	// Pre-marshal common requests
 	s.getBlockchainInfoReq = []byte(`{"jsonrpc":"1.0","id":"sprint","method":"getblockchaininfo","params":[]}`)
+	s.getMempoolInfoReq = []byte(`{"jsonrpc":"1.0","id":"sprint","method":"getmempoolinfo","params":[]}`)
 
-	// Pre-encode sprint payload template with placeholders
+	// Pre-encode sprint payload template
 	payload := struct {
 		Type     string `json:"type"`
 		Hash     string `json:"hash"`
@@ -229,118 +382,452 @@ func main() {
 		Hash:     "HASH_PLACEHOLDER",
 		Ts:       "TS_PLACEHOLDER",
 		Version:  Version,
-		Protocol: 1,
+		Protocol: 2, // Updated protocol version
 	}
-	payloadBytes, _ := json.Marshal(payload)
-	s.preEncodedPayload = append(payloadBytes, '\n') // Add newline for framing
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal payload template: %w", err)
+	}
+	s.preEncodedPayload = append(payloadBytes, '\n')
 
-	if err := s.LoadConfig(); err != nil {
-		log.Fatal("Config error:", err)
-	}
-	if err := s.ValidateLicense(); err != nil {
-		log.Fatal("License error:", err)
-	}
+	return s, nil
+}
 
+func (s *Sprint) Start() error {
+	zap.L().Info("Starting Bitcoin Sprint services...")
+
+	// Initialize rate limiter
+	s.rateLimiter = NewRateLimiter(s.config)
+
+	// Start core services
 	go s.StartWebDashboard()
 	go s.StartBlockPoller()
 	go s.ConnectToPeers()
 	go s.StartMetricsReporter()
+	go s.StartPerformanceMonitor()
+	go s.StartLicenseMonitor()
 
-	// graceful shutdown
+	// Start advanced monitoring if turbo mode enabled
+	if s.config.TurboMode {
+		go s.StartPredictiveMonitoring()
+		zap.L().Info("⚡ Bitcoin Sprint running in TURBO mode")
+	} else {
+		zap.L().Info("🔒 Bitcoin Sprint running in STANDARD mode")
+	}
+
+	// Log configuration
+	dashPort := s.getDashboardPort()
+	zap.L().Info("Dashboard started", zap.String("url", "http://localhost"+dashPort))
+	zap.L().Info("Configuration",
+		zap.String("tier", s.config.Tier),
+		zap.Int("nodes", len(s.config.RPCNodes)),
+		zap.Int("poll_interval", s.config.PollInterval))
+
+	return nil
+}
+
+func (s *Sprint) WaitForShutdown() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigCh
-		log.Println("Shutting down Bitcoin Sprint RPC edition...")
-		cancel()
-		os.Exit(0)
-	}()
 
-	log.Println("Bitcoin Sprint (RPC edition) running...")
-	// Log dashboard URL with actual port (SPRINT_DASH_PORT or PORT, default 8080)
-	dashPort := os.Getenv("SPRINT_DASH_PORT")
-	if dashPort == "" {
-		dashPort = os.Getenv("PORT")
-	}
-	if dashPort == "" {
-		dashPort = "8080"
-	}
-	log.Printf("Dashboard: http://localhost:%s", strings.TrimPrefix(dashPort, ":"))
-	log.Printf("Tier: %s", s.license.Tier)
+	// Wait for shutdown signal
+	<-sigCh
+	zap.L().Info("Shutting down Bitcoin Sprint...")
 
-	mode := "SAFE"
-	if s.config.TurboMode {
-		mode = "TURBO"
-	}
-	log.Printf("⚡ Bitcoin Sprint running in %s mode", mode)
-
-	<-s.ctx.Done()
+	// Graceful shutdown
+	s.Shutdown()
+	zap.L().Info("Bitcoin Sprint shutdown complete")
 }
 
-// ───────────────────────── Block Poller ─────────────────────────
+func (s *Sprint) Shutdown() {
+	// Cancel context
+	s.cancelFn()
+
+	// Close peer connections
+	s.peersMu.Lock()
+	for _, peer := range s.peers {
+		if peer.conn != nil {
+			peer.conn.Close()
+		}
+	}
+	s.peersMu.Unlock()
+
+	// Stop rate limiter
+	s.rateLimiter.Stop()
+
+	// Close metrics channel
+	close(s.metrics)
+}
+
+// ───────────────────────── Config and License ─────────────────────────
+
+func (s *Sprint) LoadConfig() error {
+	// Default configuration
+	s.config = Config{
+		PollInterval: 5,
+		Tier:         "free",
+		LogLevel:     "info",
+		MaxPeers:     100,
+		MetricsURL:   "https://api.bitcoincab.inc/metrics",
+		APIBase:      "http://localhost:8080",
+		RateLimits:   make(map[string]int),
+	}
+
+	// Override with env vars for sensitive fields
+	if user := os.Getenv("RPC_USER"); user != "" {
+		s.config.RPCUser = user
+	}
+	if pass := os.Getenv("RPC_PASS"); pass != "" {
+		s.config.RPCPass = pass
+	}
+	if secret := os.Getenv("PEER_SECRET"); secret != "" {
+		s.config.PeerSecret = secret
+	}
+
+	// Read config file
+	data, err := os.ReadFile("config.json")
+	if err != nil {
+		if os.IsNotExist(err) {
+			zap.L().Warn("No config.json found, using defaults")
+			return nil
+		}
+		return fmt.Errorf("failed to read config.json: %w", err)
+	}
+
+	// Unmarshal JSON into config
+	if err := json.Unmarshal(data, &s.config); err != nil {
+		return fmt.Errorf("failed to parse config.json: %w", err)
+	}
+
+	// Validate required fields
+	if s.config.LicenseKey == "" {
+		return fmt.Errorf("license_key is required in config")
+	}
+	if len(s.config.RPCNodes) == 0 {
+		return fmt.Errorf("at least one RPC node must be specified")
+	}
+	for _, node := range s.config.RPCNodes {
+		if !strings.HasPrefix(node, "https://") && !strings.HasPrefix(node, "http://localhost") {
+			return fmt.Errorf("RPC node %s must use HTTPS or be localhost", node)
+		}
+	}
+	if s.config.PeerSecret == "" {
+		return fmt.Errorf("peer_secret is required for secure peer connections")
+	}
+
+	zap.L().Info("Loaded configuration",
+		zap.String("tier", s.config.Tier),
+		zap.Int("rpc_nodes", len(s.config.RPCNodes)),
+		zap.Bool("turbo_mode", s.config.TurboMode))
+
+	return nil
+}
+
+func (s *Sprint) ValidateLicense() error {
+	// Try local license file first
+	data, err := os.ReadFile("license.json")
+	if err == nil {
+		if err := json.Unmarshal(data, &s.license); err != nil {
+			return fmt.Errorf("failed to parse license.json: %w", err)
+		}
+		if s.license.Valid && s.config.LicenseKey == s.license.LicenseKey && s.license.ExpiresAt > time.Now().Unix() {
+			if s.isLicenseResetNeeded() {
+				if err := s.resetLicenseBlocks(); err != nil {
+					return fmt.Errorf("failed to reset license: %w", err)
+				}
+			}
+			zap.L().Info("Local license validated",
+				zap.String("tier", s.license.Tier),
+				zap.String("expires", time.Unix(s.license.ExpiresAt, 0).String()))
+			return nil
+		}
+	}
+
+	// Fallback to remote license check
+	return s.validateLicenseRemote()
+}
+
+func (s *Sprint) validateLicenseRemote() error {
+	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
+	defer cancel()
+
+	reqBody, _ := json.Marshal(map[string]string{"license_key": s.config.LicenseKey})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.config.MetricsURL+"/license/validate", bytes.NewReader(reqBody))
+	if err != nil {
+		return fmt.Errorf("failed to create license validation request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("license validation failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("license validation HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&s.license); err != nil {
+		return fmt.Errorf("failed to decode license response: %w", err)
+	}
+
+	if !s.license.Valid || s.license.ExpiresAt <= time.Now().Unix() {
+		return fmt.Errorf("invalid or expired license: valid=%v, expires=%d", s.license.Valid, s.license.ExpiresAt)
+	}
+
+	// Initialize daily reset
+	s.license.DailyReset = time.Now().Unix()
+	if err := s.saveLicense(); err != nil {
+		zap.L().Warn("Failed to save license", zap.Error(err))
+	}
+
+	zap.L().Info("Remote license validated",
+		zap.String("tier", s.license.Tier),
+		zap.Int("block_limit", s.license.BlockLimit),
+		zap.String("expires", time.Unix(s.license.ExpiresAt, 0).String()))
+	return nil
+}
+
+func (s *Sprint) StartLicenseMonitor() {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			if s.isLicenseResetNeeded() {
+				if err := s.resetLicenseBlocks(); err != nil {
+					zap.L().Error("Failed to reset license blocks", zap.Error(err))
+				}
+			}
+			if time.Now().Unix() > s.license.ExpiresAt-24*3600 {
+				if err := s.validateLicenseRemote(); err != nil {
+					zap.L().Error("Failed to revalidate license", zap.Error(err))
+				}
+			}
+		}
+	}
+}
+
+func (s *Sprint) isLicenseResetNeeded() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return time.Now().Unix() > s.license.DailyReset+24*3600
+}
+
+func (s *Sprint) resetLicenseBlocks() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
+	defer cancel()
+
+	reqBody, _ := json.Marshal(map[string]string{
+		"license_key": s.config.LicenseKey,
+		"tier":        s.license.Tier,
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.config.MetricsURL+"/license/reset", bytes.NewReader(reqBody))
+	if err != nil {
+		return fmt.Errorf("failed to create license reset request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("license reset failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("license reset HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	s.license.DailyReset = time.Now().Unix()
+	atomic.StoreInt64(&s.blocksSent, 0)
+	if err := s.saveLicense(); err != nil {
+		zap.L().Warn("Failed to save license after reset", zap.Error(err))
+	}
+
+	zap.L().Info("License block limit reset", zap.String("tier", s.license.Tier))
+	return nil
+}
+
+func (s *Sprint) saveLicense() error {
+	data, err := json.Marshal(s.license)
+	if err != nil {
+		return fmt.Errorf("failed to marshal license: %w", err)
+	}
+	return os.WriteFile("license.json", data, 0600)
+}
+
+// ───────────────────────── Block Polling ─────────────────────────
+
+func (s *Sprint) StartBlockPoller() {
+	baseInterval := time.Duration(s.config.PollInterval) * time.Second
+	ticker := time.NewTicker(baseInterval)
+	defer ticker.Stop()
+
+	zap.L().Info("Block poller started", zap.Duration("interval", baseInterval))
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			s.pollForNewBlocks()
+
+			// Adaptive interval in turbo mode
+			if s.config.TurboMode {
+				interval := baseInterval
+				if s.lastMempool > 1000 {
+					interval = baseInterval / 2
+				} else if s.lastMempool < 100 {
+					interval = baseInterval * 2
+				}
+				ticker.Reset(interval)
+			}
+		}
+	}
+}
+
+func (s *Sprint) pollForNewBlocks() {
+	hash, height, node, err := s.getBestBlock()
+	if err != nil {
+		if s.shouldLog("debug") {
+			zap.L().Debug("Block poll failed", zap.Error(err))
+		}
+		return
+	}
+
+	// Check if this is a new block
+	s.mu.Lock()
+	isNewBlock := hash != s.currentBlockHash
+	if isNewBlock {
+		s.currentBlockHash = hash
+		s.currentBlockHeight = height
+		s.lastBlockTime = time.Now()
+	}
+	s.mu.Unlock()
+
+	if isNewBlock {
+		zap.L().Info("New block detected",
+			zap.String("hash_prefix", hash[:8]),
+			zap.Int("height", height),
+			zap.String("node", node))
+		s.OnNewBlock(hash, height, node)
+
+		// Start burst monitoring if turbo mode
+		if s.config.TurboMode {
+			go s.startBurstMonitoring(hash, height)
+		}
+	}
+}
 
 func (s *Sprint) getBestBlock() (string, int, string, error) {
-	// Ensure we have at least one RPC node
-	if len(s.config.RPCNodes) == 0 {
-		// Try localhost as fallback
-		s.config.RPCNodes = []string{"http://127.0.0.1:8332"}
-		log.Printf("No RPC nodes configured, using fallback: %s", s.config.RPCNodes[0])
+	s.circuitBreaker.mu.RLock()
+	if time.Now().Before(s.circuitBreaker.breakUntil) {
+		s.circuitBreaker.mu.RUnlock()
+		return "", 0, "", fmt.Errorf("circuit breaker open until %v", s.circuitBreaker.breakUntil)
+	}
+	s.circuitBreaker.mu.RUnlock()
+
+	var hash string
+	var height int
+	var node string
+	var err error
+
+	if len(s.config.RPCNodes) > 1 && s.config.TurboMode {
+		hash, height, node, err = s.getBestBlockParallel()
+	} else {
+		hash, height, node, err = s.getBestBlockSingle()
 	}
 
-	// OPTIMIZATION: Parallel fan-out for first-response-wins
-	if len(s.config.RPCNodes) > 1 {
-		return s.getBestBlockParallel()
+	if err != nil {
+		s.circuitBreaker.mu.Lock()
+		s.circuitBreaker.failures++
+		if s.circuitBreaker.failures >= s.circuitBreaker.maxFailures {
+			s.circuitBreaker.breakUntil = time.Now().Add(30 * time.Second)
+			zap.L().Warn("Circuit breaker opened",
+				zap.Int("failures", s.circuitBreaker.failures),
+				zap.Duration("duration", 30*time.Second))
+		}
+		s.circuitBreaker.mu.Unlock()
+	} else {
+		s.circuitBreaker.mu.Lock()
+		s.circuitBreaker.failures = 0
+		s.circuitBreaker.mu.Unlock()
 	}
 
-	// Single node fallback
-	return s.getBestBlockSingle()
+	return hash, height, node, err
 }
 
-// getBestBlockParallel implements parallel fan-out for multiple nodes
 func (s *Sprint) getBestBlockParallel() (string, int, string, error) {
+	type nodeInfo struct {
+		url     string
+		latency time.Duration
+	}
+	nodes := make([]nodeInfo, 0, len(s.config.RPCNodes))
+	s.perfMetrics.mu.RLock()
+	for _, url := range s.config.RPCNodes {
+		if s.isNodeInBackoff(url) {
+			continue
+		}
+		latency := s.perfMetrics.nodeLatencies[url]
+		nodes = append(nodes, nodeInfo{url, latency})
+	}
+	s.perfMetrics.mu.RUnlock()
+
+	if len(nodes) == 0 {
+		return "", 0, "", fmt.Errorf("no RPC nodes available (all in backoff)")
+	}
+
+	// Sort by historical latency (lowest first)
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].latency < nodes[j].latency
+	})
+
 	type result struct {
 		hash   string
 		height int
 		node   string
 		err    error
+		took   time.Duration
 	}
 
-	results := make(chan result, len(s.config.RPCNodes))
-	ctx, cancel := context.WithTimeout(s.ctx, 2*time.Second)
+	results := make(chan result, len(nodes))
+	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
 	defer cancel()
 
-	// Fire all requests simultaneously
-	activeNodes := 0
-	for _, node := range s.config.RPCNodes {
-		// Skip nodes in backoff
-		if t, ok := s.nodeBackoff[node]; ok && time.Now().Before(t) {
-			continue
-		}
-
-		activeNodes++
+	for _, ni := range nodes {
 		go func(nodeURL string) {
-			hash, height, err := s.tryRPCOptimized(nodeURL, s.getBlockchainInfoReq)
+			start := time.Now()
+			hash, height, err := s.queryNodeWithRetry(nodeURL, s.getBlockchainInfoReq, 3)
+			took := time.Since(start)
+
 			select {
-			case results <- result{hash, height, nodeURL, err}:
+			case results <- result{hash, height, nodeURL, err, took}:
 			case <-ctx.Done():
 			}
-		}(node)
-	}
-
-	if activeNodes == 0 {
-		return "", 0, "", fmt.Errorf("no RPC nodes available (all in backoff)")
+		}(ni.url)
 	}
 
 	// Return first successful response
-	for i := 0; i < activeNodes; i++ {
+	for i := 0; i < len(nodes); i++ {
 		select {
 		case res := <-results:
 			if res.err == nil {
-				// Clear backoff on success
-				delete(s.nodeBackoff, res.node)
+				s.clearNodeBackoff(res.node)
+				s.updateNodeLatency(res.node, res.took)
+				if s.shouldLog("debug") {
+					zap.L().Debug("RPC success", zap.String("node", res.node), zap.Duration("took", res.took))
+				}
 				return res.hash, res.height, res.node, nil
 			}
-			// Set backoff on failure
 			s.setNodeBackoff(res.node, res.err)
 		case <-ctx.Done():
 			return "", 0, "", fmt.Errorf("parallel RPC timeout")
@@ -350,73 +837,71 @@ func (s *Sprint) getBestBlockParallel() (string, int, string, error) {
 	return "", 0, "", fmt.Errorf("all parallel RPC calls failed")
 }
 
-// getBestBlockSingle handles single node requests
 func (s *Sprint) getBestBlockSingle() (string, int, string, error) {
 	node := s.config.RPCNodes[0]
 
-	// Skip if in backoff
-	if t, ok := s.nodeBackoff[node]; ok && time.Now().Before(t) {
-		return "", 0, "", fmt.Errorf("node %s in backoff until %v", node, t)
+	if s.isNodeInBackoff(node) {
+		backoff := s.nodeBackoff[node]
+		return "", 0, "", fmt.Errorf("node %s in backoff until %v (last error: %v)",
+			node, backoff.until, backoff.lastError)
 	}
 
-	hash, height, err := s.tryRPCOptimized(node, s.getBlockchainInfoReq)
+	start := time.Now()
+	hash, height, err := s.queryNodeWithRetry(node, s.getBlockchainInfoReq, 3)
+	took := time.Since(start)
 	if err != nil {
 		s.setNodeBackoff(node, err)
 		return "", 0, "", err
 	}
 
-	delete(s.nodeBackoff, node)
+	s.clearNodeBackoff(node)
+	s.updateNodeLatency(node, took)
 	return hash, height, node, nil
 }
 
-// setNodeBackoff implements smart backoff with jitter
-func (s *Sprint) setNodeBackoff(node string, err error) {
-	baseDelay := 3 * time.Second // OPTIMIZED: Faster recovery
-	if prevTime, ok := s.nodeBackoff[node]; ok {
-		sinceErr := time.Since(prevTime)
-		if sinceErr < 20*time.Second { // OPTIMIZED: Faster max backoff
-			baseDelay = time.Duration(math.Min(20, float64(baseDelay.Seconds()*1.5))) * time.Second
+func (s *Sprint) queryNodeWithRetry(node string, reqBody []byte, retries int) (string, int, error) {
+	var lastErr error
+	for i := 0; i < retries; i++ {
+		hash, height, err := s.queryNode(node, reqBody)
+		if err == nil {
+			return hash, height, nil
 		}
+		lastErr = err
+		if s.shouldLog("debug") {
+			zap.L().Debug("RPC retry", zap.Int("attempt", i+1), zap.Int("max", retries), zap.String("node", node), zap.Error(err))
+		}
+		time.Sleep(time.Duration(100*(i+1)) * time.Millisecond)
 	}
-	jitter := time.Duration(rand.Intn(2000)) * time.Millisecond // OPTIMIZED: Less jitter
-	s.nodeBackoff[node] = time.Now().Add(baseDelay + jitter)
+	return "", 0, fmt.Errorf("failed after %d retries: %w", retries, lastErr)
 }
 
-// tryRPCOptimized is the hot path optimized version of tryRPC
-func (s *Sprint) tryRPCOptimized(node string, reqBody []byte) (string, int, error) {
-	// OPTIMIZATION: Ultra-short timeout for hot path
-	ctx, cancel := context.WithTimeout(s.ctx, 1*time.Second)
+func (s *Sprint) queryNode(node string, reqBody []byte) (string, int, error) {
+	ctx, cancel := context.WithTimeout(s.ctx, 3*time.Second)
 	defer cancel()
 
-	// Create request with pre-allocated body
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, node, bytes.NewReader(reqBody))
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set authentication and headers (optimized)
+	// Set authentication and headers
 	if s.config.RPCUser != "" || s.config.RPCPass != "" {
 		req.SetBasicAuth(s.config.RPCUser, s.config.RPCPass)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Connection", "keep-alive")
 
-	// Execute request with timing
-	start := time.Now()
 	resp, err := s.client.Do(req)
-	latency := time.Since(start).Milliseconds()
-
 	if err != nil {
 		return "", 0, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// Check HTTP status (fast path)
 	if resp.StatusCode != 200 {
-		return "", 0, fmt.Errorf("bad status: %d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return "", 0, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
-	// OPTIMIZATION: Direct decode to target struct
 	var envelope struct {
 		Result struct {
 			BestHash string `json:"bestblockhash"`
@@ -432,1138 +917,794 @@ func (s *Sprint) tryRPCOptimized(node string, reqBody []byte) (string, int, erro
 		return "", 0, fmt.Errorf("decode failed: %w", err)
 	}
 
-	// Check for RPC error
 	if envelope.Error != nil {
-		return "", 0, fmt.Errorf("rpc error: %d %s", envelope.Error.Code, envelope.Error.Message)
+		return "", 0, fmt.Errorf("RPC error %d: %s", envelope.Error.Code, envelope.Error.Message)
 	}
 
-	if envelope.Result.BestHash != "" {
-		log.Printf("RPC call successful to %s in %dms", node, latency)
-		return envelope.Result.BestHash, envelope.Result.Height, nil
+	if envelope.Result.BestHash == "" {
+		return "", 0, fmt.Errorf("empty block hash in response")
 	}
 
-	return "", 0, fmt.Errorf("no valid block hash in response")
+	return envelope.Result.BestHash, envelope.Result.Height, nil
 }
 
-// burstProbe implements burst probing for immediate block detection
-func (s *Sprint) burstProbe(currentHash string) (string, int, string, error) {
-	log.Printf("🚀 BURST PROBE: 5 rapid calls in 50ms intervals")
+func (s *Sprint) updateNodeLatency(node string, latency time.Duration) {
+	s.perfMetrics.mu.Lock()
+	defer s.perfMetrics.mu.Unlock()
 
-	for i := 0; i < 5; i++ {
-		hash, height, node, err := s.getBestBlock()
-		if err == nil && hash != currentHash {
-			log.Printf("🎯 BURST SUCCESS: New block %s detected on probe %d", hash[:8], i+1)
-			return hash, height, node, nil
-		}
-
-		if i < 4 { // Don't sleep after last probe
-			time.Sleep(50 * time.Millisecond)
-		}
-	}
-
-	return "", 0, "", fmt.Errorf("burst probe failed to detect new block")
-}
-
-func (s *Sprint) prefetchBlock(hash, node string) {
-	reqBody := []byte(fmt.Sprintf(`{"jsonrpc":"1.0","id":"sprint","method":"getblockheader","params":["%s"]}`, hash))
-	if t, ok := s.nodeBackoff[node]; ok && time.Now().Before(t) {
-		return
-	}
-	ctx, cancel := context.WithTimeout(s.ctx, 3*time.Second) // faster prefetch
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, node, bytes.NewReader(reqBody))
-	req.SetBasicAuth(s.config.RPCUser, s.config.RPCPass)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := s.client.Do(req)
-	cancel()
-	if err == nil && resp.StatusCode == 200 {
-		resp.Body.Close()
-		return
-	}
-	if err != nil {
-		log.Printf("prefetch error %s: %v", node, err)
-	} else if resp != nil {
-		log.Printf("prefetch bad status %s: %d", node, resp.StatusCode)
+	current := s.perfMetrics.nodeLatencies[node]
+	if current == 0 {
+		s.perfMetrics.nodeLatencies[node] = latency
+	} else {
+		// Exponential moving average
+		alpha := 0.2
+		s.perfMetrics.nodeLatencies[node] = time.Duration(float64(current)*(1-alpha) + float64(latency)*alpha)
 	}
 }
 
-// ───────────────────────── On New Block ─────────────────────────
+// ───────────────────────── Node Backoff Management ─────────────────────────
 
-func (s *Sprint) OnNewBlock(hash string, height int, node string) {
+func (s *Sprint) isNodeInBackoff(node string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if backoff, exists := s.nodeBackoff[node]; exists {
+		return time.Now().Before(backoff.until)
+	}
+	return false
+}
+
+func (s *Sprint) setNodeBackoff(node string, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.license.Tier == "free" && s.blocksSent >= s.license.BlockLimit {
-		log.Printf("Free tier block limit reached (%d/day)", s.license.BlockLimit)
+	backoff := s.nodeBackoff[node]
+	if backoff == nil {
+		backoff = &BackoffState{attempts: 0}
+		s.nodeBackoff[node] = backoff
+	}
+
+	backoff.attempts++
+	backoff.lastError = err
+
+	// Exponential backoff with jitter
+	baseDelay := time.Duration(math.Pow(2, float64(backoff.attempts-1))) * time.Second
+	if baseDelay > 60*time.Second {
+		baseDelay = 60 * time.Second
+	}
+
+	jitter := time.Duration(rand.Intn(1000)) * time.Millisecond
+	backoff.until = time.Now().Add(baseDelay + jitter)
+
+	zap.L().Warn("Node entering backoff",
+		zap.String("node", node),
+		zap.Duration("duration", baseDelay+jitter),
+		zap.Int("attempt", backoff.attempts),
+		zap.Error(err))
+}
+
+func (s *Sprint) clearNodeBackoff(node string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if backoff, exists := s.nodeBackoff[node]; exists && backoff.attempts > 0 {
+		zap.L().Info("Node recovered", zap.String("node", node), zap.Int("failed_attempts", backoff.attempts))
+	}
+
+	delete(s.nodeBackoff, node)
+}
+
+// ───────────────────────── Block Broadcasting ─────────────────────────
+
+func (s *Sprint) OnNewBlock(hash string, height int, node string) {
+	start := time.Now()
+
+	// Check license limits
+	if s.isBlockLimitReached() {
+		zap.L().Warn("Block limit reached",
+			zap.String("tier", s.license.Tier),
+			zap.Int("limit", s.license.BlockLimit))
 		return
 	}
 
-	start := time.Now()
 	var sent int
 	if s.config.TurboMode {
 		sent = s.SprintBlockTurbo(hash)
 	} else {
 		sent = s.SprintBlock(hash)
 	}
-	lat := float64(time.Since(start).Milliseconds())
 
-	s.blocksSent++
+	latency := float64(time.Since(start).Milliseconds())
+	atomic.AddInt64(&s.blocksSent, 1)
+
+	// Create metrics
 	m := Metrics{
 		BlockHash:  hash,
 		Height:     height,
-		Latency:    lat,
+		Latency:    latency,
 		PeerCount:  sent,
 		Timestamp:  time.Now().Unix(),
 		LicenseKey: s.config.LicenseKey,
 		RPCNode:    node,
+		Success:    sent > 0,
 	}
 
-	// Store latest metric for /latest endpoint
+	// Store latest metric
 	s.mu.Lock()
 	s.latestMetric = &m
 	s.mu.Unlock()
 
+	// Send to metrics channel (with overflow protection)
 	select {
 	case s.metrics <- m:
 	default:
-		log.Printf("metrics buffer full, dropping block %s", hash[:8])
+		zap.L().Warn("Metrics buffer full, dropping metric", zap.String("block_hash_prefix", hash[:8]))
+		// Drain oldest to make room
+		select {
+		case <-s.metrics:
+		default:
+		}
+		s.metrics <- m
 	}
 
-	log.Printf("Block %s (h=%d) sprinted in %.1fms to %d peers via %s",
-		hash[:8], height, lat, sent, node)
+	// Update performance metrics
+	s.perfMetrics.mu.Lock()
+	s.perfMetrics.totalBlocks++
+	if s.perfMetrics.totalBlocks == 1 {
+		s.perfMetrics.avgSprintTime = time.Duration(latency) * time.Millisecond
+		s.perfMetrics.avgBlockDetection = time.Since(s.lastBlockTime)
+	} else {
+		alpha := 0.1
+		s.perfMetrics.avgSprintTime = time.Duration(float64(s.perfMetrics.avgSprintTime)*(1-alpha) + float64(latency*int64(time.Millisecond))*alpha)
+		s.perfMetrics.avgBlockDetection = time.Duration(float64(s.perfMetrics.avgBlockDetection)*(1-alpha) + float64(time.Since(s.lastBlockTime))*alpha)
+	}
+	s.perfMetrics.mu.Unlock()
+
+	zap.L().Info("Block sprinted",
+		zap.String("hash_prefix", hash[:8]),
+		zap.Int("height", height),
+		zap.Float64("latency_ms", latency),
+		zap.Int("peers", sent),
+		zap.String("node", node))
 }
 
-// getBestBlockTurbo queries all nodes in parallel and returns the fastest valid response.
-func (s *Sprint) getBestBlockTurbo() (string, int, string, error) {
-	if len(s.config.RPCNodes) == 0 {
-		return "", 0, "", fmt.Errorf("no RPC nodes configured")
+func (s *Sprint) isBlockLimitReached() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	switch s.license.Tier {
+	case "free":
+		return atomic.LoadInt64(&s.blocksSent) >= int64(s.license.BlockLimit)
+	case "pro":
+		return atomic.LoadInt64(&s.blocksSent) >= int64(s.license.BlockLimit*2)
+	case "enterprise":
+		return false // Unlimited for enterprise
+	default:
+		return true
 	}
+}
 
-	ctx, cancel := context.WithTimeout(s.ctx, 2*time.Second) // shorter timeout
-	defer cancel()
+func (s *Sprint) SprintBlock(hash string) int {
+	return s.sprintBlockInternal(hash, false)
+}
 
-	type result struct {
-		hash   string
-		height int
-		node   string
-		err    error
-	}
-	results := make(chan result, len(s.config.RPCNodes))
+func (s *Sprint) SprintBlockTurbo(hash string) int {
+	return s.sprintBlockInternal(hash, true)
+}
 
-	reqBody := []byte(`{"jsonrpc":"1.0","id":"sprint","method":"getblockchaininfo","params":[]}`)
-
-	for _, node := range s.config.RPCNodes {
-		go func(n string) {
-			h, height, err := s.tryRPCOptimized(n, reqBody)
-			select {
-			case results <- result{hash: h, height: height, node: n, err: err}:
-			case <-ctx.Done():
-			}
-		}(node)
-	}
-
-	// take first valid response, or timeout
-	for range s.config.RPCNodes {
-		select {
-		case r := <-results:
-			if r.err == nil && r.hash != "" {
-				return r.hash, r.height, r.node, nil
-			}
-		case <-ctx.Done():
-			return "", 0, "", fmt.Errorf("turbo poll timeout")
+func (s *Sprint) sprintBlockInternal(hash string, turbo bool) int {
+	s.peersMu.RLock()
+	peers := make([]*PeerConnection, 0, len(s.peers))
+	for _, peer := range s.peers {
+		if peer.authed {
+			peers = append(peers, peer)
 		}
 	}
-	return "", 0, "", fmt.Errorf("all turbo RPC calls failed")
-}
+	s.peersMu.RUnlock()
 
-// SprintBlockTurbo sends a pre-encoded notification to peers with tight deadlines and async logging.
-func (s *Sprint) SprintBlockTurbo(hash string) int {
-	s.mu.RLock()
-	peers := make([]net.Conn, 0, len(s.peers))
-	peerAddrs := make([]string, 0, len(s.peers))
-	for addr, c := range s.peers {
-		peers = append(peers, c)
-		peerAddrs = append(peerAddrs, addr)
-	}
-	s.mu.RUnlock()
 	if len(peers) == 0 {
 		return 0
 	}
 
-	// Pre-encode payload once per sprint
-	payload := struct {
-		Type     string `json:"type"`
-		Hash     string `json:"hash"`
-		Ts       int64  `json:"ts"`
-		Version  string `json:"version"`
-		Protocol int    `json:"protocol"`
-	}{
-		Type: "block", Hash: hash, Ts: time.Now().UnixMilli(),
-		Version: Version, Protocol: 1,
-	}
-	b, _ := json.Marshal(payload)
-	message := append(b, '\n')
+	// Prepare message
+	message := s.prepareMessage(hash)
 
 	var wg sync.WaitGroup
-	var success int32
+	var successCount atomic.Int32
 
-	for i, conn := range peers {
-		addr := peerAddrs[i]
+	// Fan-out concurrency limit
+	concurrency := len(peers)
+	if turbo {
+		concurrency = min(concurrency, 100)
+	} else {
+		concurrency = min(concurrency, 50)
+	}
+
+	sem := make(chan struct{}, concurrency)
+	for _, peer := range peers {
+		sem <- struct{}{}
 		wg.Add(1)
-		go func(c net.Conn, a string) {
+		go func(p *PeerConnection) {
 			defer wg.Done()
-			_ = c.SetWriteDeadline(time.Now().Add(200 * time.Millisecond))
-			if tcp, ok := c.(*net.TCPConn); ok {
-				_ = tcp.SetNoDelay(true)
-			}
-			if _, err := c.Write(message); err == nil {
-				atomic.AddInt32(&success, 1)
+			defer func() { <-sem }()
+
+			if s.sendToPeer(p, message) {
+				successCount.Add(1)
+				atomic.AddInt64(&p.successes, 1)
+				p.lastSent = time.Now()
 			} else {
-				// drop slow/broken peer
-				s.mu.Lock()
-				if pc, exists := s.peers[a]; exists && pc == c {
-					_ = pc.Close()
-					delete(s.peers, a)
-				}
-				s.mu.Unlock()
+				atomic.AddInt64(&p.failures, 1)
 			}
-		}(conn, addr)
+		}(peer)
 	}
 
 	wg.Wait()
-	succ := int(atomic.LoadInt32(&success))
-	// Async non-blocking log
-	go log.Printf("⚡ TURBO block %s sprinted to %d peers", hash[:8], succ)
-	return succ
+	return int(successCount.Load())
 }
 
-// ───────────────────────── Stubs / Helpers ─────────────────────────
-
-// LoadConfig loads configuration from environment or a local file.
-func (s *Sprint) LoadConfig() error {
-	// defaults with sensible initial values
-	cfg := Config{
-		PollInterval: 5,
-		Tier:         "free",
-		RPCNodes:     []string{"http://127.0.0.1:8332"}, // Default to local node
-	}
-
-	// try read config.json from working dir
-	configPaths := []string{"config.json", "/etc/bitcoin-sprint/config.json"}
-	for _, path := range configPaths {
-		if data, err := os.ReadFile(path); err == nil {
-			var fileCfg Config
-			if err := json.Unmarshal(data, &fileCfg); err == nil {
-				// adopt values from file
-				cfg = fileCfg
-
-				// Ensure we don't have nil slices even when loading from file
-				if cfg.RPCNodes == nil {
-					cfg.RPCNodes = []string{"http://127.0.0.1:8332"}
-				}
-
-				log.Printf("Loaded configuration from %s", path)
-				break
-			} else {
-				// if file exists but is invalid, return error
-				return fmt.Errorf("invalid config file %s: %w", path, err)
-			}
-		}
-	}
-
-	// environment overrides (if present)
-	if v := os.Getenv("SPRINT_LICENSE"); v != "" {
-		cfg.LicenseKey = v
-	}
-	if v := os.Getenv("SPRINT_TIER"); v != "" {
-		cfg.Tier = v
-	}
-	if v := os.Getenv("SPRINT_METRICS_URL"); v != "" {
-		cfg.MetricsURL = v
-	}
-	if v := os.Getenv("SPRINT_RPC_NODE"); v != "" {
-		// allow comma-separated list
-		cfg.RPCNodes = nil
-		for _, n := range strings.Split(v, ",") {
-			n = strings.TrimSpace(n)
-			if n != "" {
-				// Ensure URL has a scheme
-				if !strings.Contains(n, "://") {
-					n = "http://" + n
-				}
-				cfg.RPCNodes = append(cfg.RPCNodes, n)
-			}
-		}
-	}
-	if v := os.Getenv("SPRINT_API_BASE"); v != "" {
-		cfg.APIBase = v
-	}
-	if v := os.Getenv("SPRINT_RPC_USER"); v != "" {
-		cfg.RPCUser = v
-	}
-	if v := os.Getenv("SPRINT_RPC_PASS"); v != "" {
-		cfg.RPCPass = v
-	}
-	if v := os.Getenv("SPRINT_POLL_INTERVAL"); v != "" {
-		if iv, err := strconv.Atoi(v); err == nil && iv > 0 {
-			cfg.PollInterval = iv
-		}
-	}
-
-	// Turbo mode env override
-	if v := os.Getenv("SPRINT_TURBO"); v != "" {
-		lv := strings.ToLower(strings.TrimSpace(v))
-		if lv == "1" || lv == "true" || lv == "yes" || lv == "on" {
-			cfg.TurboMode = true
-		}
-	}
-
-	// Fallback to local node if no nodes were specified
-	if len(cfg.RPCNodes) == 0 {
-		cfg.RPCNodes = []string{"http://127.0.0.1:8332"}
-		log.Printf("No RPC nodes specified, defaulting to %s", cfg.RPCNodes[0])
-	}
-
-	// Log configuration summary (excluding sensitive information)
-	log.Printf("Configuration loaded: Tier=%s, Nodes=%d, PollInterval=%ds, Turbo=%v",
-		cfg.Tier, len(cfg.RPCNodes), cfg.PollInterval, cfg.TurboMode)
-
-	s.config = cfg
-	return nil
+func (s *Sprint) prepareMessage(hash string) []byte {
+	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	msg := bytes.ReplaceAll(s.preEncodedPayload, []byte("HASH_PLACEHOLDER"), []byte(hash))
+	msg = bytes.ReplaceAll(msg, []byte("TS_PLACEHOLDER"), []byte(ts))
+	return msg
 }
 
-// ValidateLicense obtains or validates license details from API or local config.
-// Behaviour: if no license key and tier is free, create a free license locally.
-// Otherwise, attempt to call APIBase to retrieve license details; on network
-// failure, fall back to a conservative local license if possible.
-func (s *Sprint) ValidateLicense() error {
-	// Free tier with no key = automatic license
-	if s.config.Tier == "free" && s.config.LicenseKey == "" {
-		// Updated to 25 blocks/day for free tier
-		s.license = License{Valid: true, Tier: "free", BlockLimit: 25, Peers: []string{}}
-		log.Println("Using free tier license with 25 blocks/day limit")
-		return nil
+func (s *Sprint) sendToPeer(peer *PeerConnection, message []byte) bool {
+	if peer.conn == nil || !peer.authed {
+		return false
 	}
 
-	// If no API base provided or no license key, use local defaults
-	if s.config.APIBase == "" || s.config.LicenseKey == "" {
-		// Ensure tier is valid
-		tier := s.config.Tier
-		if tier == "" {
-			tier = "standard"
-		}
-
-		// Set block limits based on tier
-		blockLimit := 100 // default
-		switch strings.ToLower(tier) {
-		case "standard":
-			blockLimit = 100
-		case "premium":
-			blockLimit = 1000
-		case "enterprise":
-			blockLimit = 999999 // effectively unlimited
-		}
-
-		s.license = License{Valid: true, Tier: tier, BlockLimit: blockLimit, Peers: []string{}}
-		log.Printf("Using local license configuration: tier=%s, limit=%d blocks/day", tier, blockLimit)
-		return nil
+	if err := peer.conn.SetWriteDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		zap.L().Error("Failed to set write deadline", zap.String("peer", peer.addr), zap.Error(err))
+		return false
 	}
 
-	return s.validateRemoteLicense()
-}
-
-// validateRemoteLicense handles the remote license validation logic
-func (s *Sprint) validateRemoteLicense() error {
-	// Try calling remote license validation endpoint with security measures
-	log.Printf("Validating license key with remote service: %s", s.config.APIBase)
-	url := strings.TrimRight(s.config.APIBase, "/") + "/v1/license/validate"
-	body := map[string]string{
-		"license_key": s.config.LicenseKey,
-		"version":     Version, // Include version for compatibility checking
-		"client_id":   getSystemIdentifier(),
-	}
-
-	// Parse response with size limit for security
-	var out struct {
-		Valid bool     `json:"valid"`
-		Tier  string   `json:"tier"`
-		Limit int      `json:"block_limit"`
-		Peers []string `json:"peers"`
-	}
-
-	// Prepare request
-	buf, err := json.Marshal(body)
+	_, err := peer.conn.Write(message)
 	if err != nil {
-		log.Printf("Failed to marshal license request: %v", err)
-		return s.fallbackLicense()
+		zap.L().Error("Failed to send to peer", zap.String("peer", peer.addr), zap.Error(err))
+		peer.conn.Close()
+		peer.conn = nil
+		peer.authed = false
+		return false
 	}
 
-	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
+	return true
+}
+
+func (s *Sprint) startBurstMonitoring(hash string, height int) {
+	ctx, cancel := context.WithTimeout(s.ctx, 10*time.Second)
 	defer cancel()
 
-	// Create request with proper error handling
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buf))
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			newHash, newHeight, node, err := s.getBestBlock()
+			if err != nil {
+				continue
+			}
+			if newHash != hash && newHeight > height {
+				zap.L().Info("Burst detected",
+					zap.String("new_hash_prefix", newHash[:8]),
+					zap.Int("new_height", newHeight),
+					zap.String("node", node))
+				s.OnNewBlock(newHash, newHeight, node)
+				return
+			}
+		}
+	}
+}
+
+// ───────────────────────── Peers ─────────────────────────
+
+func (s *Sprint) ConnectToPeers() {
+	zap.L().Info("Starting peer connection manager...")
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			s.connectToPeersOnce()
+		}
+	}
+}
+
+func (s *Sprint) connectToPeersOnce() {
+	s.peersMu.Lock()
+	defer s.peersMu.Unlock()
+
+	// Disconnect stale peers
+	for addr, peer := range s.peers {
+		if time.Since(peer.connected) > 2*time.Hour || peer.failures > 5 || !peer.authed {
+			if peer.conn != nil {
+				peer.conn.Close()
+			}
+			delete(s.peers, addr)
+			zap.L().Info("Disconnected stale peer",
+				zap.String("addr", addr),
+				zap.Int64("failures", peer.failures),
+				zap.Bool("authed", peer.authed))
+		}
+	}
+
+	// Connect to new peers up to MaxPeers
+	currentPeers := len(s.peers)
+	for _, addr := range s.license.Peers {
+		if currentPeers >= s.config.MaxPeers {
+			break
+		}
+		if _, exists := s.peers[addr]; exists {
+			continue
+		}
+
+		conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+		if err != nil {
+			zap.L().Warn("Failed to connect to peer", zap.String("addr", addr), zap.Error(err))
+			s.perfMetrics.mu.Lock()
+			s.perfMetrics.failedConnections++
+			s.perfMetrics.mu.Unlock()
+			continue
+		}
+
+		// Perform handshake
+		peer := &PeerConnection{
+			conn:      conn,
+			addr:      addr,
+			connected: time.Now(),
+		}
+		if err := s.performPeerHandshake(peer); err != nil {
+			zap.L().Warn("Peer handshake failed", zap.String("addr", addr), zap.Error(err))
+			conn.Close()
+			s.perfMetrics.mu.Lock()
+			s.perfMetrics.failedConnections++
+			s.perfMetrics.mu.Unlock()
+			continue
+		}
+
+		s.peers[addr] = peer
+		currentPeers++
+		zap.L().Info("Connected and authenticated peer", zap.String("addr", addr))
+	}
+
+	zap.L().Info("Active peers", zap.Int("count", len(s.peers)), zap.Int("max", s.config.MaxPeers))
+}
+
+func (s *Sprint) performPeerHandshake(peer *PeerConnection) error {
+	// Create handshake message
+	handshake := PeerHandshake{
+		LicenseKey: s.config.LicenseKey,
+		Timestamp:  time.Now().Unix(),
+	}
+	sigData := []byte(s.config.LicenseKey + strconv.FormatInt(handshake.Timestamp, 10))
+	mac := hmac.New(sha256.New, []byte(s.config.PeerSecret))
+	mac.Write(sigData)
+	handshake.Signature = hex.EncodeToString(mac.Sum(nil))
+
+	data, err := json.Marshal(handshake)
 	if err != nil {
-		log.Printf("Failed to create license validation request: %v", err)
-		return s.fallbackLicense()
+		return fmt.Errorf("failed to marshal handshake: %w", err)
+	}
+	data = append(data, '\n')
+
+	// Send handshake
+	if err := peer.conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return fmt.Errorf("failed to set write deadline: %w", err)
+	}
+	if _, err := peer.conn.Write(data); err != nil {
+		return fmt.Errorf("failed to send handshake: %w", err)
 	}
 
-	// Set secure headers
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", fmt.Sprintf("BitcoinSprint/%s", Version))
-	req.Header.Set("X-Client-Version", Version)
-
-	// Execute request with timeout
-	resp, err := s.client.Do(req)
+	// Read response
+	if err := peer.conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return fmt.Errorf("failed to set read deadline: %w", err)
+	}
+	respData, err := io.ReadAll(io.LimitReader(peer.conn, 1024))
 	if err != nil {
-		log.Printf("License validation network error: %v", err)
-		return s.fallbackLicense()
-	}
-	defer resp.Body.Close()
-
-	// Check for valid response
-	if resp.StatusCode != 200 {
-		log.Printf("License validation failed with status: %d", resp.StatusCode)
-		return s.fallbackLicense()
+		return fmt.Errorf("failed to read handshake response: %w", err)
 	}
 
-	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 10240)) // 10KB max
-	if err != nil {
-		log.Printf("Failed to read license response: %v", err)
-		return s.fallbackLicense()
+	var resp PeerHandshake
+	if err := json.Unmarshal(respData, &resp); err != nil {
+		return fmt.Errorf("failed to parse handshake response: %w", err)
 	}
 
-	if err := json.Unmarshal(bodyBytes, &out); err != nil {
-		log.Printf("Failed to parse license response: %v", err)
-		return s.fallbackLicense()
+	// Verify response signature
+	respSigData := []byte(resp.LicenseKey + strconv.FormatInt(resp.Timestamp, 10))
+	mac = hmac.New(sha256.New, []byte(s.config.PeerSecret))
+	mac.Write(respSigData)
+	expectedSig := hex.EncodeToString(mac.Sum(nil))
+	if resp.Signature != expectedSig || time.Now().Unix()-resp.Timestamp > 30 {
+		return fmt.Errorf("invalid handshake signature or timestamp")
 	}
 
-	// Validate response contents
-	if !out.Valid || out.Tier == "" || out.Limit <= 0 {
-		log.Printf("Invalid license response content: valid=%v, tier=%s, limit=%d",
-			out.Valid, out.Tier, out.Limit)
-		return s.fallbackLicense()
-	}
-
-	// Success case
-	s.license = License{
-		Valid:      out.Valid,
-		Tier:       out.Tier,
-		BlockLimit: out.Limit,
-		Peers:      out.Peers,
-	}
-	log.Printf("License validated successfully: tier=%s, limit=%d blocks/day",
-		out.Tier, out.Limit)
+	peer.authed = true
 	return nil
 }
 
-// fallbackLicense creates a conservative fallback license when validation fails
-func (s *Sprint) fallbackLicense() error {
-	// Conservative fallback to free tier
-	s.license = License{Valid: false, Tier: "free", BlockLimit: 5, Peers: []string{}}
-	return fmt.Errorf("license validation failed, using restricted free tier")
-}
+// ───────────────────────── Dashboard ─────────────────────────
 
-// getSystemIdentifier returns a unique but anonymized identifier for this system
-func getSystemIdentifier() string {
-	// Use hostname as a base but hash it for privacy
-	hostname, err := os.Hostname()
-	if err != nil || hostname == "" {
-		hostname = "unknown-" + strconv.FormatInt(time.Now().UnixNano(), 36)
-	}
-
-	// Create simple hash
-	sum := 0
-	for _, c := range hostname {
-		sum = (sum*31 + int(c)) % 1000000
-	}
-
-	// Format as anonymized ID
-	return fmt.Sprintf("node-%06d", sum)
-}
-
-// StartWebDashboard launches the enhanced API server with rate limiting and tier-based features
 func (s *Sprint) StartWebDashboard() {
 	mux := http.NewServeMux()
 
-	// Rate limiting middleware
-	rateLimitedHandler := func(endpoint string, handler http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			clientIP := r.RemoteAddr
-			if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
-				clientIP = ip
-			}
+	// Register endpoints
+	mux.HandleFunc("/status", s.handleStatus)
+	mux.HandleFunc("/latest", s.handleLatest)
+	mux.HandleFunc("/metrics", s.handleMetrics)
+	mux.HandleFunc("/predictive", s.handlePredictive)
+	mux.HandleFunc("/stream", s.handleStream)
 
-			isTurbo := s.config.TurboMode
-			if !s.rateLimiter.Allow(clientIP, endpoint, isTurbo) {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusTooManyRequests)
-				json.NewEncoder(w).Encode(map[string]string{
-					"error": "Rate limit exceeded",
-					"tier":  s.getTierName(),
-				})
-				return
-			}
-			handler(w, r)
-		}
-	}
-
-	// Enhanced dashboard with real-time metrics
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		html := fmt.Sprintf(`
-		<html>
-		<head><title>Bitcoin Sprint v%s</title>
-		<style>body{font-family:Arial;margin:20px}table{border-collapse:collapse;width:100%%}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background-color:#f2f2f2}</style>
-		</head>
-		<body>
-		<h1>Bitcoin Sprint v%s ⚡</h1>
-		<p><strong>Mode:</strong> %s | <strong>Tier:</strong> %s</p>
-		<h2>API Endpoints</h2>
-		<table>
-		<tr><th>Endpoint</th><th>Method</th><th>Description</th><th>Tier</th></tr>
-		<tr><td><a href="/latest">/latest</a></td><td>GET</td><td>Most recent block only</td><td>All</td></tr>
-		<tr><td><a href="/metrics">/metrics</a></td><td>GET</td><td>Batch of recent blocks</td><td>All</td></tr>
-		<tr><td><a href="/status">/status</a></td><td>GET</td><td>System & license status</td><td>All</td></tr>
-		<tr><td>/stream</td><td>GET</td><td>Server-Sent Events</td><td>Turbo Only</td></tr>
-		<tr><td>/predictive</td><td>GET</td><td>Mempool predictions</td><td>Turbo Only</td></tr>
-		</table>
-		<script>setInterval(()=>fetch('/status').then(r=>r.json()).then(d=>console.log('Status:',d)),5000)</script>
-		</body></html>`, Version, Version, s.getModeName(), s.getTierName())
-		w.Write([]byte(html))
+	// Secure middleware
+	securedMux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'")
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		mux.ServeHTTP(w, r)
 	})
 
-	// /latest - Returns most recent block only (optimized for speed)
-	mux.HandleFunc("/latest", rateLimitedHandler("/latest", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-
-		// Get latest stored metric
-		s.mu.RLock()
-		latest := s.latestMetric
-		s.mu.RUnlock()
-
-		if latest != nil {
-			json.NewEncoder(w).Encode(latest)
-		} else {
-			// No metrics available yet
-			w.WriteHeader(http.StatusNoContent)
-		}
-	}))
-
-	// /metrics - Returns batch of recent blocks with query params
-	mux.HandleFunc("/metrics", rateLimitedHandler("/metrics", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-
-		// Parse query parameters
-		limitStr := r.URL.Query().Get("limit")
-		sinceStr := r.URL.Query().Get("since")
-
-		limit := 100 // default
-		if s.config.TurboMode {
-			limit = 500 // turbo gets more
-		}
-		if limitStr != "" {
-			if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
-				if s.config.TurboMode && parsed <= 500 {
-					limit = parsed
-				} else if !s.config.TurboMode && parsed <= 100 {
-					limit = parsed
-				}
-			}
-		}
-
-		var since int64
-		if sinceStr != "" {
-			if parsed, err := strconv.ParseInt(sinceStr, 10, 64); err == nil {
-				since = parsed
-			}
-		}
-
-		// Drain available metrics non-blocking
-		var batch []Metrics
-		for i := 0; i < limit; i++ {
-			select {
-			case m := <-s.metrics:
-				if since == 0 || m.Timestamp >= since {
-					batch = append(batch, m)
-				}
-			default:
-				i = limit // break loop
-			}
-		}
-		json.NewEncoder(w).Encode(batch)
-	}))
-
-	// /status - System and license information
-	mux.HandleFunc("/status", rateLimitedHandler("/status", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-
-		status := StatusResponse{
-			Tier:             s.getTierName(),
-			LicenseKey:       s.maskLicenseKey(),
-			Valid:            s.license.Valid,
-			BlocksSentToday:  s.blocksSent,
-			BlockLimit:       s.license.BlockLimit,
-			PeersConnected:   len(s.peers),
-			UptimeSeconds:    int64(time.Since(s.startTime).Seconds()),
-			Version:          Version,
-			TurboModeEnabled: s.config.TurboMode,
-		}
-		json.NewEncoder(w).Encode(status)
-	}))
-
-	// Turbo-only endpoints
-	if s.config.TurboMode {
-		// /stream - Server-Sent Events for real-time block notifications
-		mux.HandleFunc("/stream", rateLimitedHandler("/stream", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/event-stream")
-			w.Header().Set("Cache-Control", "no-cache")
-			w.Header().Set("Connection", "keep-alive")
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-
-			// Send initial connection event
-			fmt.Fprintf(w, "event: connected\ndata: {\"status\":\"connected\",\"turbo\":true}\n\n")
-			w.(http.Flusher).Flush()
-
-			// Stream metrics in real-time
-			for {
-				select {
-				case m := <-s.metrics:
-					data, _ := json.Marshal(m)
-					fmt.Fprintf(w, "event: new_block\ndata: %s\n\n", data)
-					w.(http.Flusher).Flush()
-				case <-r.Context().Done():
-					return
-				}
-			}
-		}))
-
-		// /predictive - Mempool analysis and block predictions
-		mux.HandleFunc("/predictive", rateLimitedHandler("/predictive", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-
-			// Simple mempool-based prediction (this would be enhanced with real mempool data)
-			trend := "stable"
-			if s.lastMempool > 0 {
-				// This is a placeholder - real implementation would analyze mempool growth
-				trend = "increasing"
-			}
-
-			prediction := PredictiveResponse{
-				MempoolSize:             s.lastMempool,
-				Trend:                   trend,
-				ProbabilityNextBlock60s: 0.72, // Placeholder probability
-				LastUpdate:              time.Now().Unix(),
-			}
-			json.NewEncoder(w).Encode(prediction)
-		}))
+	port := s.getDashboardPort()
+	server := &http.Server{
+		Addr:         port,
+		Handler:      securedMux,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  30 * time.Second,
 	}
 
-	// Start server
-	port := os.Getenv("SPRINT_DASH_PORT")
-	if port == "" {
-		port = os.Getenv("PORT")
-	}
-	if port == "" {
-		port = "8080"
-	}
-	if !strings.HasPrefix(port, ":") {
-		port = ":" + port
-	}
-
-	srv := &http.Server{Addr: port, Handler: mux}
+	zap.L().Info("Starting web dashboard", zap.String("port", port))
 	go func() {
-		log.Printf("Enhanced API server starting on %s (Turbo: %v)", port, s.config.TurboMode)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("Dashboard server error: %v", err)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			zap.L().Error("Web dashboard error", zap.Error(err))
 		}
 	}()
-}
 
-// Helper methods for API
-func (s *Sprint) getTierName() string {
-	if s.license.Valid {
-		return s.license.Tier
-	}
-	return "free"
-}
-
-func (s *Sprint) getModeName() string {
-	if s.config.TurboMode {
-		return "Turbo"
-	}
-	return "Standard"
-}
-
-func (s *Sprint) maskLicenseKey() string {
-	if s.config.LicenseKey == "" {
-		return ""
-	}
-	key := s.config.LicenseKey
-	if len(key) > 8 {
-		return key[:4] + "-****"
-	}
-	return "****"
-}
-
-// ConnectToPeers maintains TCP connections to peers listed in the license. It
-// dials each peer in the background and keeps the connection in s.peers.
-func (s *Sprint) ConnectToPeers() {
-	go func() {
-		backoff := map[string]time.Time{}
-		for {
-			select {
-			case <-s.ctx.Done():
-				// close existing connections
-				for k, c := range s.peers {
-					_ = c.Close()
-					delete(s.peers, k)
-				}
-				return
-			default:
-			}
-
-			peers := s.license.Peers
-			if len(peers) == 0 {
-				// nothing to do — sleep and check later
-				time.Sleep(2 * time.Second)
-				continue
-			}
-
-			for _, addr := range peers {
-				if _, ok := s.peers[addr]; ok {
-					continue // already connected
-				}
-				if t, ok := backoff[addr]; ok && time.Now().Before(t) {
-					continue
-				}
-				// try dial
-				conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
-				if err != nil {
-					// set retry backoff
-					backoff[addr] = time.Now().Add(5 * time.Second)
-					log.Printf("peer dial failed %s: %v", addr, err)
-					continue
-				}
-				// store connection
-				s.mu.Lock()
-				s.peers[addr] = conn
-				s.mu.Unlock()
-				log.Printf("connected to peer %s", addr)
-			}
-
-			time.Sleep(1 * time.Second)
-		}
-	}()
-}
-
-// StartMetricsReporter batches metrics and posts them to the configured MetricsURL.
-func (s *Sprint) StartMetricsReporter() {
-	go func() {
-		ticker := time.NewTicker(2 * time.Second)
-		defer ticker.Stop()
-		var batch []Metrics
-		for {
-			select {
-			case <-s.ctx.Done():
-				return
-			case m := <-s.metrics:
-				batch = append(batch, m)
-				if len(batch) >= 25 {
-					s.postMetrics(batch)
-					batch = nil
-				}
-			case <-ticker.C:
-				if len(batch) > 0 {
-					s.postMetrics(batch)
-					batch = nil
-				}
-			}
-		}
-	}()
-}
-
-func (s *Sprint) postMetrics(batch []Metrics) {
-	if s.config.MetricsURL == "" {
-		return
-	}
-	buf, _ := json.Marshal(batch)
-	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
+	// Handle graceful shutdown
+	<-s.ctx.Done()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, s.config.MetricsURL, bytes.NewReader(buf))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := s.client.Do(req)
-	if err != nil {
-		log.Printf("metrics post failed: %v", err)
-		return
-	}
-	io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
+	server.Shutdown(ctx)
 }
 
-// SprintBlock writes a small notification to each connected peer and returns
-// the number of peers that accepted the message. Writes are done with a short
-// deadline so this function won't block for long.
-func (s *Sprint) SprintBlock(hash string) int {
+func (s *Sprint) handleStatus(w http.ResponseWriter, r *http.Request) {
+	clientIP := r.RemoteAddr
+	if !s.rateLimiter.Allow(clientIP, "/status", s.config.TurboMode) {
+		http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+		return
+	}
+
 	s.mu.RLock()
-	peers := make([]net.Conn, 0, len(s.peers))
-	peerAddrs := make([]string, 0, len(s.peers))
-	for addr, c := range s.peers {
-		peers = append(peers, c)
-		peerAddrs = append(peerAddrs, addr)
+	resp := StatusResponse{
+		Tier:             s.license.Tier,
+		LicenseKey:       maskLicenseKey(s.config.LicenseKey),
+		Valid:            s.license.Valid,
+		BlocksSentToday:  atomic.LoadInt64(&s.blocksSent),
+		BlockLimit:       s.license.BlockLimit,
+		PeersConnected:   len(s.peers),
+		UptimeSeconds:    int64(time.Since(s.startTime).Seconds()),
+		Version:          Version,
+		TurboModeEnabled: s.config.TurboMode,
+		LastBlockTime:    s.lastBlockTime,
+		RPCNodesActive:   len(s.config.RPCNodes) - len(s.nodeBackoff),
 	}
 	s.mu.RUnlock()
 
-	if len(peers) == 0 {
-		return 0
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Sprint) handleLatest(w http.ResponseWriter, r *http.Request) {
+	clientIP := r.RemoteAddr
+	if !s.rateLimiter.Allow(clientIP, "/latest", s.config.TurboMode) {
+		http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+		return
 	}
 
-	var wg sync.WaitGroup
-	type peerResult struct {
-		addr    string
-		success bool
-		latency time.Duration
-		err     error
+	s.mu.RLock()
+	if s.latestMetric == nil {
+		s.mu.RUnlock()
+		http.Error(w, "No blocks detected yet", http.StatusServiceUnavailable)
+		return
+	}
+	metric := *s.latestMetric
+	s.mu.RUnlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(metric)
+}
+
+func (s *Sprint) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	clientIP := r.RemoteAddr
+	if !s.rateLimiter.Allow(clientIP, "/metrics", s.config.TurboMode) {
+		http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+		return
 	}
 
-	results := make(chan peerResult, len(peers))
-	start := time.Now()
+	// Collect recent metrics (last 100 or buffer size)
+	metrics := make([]Metrics, 0, 100)
+	for i := 0; i < 100; i++ {
+		select {
+		case m := <-s.metrics:
+			metrics = append(metrics, m)
+		default:
+			break
+		}
+	}
 
-	// OPTIMIZATION: Use pre-encoded template with hot path substitution
-	message := s.preEncodedPayload
-	// Replace placeholder hash in pre-encoded JSON
-	hashBytes := []byte(hash)
-	message = bytes.Replace(message, []byte("HASH_PLACEHOLDER"), hashBytes, 1)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(metrics)
+}
 
-	// Add timestamp for real-time update (minimal overhead)
-	ts := time.Now().UnixNano() / int64(time.Millisecond)
-	tsBytes := []byte(fmt.Sprintf("%d", ts))
-	message = bytes.Replace(message, []byte("TS_PLACEHOLDER"), tsBytes, 1)
+func (s *Sprint) handlePredictive(w http.ResponseWriter, r *http.Request) {
+	clientIP := r.RemoteAddr
+	if !s.rateLimiter.Allow(clientIP, "/predictive", s.config.TurboMode) {
+		http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+		return
+	}
 
-	// Send to all peers concurrently with ultra-fast timeouts
-	for i, conn := range peers {
-		addr := peerAddrs[i]
-		wg.Add(1)
-		go func(conn net.Conn, addr string) {
-			defer wg.Done()
+	s.mu.RLock()
+	resp := PredictiveResponse{
+		MempoolSize:             s.lastMempool,
+		Trend:                   s.calculateMempoolTrend(),
+		ProbabilityNextBlock60s: s.calculateBlockProbability(),
+		LastUpdate:              time.Now().Unix(),
+		AverageBlockTime:        s.perfMetrics.avgBlockDetection.Minutes(),
+	}
+	s.mu.RUnlock()
 
-			// HOT PATH OPTIMIZATION: 200ms deadline for maximum speed
-			peerStart := time.Now()
-			conn.SetWriteDeadline(time.Now().Add(200 * time.Millisecond))
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
 
-			// TCP_NODELAY for immediate transmission
-			if tcpConn, ok := conn.(*net.TCPConn); ok {
-				_ = tcpConn.SetNoDelay(true)
+func (s *Sprint) handleStream(w http.ResponseWriter, r *http.Request) {
+	clientIP := r.RemoteAddr
+	if !s.rateLimiter.Allow(clientIP, "/stream", s.config.TurboMode) {
+		http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	for {
+		select {
+		case m := <-s.metrics:
+			data, _ := json.Marshal(m)
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+		case <-r.Context().Done():
+			return
+		case <-s.ctx.Done():
+			return
+		}
+	}
+}
+
+func (s *Sprint) getDashboardPort() string {
+	u, err := url.Parse(s.config.APIBase)
+	if err != nil {
+		return ":8080"
+	}
+	return u.Host
+}
+
+func maskLicenseKey(key string) string {
+	if len(key) < 8 {
+		return "****"
+	}
+	return key[:4] + "****" + key[len(key)-4:]
+}
+
+// ───────────────────────── Predictive Monitoring ─────────────────────────
+
+func (s *Sprint) StartPredictiveMonitoring() {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			mempoolSize, err := s.getMempoolSize()
+			if err != nil {
+				if s.shouldLog("debug") {
+					zap.L().Debug("Mempool query failed", zap.Error(err))
+				}
+				continue
 			}
+			s.mu.Lock()
+			s.lastMempool = mempoolSize
+			s.mu.Unlock()
+		}
+	}
+}
 
-			// Single write operation (optimized)
-			n, err := conn.Write(message)
-			latency := time.Since(peerStart)
+func (s *Sprint) getMempoolSize() (int, error) {
+	_, _, node, err := s.getBestBlockSingle()
+	if err != nil {
+		return 0, err
+	}
 
-			if err != nil || n != len(message) {
-				results <- peerResult{
-					addr:    addr,
-					success: false,
-					latency: latency,
-					err:     err,
-				}
+	ctx, cancel := context.WithTimeout(s.ctx, 3*time.Second)
+	defer cancel()
 
-				// Fast connection cleanup
-				s.mu.Lock()
-				if peerConn, exists := s.peers[addr]; exists && peerConn == conn {
-					_ = peerConn.Close()
-					delete(s.peers, addr)
-				}
-				s.mu.Unlock()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, node, bytes.NewReader(s.getMempoolInfoReq))
+	if err != nil {
+		return 0, fmt.Errorf("failed to create mempool request: %w", err)
+	}
+	req.SetBasicAuth(s.config.RPCUser, s.config.RPCPass)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("mempool request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var envelope struct {
+		Result struct {
+			Size int `json:"size"`
+		} `json:"result"`
+		Error *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		return 0, fmt.Errorf("decode mempool failed: %w", err)
+	}
+	if envelope.Error != nil {
+		return 0, fmt.Errorf("mempool RPC error %d: %s", envelope.Error.Code, envelope.Error.Message)
+	}
+
+	return envelope.Result.Size, nil
+}
+
+func (s *Sprint) calculateMempoolTrend() string {
+	if s.lastMempool > 1000 {
+		return "high"
+	} else if s.lastMempool > 100 {
+		return "medium"
+	}
+	return "low"
+}
+
+func (s *Sprint) calculateBlockProbability() float64 {
+	mempool := float64(s.lastMempool)
+	if mempool < 100 {
+		return 0.1
+	} else if mempool < 1000 {
+		return 0.5
+	}
+	return 0.9
+}
+
+// ───────────────────────── Metrics Reporter ─────────────────────────
+
+func (s *Sprint) StartMetricsReporter() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			s.reportMetrics()
+		}
+	}
+}
+
+func (s *Sprint) reportMetrics() {
+	var metrics []Metrics
+	for {
+		select {
+		case m := <-s.metrics:
+			metrics = append(metrics, m)
+			if len(metrics) >= 100 {
+				break
+			}
+		default:
+			if len(metrics) == 0 {
 				return
 			}
-
-			results <- peerResult{
-				addr:    addr,
-				success: true,
-				latency: latency,
-				err:     nil,
-			}
-		}(conn, addr)
-	}
-
-	// HOT PATH: Faster timeout for maximum responsiveness
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		// All completed
-	case <-time.After(300 * time.Millisecond): // Reduced from 750ms
-		// Continue processing partial results
-	}
-
-	// Fast results collection
-	close(results)
-	success := 0
-	totalLatency := int64(0)
-	for result := range results {
-		if result.success {
-			success++
-			totalLatency += result.latency.Milliseconds()
+			break
 		}
 	}
 
-	// Optimized logging (reduce contention)
-	if success > 0 {
-		s.blocksSentMu.Lock()
-		s.blocksSent++
-		s.blocksSentMu.Unlock()
+	// Async POST to metrics endpoint
+	go func(metrics []Metrics) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 
-		if success > 0 {
-			avgLatency := float64(totalLatency) / float64(success)
-			log.Printf("⚡ SPRINT: Block %s → %d peers in %.1fms avg (%.1fms total)",
-				hash[:8], success, avgLatency, float64(time.Since(start).Milliseconds()))
+		data, err := json.Marshal(metrics)
+		if err != nil {
+			zap.L().Error("Failed to marshal metrics", zap.Error(err))
+			return
 		}
-	}
 
-	return success
-}
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.config.MetricsURL, bytes.NewReader(data))
+		if err != nil {
+			zap.L().Error("Failed to create metrics request", zap.Error(err))
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
 
-// startParallelMonitoring starts aggressive parallel monitoring across all RPC nodes
-// to maximize block detection speed and achieve claimed performance advantages
-func (s *Sprint) startParallelMonitoring(currentHash string, currentHeight int) {
-	if len(s.config.RPCNodes) <= 1 {
-		return // Need multiple nodes for parallel monitoring
-	}
-
-	log.Printf("Starting PARALLEL monitoring across %d nodes for ultra-fast detection", len(s.config.RPCNodes))
-
-	// Monitor all nodes simultaneously for 30 seconds after block detection
-	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
-	defer cancel()
-
-	var wg sync.WaitGroup
-	results := make(chan struct {
-		node    string
-		hash    string
-		height  int
-		latency time.Duration
-	}, len(s.config.RPCNodes))
-
-	// ULTRA-AGGRESSIVE: Poll all nodes every 100ms simultaneously
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-
-	for _, node := range s.config.RPCNodes {
-		wg.Add(1)
-		go func(nodeURL string) {
-			defer wg.Done()
-
-			for {
+		resp, err := s.client.Do(req)
+		if err != nil {
+			zap.L().Error("Failed to send metrics", zap.Error(err))
+			// Re-queue metrics for next attempt
+			for _, m := range metrics {
 				select {
-				case <-ctx.Done():
-					return
-				case <-ticker.C:
-					start := time.Now()
-					reqBody := []byte(`{"jsonrpc":"1.0","id":"parallel","method":"getblockchaininfo","params":[]}`)
-
-					hash, height, err := s.tryRPCOptimized(nodeURL, reqBody)
-					latency := time.Since(start)
-
-					if err == nil && hash != currentHash && height > currentHeight {
-						// NEW BLOCK DETECTED BY PARALLEL MONITORING!
-						results <- struct {
-							node    string
-							hash    string
-							height  int
-							latency time.Duration
-						}{nodeURL, hash, height, latency}
-
-						log.Printf(" PARALLEL DETECTION: New block %s at height %d via %s in %v",
-							hash[:8], height, nodeURL, latency)
-
-						// Trigger immediate main detection
-						s.OnNewBlock(hash, height, nodeURL)
-						return
-					}
+				case s.metrics <- m:
+				default:
+					zap.L().Warn("Metrics buffer full, dropping metric", zap.String("block_hash_prefix", m.BlockHash[:8]))
 				}
 			}
-		}(node)
-	}
+			return
+		}
+		defer resp.Body.Close()
 
-	// Wait for completion or timeout
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+			zap.L().Error("Metrics endpoint error", zap.Int("status", resp.StatusCode), zap.String("body", string(body)))
+			return
+		}
 
-	// Process any results
-	for result := range results {
-		log.Printf("Parallel node %s detected block %s in %v",
-			result.node, result.hash[:8], result.latency)
-	}
+		zap.L().Info("Reported metrics batch", zap.Int("count", len(metrics)))
+	}(metrics)
 }
 
-// startPredictiveMonitoring uses mempool analysis to predict when blocks are likely
-// and increases polling frequency accordingly for maximum speed advantage
-func (s *Sprint) startPredictiveMonitoring() {
-	if len(s.config.RPCNodes) == 0 {
-		return
-	}
+// ───────────────────────── Performance Monitor ─────────────────────────
 
-	log.Printf("Starting PREDICTIVE monitoring for mempool-based block prediction")
-
-	// Monitor mempool every 2 seconds to predict blocks
-	ticker := time.NewTicker(2 * time.Second)
+func (s *Sprint) StartPerformanceMonitor() {
+	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
-
-	var lastMempoolSize int
-	highActivityThreshold := 50 // transactions
-
-	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Minute)
-	defer cancel()
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-s.ctx.Done():
 			return
 		case <-ticker.C:
-			// Get mempool info from primary node
-			node := s.config.RPCNodes[0]
-			reqBody := []byte(`{"jsonrpc":"1.0","id":"predictive","method":"getmempoolinfo","params":[]}`)
-
-			ctx, cancel := context.WithTimeout(s.ctx, 2*time.Second)
-			req, err := http.NewRequestWithContext(ctx, http.MethodPost, node, bytes.NewReader(reqBody))
-			if err != nil {
-				cancel()
-				continue
-			}
-
-			req.SetBasicAuth(s.config.RPCUser, s.config.RPCPass)
-			req.Header.Set("Content-Type", "application/json")
-
-			resp, err := s.client.Do(req)
-			if err != nil {
-				cancel()
-				continue
-			}
-
-			var result struct {
-				Result struct {
-					Size int `json:"size"`
-				} `json:"result"`
-			}
-
-			if json.NewDecoder(resp.Body).Decode(&result) == nil {
-				mempoolSize := result.Result.Size
-				resp.Body.Close()
-				cancel()
-
-				// Detect high mempool activity indicating likely block soon
-				if mempoolSize > highActivityThreshold && mempoolSize > lastMempoolSize*2 {
-					log.Printf(" PREDICTIVE: High mempool activity detected (%d txs), expecting block soon - BOOSTING polling", mempoolSize)
-
-					// Start HYPER-AGGRESSIVE polling for 60 seconds
-					go s.hyperAggressivePolling(60 * time.Second)
-				}
-
-				lastMempoolSize = mempoolSize
-			} else {
-				resp.Body.Close()
-				cancel()
-			}
+			s.perfMetrics.mu.RLock()
+			zap.L().Info("Performance metrics",
+				zap.Int64("total_blocks", s.perfMetrics.totalBlocks),
+				zap.Float64("avg_sprint_time_ms", s.perfMetrics.avgSprintTime.Seconds()*1000),
+				zap.Int64("failed_connections", s.perfMetrics.failedConnections),
+				zap.Float64("uptime_hours", time.Since(s.perfMetrics.startTime).Hours()))
+			s.perfMetrics.mu.RUnlock()
 		}
 	}
 }
 
-// startPredictiveMonitoringTurbo is a faster mempool-based predictor used in Turbo mode.
-func (s *Sprint) startPredictiveMonitoringTurbo() {
-	if len(s.config.RPCNodes) == 0 {
-		return
-	}
+// ───────────────────────── Helpers ─────────────────────────
 
-	log.Printf("Starting PREDICTIVE monitoring (Turbo) with 500ms cadence")
-
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-
-	var lastSize int
-	spike := 40 // lower threshold in turbo
-
-	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Minute)
-	defer cancel()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			node := s.config.RPCNodes[0]
-			reqBody := []byte(`{"jsonrpc":"1.0","id":"predictive","method":"getmempoolinfo","params":[]}`)
-			cctx, ccancel := context.WithTimeout(s.ctx, 1*time.Second)
-			req, err := http.NewRequestWithContext(cctx, http.MethodPost, node, bytes.NewReader(reqBody))
-			if err != nil {
-				ccancel()
-				continue
-			}
-			req.SetBasicAuth(s.config.RPCUser, s.config.RPCPass)
-			req.Header.Set("Content-Type", "application/json")
-			resp, err := s.client.Do(req)
-			if err != nil {
-				ccancel()
-				continue
-			}
-			var out struct {
-				Result struct {
-					Size int `json:"size"`
-				} `json:"result"`
-			}
-			if json.NewDecoder(resp.Body).Decode(&out) == nil {
-				resp.Body.Close()
-				ccancel()
-				size := out.Result.Size
-				if size > spike && (lastSize == 0 || size > lastSize*2) {
-					log.Printf(" PREDICTIVE (Turbo): mempool spike %d → BOOST 100ms", size)
-					go s.hyperAggressivePolling(60 * time.Second)
-				}
-				lastSize = size
-			} else {
-				resp.Body.Close()
-				ccancel()
-			}
-		}
-	}
+func (s *Sprint) shouldLog(level string) bool {
+	lvl := strings.ToLower(s.config.LogLevel)
+	return lvl == "debug" ||
+		(lvl == "info" && level != "debug") ||
+		(lvl == "warn" && (level == "warn" || level == "error")) ||
+		(lvl == "error" && level == "error")
 }
 
-// hyperAggressivePolling starts extremely fast polling (100ms) for a specified duration
-// to catch blocks immediately when high activity is detected
-func (s *Sprint) hyperAggressivePolling(duration time.Duration) {
-	log.Printf(" HYPER-AGGRESSIVE POLLING: 100ms intervals for %v", duration)
-
-	ctx, cancel := context.WithTimeout(s.ctx, duration)
-	defer cancel()
-
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-
-	var lastHash string
-
-	for {
-		select {
-		case <-ctx.Done():
-			log.Printf("HYPER-AGGRESSIVE polling completed")
-			return
-		case <-ticker.C:
-			if len(s.config.RPCNodes) == 0 {
-				continue
-			}
-
-			reqBody := []byte(`{"jsonrpc":"1.0","id":"hyper","method":"getblockchaininfo","params":[]}`)
-			hash, height, err := s.tryRPCOptimized(s.config.RPCNodes[0], reqBody)
-
-			if err == nil && hash != "" && hash != lastHash {
-				log.Printf("🔥 HYPER-AGGRESSIVE DETECTION: Block %s at height %d", hash[:8], height)
-				s.OnNewBlock(hash, height, s.config.RPCNodes[0])
-				lastHash = hash
-			}
-		}
+func min(a, b int) int {
+	if a < b {
+		return a
 	}
+	return b
 }
+```

@@ -1,75 +1,31 @@
-# Bitcoin Sprint - Enterprise Bitcoin Block Relay
+# Bitcoin Sprint — Enterprise Bitcoin Block Relay
 
 Fast, reliable Bitcoin block sprinting with RPC polling and enterprise features.
 
 ## Quick Start
 
-### Building
-
-#### Local Developer Build
-
-For local builds, the script will automatically detect your Git commit:
+### Build (Windows, PowerShell)
 
 ```powershell
-# Standard local build
-.\build-optimized.ps1 -OutputName "sprint.exe" -Release -Turbo -Version "1.0.3"
-
-# Example output
-# Bitcoin Sprint v1.0.3 (commit 29c554f)
+go build -o bitcoin-sprint.exe .
+./bitcoin-sprint.exe --version
 ```
 
-No need to pass `-Commit`; the script runs `git rev-parse --short HEAD`.
-
-#### CI/CD Deterministic Build
-
-When `.git` isn't available (e.g., CI pipelines building from source tarballs), pass the commit manually:
+### Run (Public RPC, no local node required)
 
 ```powershell
-# Deterministic CI build
-.\build-optimized.ps1 -OutputName "sprint-ci.exe" -Release -Turbo `
-    -Version "1.0.3" -Commit "ci-abcdef"
+$env:SPRINT_RPC_NODE = "https://docs-demo.btc.quiknode.pro/"
+$env:SPRINT_TURBO    = "0"  # Safe for public endpoints
+./bitcoin-sprint.exe
 ```
 
-✅ Output is guaranteed to embed exactly what you provide:
-
-```text
-Bitcoin Sprint v1.0.3 (commit ci-abcdef)
-```
-
-#### Build Verification
-
-Every build runs `--version` immediately after compile to verify metadata was embedded correctly:
+Or use the helper script:
 
 ```powershell
-.\sprint.exe --version
-# Bitcoin Sprint v1.0.3 (commit ci-abcdef)
+./start-sprint-publicrpc.ps1 -network mainnet    # QuickNode (default)
+./start-sprint-publicrpc.ps1 -network testnet    # Blast testnet
+./start-sprint-publicrpc.ps1 -RpcUrl 'https://your-rpc/' -Turbo 1
 ```
-
-#### Build Parameters
-
-| Parameter     | Description                                               | Example       |
-| ------------- | --------------------------------------------------------- | ------------- |
-| `-OutputName` | Name of output binary                                     | `sprint.exe`  |
-| `-Release`    | Apply release optimizations                               | `-Release`    |
-| `-Turbo`      | Enable turbo optimizations (aggressive mode)              | `-Turbo`      |
-| `-Version`    | Version string to embed                                   | `"1.0.3"`     |
-| `-Commit`     | Commit/ref to embed (optional, defaults to git rev-parse) | `"ci-abcdef"` |
-
-With this setup:
-
-- Local builds stay automatic
-- CI builds stay deterministic & reproducible  
-- Every binary can be traced to version + commit without ambiguity
-
-### Installation
-
-1. **Install on Windows (as Administrator):**
-
-   ```powershell
-   .\install.ps1 -BinaryUrl "https://your-cdn.com/sprint.exe" -BinarySha256 "YOUR_SHA256_HERE"
-   ```
-
-2. **Access dashboard:** <http://localhost:8080>
 
 ## Configuration
 
@@ -80,7 +36,36 @@ Edit `config.json` or set environment variables:
 - `SPRINT_RPC_NODE` - Bitcoin Core RPC nodes (comma-separated)
 - `SPRINT_RPC_USER` / `SPRINT_RPC_PASS` - RPC credentials
 
-## Bitcoin Core Setup
+## Production Use Only
+
+This repository is cleaned for production distribution. Development mocks and simulators have been removed.
+
+Build the production binary:
+
+```powershell
+go build -o bitcoin-sprint.exe .
+```
+
+Public endpoints you can try (swap into `SPRINT_RPC_NODE` or pass with `-RpcUrl`):
+
+- [https://docs-demo.btc.quiknode.pro/](https://docs-demo.btc.quiknode.pro/) ⭐ **Recommended** (QuickNode demo, most reliable)
+- [https://bitcoin-rpc.publicnode.com](https://bitcoin-rpc.publicnode.com) (PublicNode, mainnet)
+- [https://bitcoin.api.onfinality.io/public](https://bitcoin.api.onfinality.io/public)
+- [https://bitcoin-mainnet.public.blastapi.io/](https://bitcoin-mainnet.public.blastapi.io/)
+- [https://bitcoin.therpc.io/](https://bitcoin.therpc.io/)
+
+Notes
+
+- Leave `SPRINT_RPC_USER`/`SPRINT_RPC_PASS` empty for these gateways.
+- If you encounter 429/limits, set `SPRINT_TURBO=0` and/or `SPRINT_POLL_INTERVAL=2`.
+- Multiple endpoints are supported (comma-separated) for HA:
+
+   ```powershell
+   $env:SPRINT_RPC_NODE = 'https://bitcoin-rpc.publicnode.com,https://bitcoin.api.onfinality.io/public'
+   ./bitcoin-sprint.exe
+   ```
+
+## Bitcoin Core Setup (optional)
 
 Add to your `bitcoin.conf`:
 
@@ -96,30 +81,35 @@ txindex=1
 
 ## Automation/CI
 
-For automated deployments, use `-JsonOutput` for machine-readable results:
+Build artifacts can be produced using standard Go toolchain in your pipeline:
 
 ```powershell
-# Install
-.\install.ps1 -BinaryUrl "..." -BinarySha256 "..." -JsonOutput
-
-# Uninstall
-.\uninstall.ps1 -JsonOutput
+go build -ldflags "-X main.Version=1.0.5 -X main.Commit=$env:GITHUB_SHA" -o bitcoin-sprint.exe .
 ```
-
-Exit codes: 0 = success, 1 = failure.
 
 ## Files
 
-- `sprint.exe` - Main binary
-- `config.json` - Configuration file
-- `install.ps1` - Windows installer with service registration
-- `uninstall.ps1` - Clean removal script
-- `main_test.go` - Unit tests
+- `main.go` - Core server and API endpoints
+- `production.go` - Production block poller
+- `release_guard.go` - Free-tier timed release gate
+- `config.json` - Default configuration
+- `start-sprint-publicrpc.ps1` - Helper to run against public RPC
 
-## Testing
+## Timed Release and Free Tier
+
+This build enforces a free, limited API and is time‑boxed:
+
+- Tier: free (no license required)
+- Turbo mode: disabled by default for public RPC safety
+- Poll interval: 2s (can be adjusted via env)
+- Expiration: controlled by SPRINT_TRIAL_EXPIRES (default 2025-09-30T23:59:59Z)
+
+Environment overrides:
 
 ```powershell
-go test ./... -v
+$env:SPRINT_TIER = "free"
+$env:SPRINT_POLL_INTERVAL = "2"
+$env:SPRINT_TRIAL_EXPIRES = "2025-09-30T23:59:59Z"
 ```
 
 ## Performance Analysis
@@ -171,7 +161,7 @@ Built for enterprise: single binary, no external dependencies, audit-grade quali
 
 Use this lightweight, copy‑pasteable harness to measure Sprint’s detection lead versus a 5s baseline poller. It doesn’t change your app and runs as a separate tool.
 
-1) Ensure Bitcoin Core RPC is reachable (see bitcoin.conf above).
+1) You can use either a local Bitcoin Core or a public RPC URL.
 2) Create a temporary file `bench.go` with the following content:
 
 ```go
@@ -283,9 +273,18 @@ func main() {
 
 1) Run it:
 
+Local node example:
+
 ```powershell
-# Optional: change directory to where you saved bench.go
 go run bench.go -rpc-url "http://127.0.0.1:8332" -rpc-user "bitcoin" -rpc-pass "password123" -count 50
+```
+
+Public RPC examples (no user/pass):
+
+```powershell
+go run bench.go -rpc-url "https://bitcoin-mainnet.public.blastapi.io/" -count 50
+go run bench.go -rpc-url "https://bitcoin.api.onfinality.io/public" -count 50
+go run bench.go -rpc-url "https://bitcoin-rpc.publicnode.com" -count 50
 ```
 
 Interpretation

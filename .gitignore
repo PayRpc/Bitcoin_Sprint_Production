@@ -3,6 +3,7 @@
 
 # Compiled binaries
 *.exe
+*.exe~
 *.dll
 *.so
 *.dylib
@@ -10,7 +11,6 @@ bin/
 dist/
 
 # Go build cache
-go.sum
 vendor/
 
 # Log files
@@ -25,6 +25,7 @@ config-local.json
 # IDE and editor files
 .vscode/settings.json
 .vscode/launch.json
+/.vscode/
 *.swp
 *.swo
 *~
@@ -58,3 +59,18 @@ debug
 # Backup files
 *.bak
 *.backup
+
+# Windows service/installer artifacts (not shipped in source-only)
+install-*.ps1
+install-*.bat
+Install-*.vbs
+Install-*.cmd
+Run-Installer.ps1
+BUILD-*.ps1
+build-*.ps1
+quick-install.ps1
+run-sprint-zmq.ps1
+start-bitcoin-testnet4.ps1
+start-sprint-testnet4.ps1
+Start-MockServer.ps1
+zmq-config.json
