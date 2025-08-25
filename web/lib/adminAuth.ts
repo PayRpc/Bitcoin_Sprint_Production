@@ -1,5 +1,5 @@
-import type { NextApiRequest, NextApiResponse } from "next"
 import crypto from "crypto"
+import type { NextApiRequest, NextApiResponse } from "next"
 
 /**
  * Verify admin authentication via x-admin-secret header.

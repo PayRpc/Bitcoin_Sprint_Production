@@ -1,20 +1,19 @@
-import crypto from 'crypto';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 type Data = {
-  key?: string;
-  error?: string;
+  error: string;
+  message: string;
+  redirectTo?: string;
 }
 
+/**
+ * @deprecated This endpoint has been replaced by /api/keys
+ * @description Legacy API key generation endpoint - redirects to new implementation
+ */
 export default function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const { email, company, tier } = req.body || {};
-  if (!email) return res.status(400).json({ error: 'Email is required' });
-
-  // Simple demo key generator — replace with real issuance & persistence in production
-  const key = crypto.randomBytes(24).toString('base64url');
-
-  // TODO: persist key and metadata to a database and return associated info
-
-  return res.status(200).json({ key });
+  return res.status(410).json({
+    error: 'Endpoint Deprecated',
+    message: 'This endpoint has been replaced. Please use /api/keys instead for API key generation with proper persistence and management.',
+    redirectTo: '/api/keys'
+  });
 }

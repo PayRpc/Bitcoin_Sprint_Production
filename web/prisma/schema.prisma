@@ -1,5 +1,5 @@
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -8,12 +8,24 @@ generator client {
 }
 
 model ApiKey {
-  id         String   @id @default(uuid())
-  key        String   @unique
-  email      String
-  company    String?
-  tier       String
-  createdAt  DateTime @default(now())
-  expiresAt  DateTime
-  revoked    Boolean  @default(false)
+  id          String   @id @default(cuid())
+  key         String   @unique
+  email       String
+  company     String?
+  tier        Tier     @default(FREE)
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+  revoked     Boolean  @default(false)
+  
+  // Analytics metadata
+  lastUsedAt  DateTime?
+  requests    Int      @default(0)
+  blocksToday Int      @default(0)
+}
+
+enum Tier {
+  FREE
+  PRO
+  ENTERPRISE
+  ENTERPRISE_PLUS
 }

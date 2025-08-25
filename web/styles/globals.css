@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─────────────────────────────
+   1. Base resets & typography
+───────────────────────────── */
+@layer base {
+  html {
+    @apply antialiased text-gray-100 bg-brand-dark;
+    font-feature-settings: "liga" 1, "kern";
+  }
+  body {
+    @apply font-sans leading-relaxed bg-gradient-to-b from-gray-950 to-brand-dark;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold tracking-tight text-gradient;
+  }
+  a {
+    @apply text-brand-gold hover:text-brand-orange transition-colors;
+  }
+}
+
+/* ─────────────────────────────
+   2. Custom reusable components
+───────────────────────────── */
+@layer components {
+  .btn {
+    @apply inline-flex items-center px-5 py-2 rounded-xl font-semibold shadow-glow
+      bg-gradient-to-r from-brand-gold to-brand-orange
+      text-brand-dark hover:opacity-90 transition;
+  }
+  .btn-outline {
+    @apply inline-flex items-center px-5 py-2 rounded-xl font-semibold
+      border border-brand-gold text-brand-gold
+      hover:bg-brand-gold hover:text-brand-dark transition;
+  }
+  .card {
+    @apply bg-gray-900/70 border border-gray-800 rounded-2xl shadow-lg p-6;
+  }
+  .badge {
+    @apply px-3 py-1 rounded-full text-xs font-semibold uppercase
+      bg-brand-gold/20 text-brand-gold;
+  }
+}
+
+/* ─────────────────────────────
+   3. Utility extensions
+───────────────────────────── */
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-brand-gold to-brand-orange;
+  }
+  .glass {
+    @apply bg-gray-900/60 backdrop-blur-lg border border-gray-800;
+  }
+}
