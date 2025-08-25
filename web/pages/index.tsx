@@ -1,8 +1,8 @@
-import Head from "next/head";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { motion } from "framer-motion";
 import { BarChart3, Shield, Zap } from "lucide-react";
+import Head from "next/head";
 import Image from "next/image";
 
 export default function ApiFrontPage() {
@@ -158,5 +158,6 @@ export default function ApiFrontPage() {
         <p className="mt-2 text-sm">© 2025 Bitcoin Sprint Systems</p>
       </footer>
     </div>
+    </>
   );
 }
