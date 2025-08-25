@@ -44,7 +44,7 @@ export default withAdminAuth(async function handler(req: NextApiRequest, res: Ne
     if (req.method === "GET") {
       const keys = await prisma.apiKey.findMany({ orderBy: { createdAt: "desc" } })
       // Avoid leaking raw key material in listings
-      const safe = keys.map(k => ({
+      const safe = keys.map((k: any) => ({
         id: k.id,
         email: k.email,
         company: k.company,

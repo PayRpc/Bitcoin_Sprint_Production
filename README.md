@@ -106,15 +106,63 @@ go test ./internal/secure -v
 
 ## Configuration
 
-The application configuration is built into the binary. Environment variables can be used for deployment customization:
+Bitcoin Sprint supports multiple configuration formats with automatic precedence resolution:
+
+### Configuration Sources (Priority Order)
+
+1. **Environment Variables** (highest priority)
+2. **`.env.local`** - Local environment file (gitignored) 
+3. **`.env`** - Environment file template
+4. **`config.json`** - JSON configuration with ${VAR} placeholders
+5. **Built-in Defaults** - Fallback values
 
 ### Environment Variables
 
-- `SPRINT_LICENSE` - License key
-- `SPRINT_RPC_NODE` - Bitcoin Core RPC nodes (comma-separated)
-- `SPRINT_RPC_USER` / `SPRINT_RPC_PASS` - RPC credentials
-- `SPRINT_PEER_PORT` - Peer listen port (default: 8335)
-- `SPRINT_DASH_PORT` or `PORT` - Dashboard port (default: 8080)
+- `LICENSE_KEY` - Your Bitcoin Sprint license key
+- `RPC_USER` / `RPC_PASS` - Bitcoin Core RPC credentials  
+- `RPC_NODES` - Bitcoin Core RPC endpoints (comma-separated)
+- `PEER_SECRET` - Secure peer connection secret
+- `TURBO_MODE` - Enable turbo mode (true/false)
+- `LOG_LEVEL` - Logging level (debug, info, warn, error)
+
+### .env File Configuration
+
+For development, copy `cmd/sprint/.env.example` to `.env.local`:
+
+```bash
+LICENSE_KEY=your_license_key_here
+RPC_USER=your_rpc_username
+RPC_PASS=your_rpc_password
+PEER_SECRET=your_peer_secret
+RPC_NODES=https://node1.com:8332,https://node2.com:8332
+TURBO_MODE=false
+```
+
+### JSON Configuration with Placeholders
+
+Use `config.json` with environment variable placeholders for shared configurations:
+
+```json
+{
+  "license_key": "${LICENSE_KEY}",
+  "rpc_user": "${RPC_USER}",
+  "rpc_pass": "${RPC_PASS}",
+  "peer_secret": "${PEER_SECRET}",
+  "tier": "pro",
+  "turbo_mode": true
+}
+```
+
+### Configuration Logging
+
+On startup, Bitcoin Sprint logs the configuration source and a safe summary:
+
+```
+INFO Configuration loaded source=.env.local
+INFO Config summary tier=pro turbo_mode=true license_key=abcd****wxyz
+```
+
+Sensitive values are automatically masked in logs for security.
 
 ## Security Features
 

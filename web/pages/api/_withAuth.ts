@@ -1,7 +1,9 @@
 import { authMiddleware, type AuthenticatedRequest } from '@/lib/auth';
 import type { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
 
-export function withAuth(handler: NextApiHandler): NextApiHandler {
+type AuthenticatedHandler = (req: AuthenticatedRequest, res: NextApiResponse) => void | Promise<void>;
+
+export function withAuth(handler: AuthenticatedHandler): NextApiHandler {
   return async (req: NextApiRequest, res: NextApiResponse) => {
     let finished = false;
     

@@ -220,7 +220,7 @@ export async function verifyApiKey(token: string): Promise<ApiKeyValidation> {
  * @returns Tier string or null if not tier-specific
  */
 export function extractTierFromPrefix(prefix: string): string | null {
-  const tierMap: Record<string, string> = {
+  const tierMap: Record<string, string | null> = {
     'sprint-free': 'FREE',
     'sprint-pro': 'PRO',
     'sprint-ent': 'ENTERPRISE', 

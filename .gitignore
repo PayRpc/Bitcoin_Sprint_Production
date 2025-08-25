@@ -63,13 +63,23 @@ coverage.html
 *.prof
 
 # ────────── Local Config & Secrets ──────────
+# DO NOT COMMIT sensitive configs (RPC nodes, creds, secrets)
 *.env
 .env
 .env.local
 .env.*.local
+!*.env.example
+
+config.json
 config-local.json
+cmd/sprint/config.json
 cmd/sprint/config-local.json
+license.json
 zmq-config.json
+
+# Safe templates allowed
+!config.example.json
+!license.example.json
 
 # ────────── OS / Editor Files ──────────
 .DS_Store

@@ -22,7 +22,7 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
   })}\n\n`);
 
   // Simulate real-time Bitcoin data updates
-  const intervals = [];
+  const intervals: NodeJS.Timeout[] = [];
   
   // Block updates (rare)
   const blockInterval = setInterval(() => {

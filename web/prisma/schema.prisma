@@ -12,7 +12,7 @@ model ApiKey {
   key         String   @unique
   email       String
   company     String?
-  tier        Tier     @default(FREE)
+  tier        String   @default("FREE")
   createdAt   DateTime @default(now())
   expiresAt   DateTime
   revoked     Boolean  @default(false)
@@ -21,11 +21,4 @@ model ApiKey {
   lastUsedAt  DateTime?
   requests    Int      @default(0)
   blocksToday Int      @default(0)
-}
-
-enum Tier {
-  FREE
-  PRO
-  ENTERPRISE
-  ENTERPRISE_PLUS
 }

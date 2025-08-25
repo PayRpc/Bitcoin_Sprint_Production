@@ -40,9 +40,20 @@ export default async function handler(
   console.log('[SIGNUP] Request received:', req.method, req.url);
   console.log('[SIGNUP] Request body:', req.body);
   
+  // Ensure we always return JSON, even on early errors
+  res.setHeader('Content-Type', 'application/json');
+  
   if (req.method !== "POST") {
     console.log('[SIGNUP] Method not allowed:', req.method);
     return res.status(405).json({ error: "Method not allowed" })
+  }
+
+  // Validate content type
+  if (req.headers['content-type'] !== 'application/json') {
+    return res.status(400).json({
+      error: "Invalid content type",
+      message: "Expected application/json"
+    });
   }
 
   try {
@@ -103,16 +114,17 @@ export default async function handler(
     console.error("[ERROR] API key creation failed:", error)
     
     // Handle database constraint errors (e.g., duplicate email)
-    if (error.code === 'P2002') {
+    if (error?.code === 'P2002') {
       return res.status(409).json({ 
         error: "Conflict", 
         message: "An API key for this email already exists" 
       })
     }
 
+    // Handle any other errors gracefully
     return res.status(500).json({ 
       error: "Internal server error", 
-      message: "Failed to generate API key. Please try again." 
+      message: error?.message || "Failed to generate API key. Please try again." 
     })
   }
 }

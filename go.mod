@@ -10,4 +10,7 @@ require (
 	golang.org/x/time v0.12.0
 )
 
-require go.uber.org/multierr v1.10.0 // indirect
+require (
+	github.com/joho/godotenv v1.5.1 // indirect
+	go.uber.org/multierr v1.10.0 // indirect
+)

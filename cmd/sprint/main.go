@@ -31,6 +31,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
@@ -294,6 +295,7 @@ type PerformanceMetrics struct {
 
 type Sprint struct {
 	config         Config
+	configSource   string // Track configuration source for logging
 	license        License
 	peers          map[string]*PeerConnection
 	metrics        chan Metrics
@@ -475,16 +477,19 @@ func main() {
 		log.Fatal("Configuration error:", err)
 	}
 
-	if err := s.ValidateLicense(); err != nil {
-		log.Fatal("License error:", err)
-	}
-
-	// Initialize logger
+	// Initialize logger early to show config summary
 	logger, err := initLogger(s.config.LogLevel)
 	if err != nil {
 		log.Fatal("Logger initialization error:", err)
 	}
 	zap.ReplaceGlobals(logger)
+
+	// Log configuration summary now that zap is initialized
+	s.LogConfigSummary()
+
+	if err := s.ValidateLicense(); err != nil {
+		log.Fatal("License error:", err)
+	}
 
 	// Start all services
 	if err := s.Start(); err != nil {
@@ -647,6 +652,15 @@ func (s *Sprint) Shutdown() {
 // ───────────────────────── Config and License ─────────────────────────
 
 func (s *Sprint) LoadConfig() error {
+	var source string
+
+	// 1. Load .env if available
+	if err := godotenv.Load(".env.local"); err == nil {
+		source = ".env.local"
+	} else if err := godotenv.Load(".env"); err == nil {
+		source = ".env"
+	}
+
 	// Default configuration
 	s.config = Config{
 		PollInterval:   5,
@@ -659,71 +673,60 @@ func (s *Sprint) LoadConfig() error {
 		RateLimits:     make(map[string]int),
 	}
 
-	// Override with env vars for sensitive fields - use plain text versions temporarily
-	if user := os.Getenv("RPC_USER"); user != "" {
-		s.config.RPCUser = user
-	}
-	if pass := os.Getenv("RPC_PASS"); pass != "" {
-		s.config.RPCPassPlain = pass
-	}
-	if secret := os.Getenv("PEER_SECRET"); secret != "" {
-		s.config.PeerSecretPlain = secret
-	}
-
-	// Read config file
-	data, err := os.ReadFile("config.json")
-	if err != nil {
-		if os.IsNotExist(err) {
-			zap.L().Warn("No config.json found, using defaults")
-			// Still need to initialize secure fields from env vars
-			if err := s.config.InitializeSecureFields(); err != nil {
-				return fmt.Errorf("failed to initialize secure fields: %w", err)
+	// 2. Try config.json
+	if data, err := os.ReadFile("config.json"); err == nil {
+		// Resolve ${VAR} placeholders using environment variables prior to unmarshalling
+		// e.g. "license_key": "${LICENSE_KEY}" will be replaced with the env value
+		re := regexp.MustCompile(`\$\{([A-Z0-9_]+)\}`)
+		resolved := re.ReplaceAllFunc(data, func(b []byte) []byte {
+			// extract var name without ${}
+			m := re.FindSubmatch(b)
+			if len(m) < 2 {
+				return b
 			}
-			return nil
+			name := string(m[1])
+			val := os.Getenv(name)
+			// Return the raw value (no JSON marshaling since the quotes are already in the template)
+			return []byte(val)
+		})
+
+		if err := json.Unmarshal(resolved, &s.config); err != nil {
+			return fmt.Errorf("failed to parse config.json: %w", err)
 		}
-		return fmt.Errorf("failed to read config.json: %w", err)
+		if source == "" { // only set if no .env
+			source = "config.json"
+		}
 	}
 
-	// Resolve ${VAR} placeholders using environment variables prior to unmarshalling
-	// e.g. "license_key": "${LICENSE_KEY}" will be replaced with the env value
-	re := regexp.MustCompile(`\$\{([A-Z0-9_]+)\}`)
-	resolved := re.ReplaceAllFunc(data, func(b []byte) []byte {
-		// extract var name without ${}
-		m := re.FindSubmatch(b)
-		if len(m) < 2 {
-			return b
-		}
-		name := string(m[1])
-		val := os.Getenv(name)
-		// JSON string value must be quoted; we return the JSON-escaped string
-		// If env var empty, leave empty string
-		esc, _ := json.Marshal(val)
-		// esc is a quoted JSON string like "value"; return without surrounding quotes
-		return esc
-	})
-
-	if err := json.Unmarshal(resolved, &s.config); err != nil {
-		return fmt.Errorf("failed to parse config.json: %w", err)
+	// 3. Overlay environment variables (env wins)
+	if v := os.Getenv("LICENSE_KEY"); v != "" {
+		s.config.LicenseKeyPlain = v
+		source = "env vars"
+	}
+	if v := os.Getenv("RPC_USER"); v != "" {
+		s.config.RPCUser = v
+		source = "env vars"
+	}
+	if v := os.Getenv("RPC_PASS"); v != "" {
+		s.config.RPCPassPlain = v
+		source = "env vars"
+	}
+	if v := os.Getenv("PEER_SECRET"); v != "" {
+		s.config.PeerSecretPlain = v
+		source = "env vars"
+	}
+	if v := os.Getenv("RPC_NODES"); v != "" {
+		s.config.RPCNodes = strings.Split(v, ",")
+		source = "env vars"
+	}
+	if v := os.Getenv("TURBO_MODE"); strings.ToLower(v) == "true" {
+		s.config.TurboMode = true
+		source = "env vars"
 	}
 
-	// Override JSON config with env vars if present
-	if pass := os.Getenv("RPC_PASS"); pass != "" {
-		if s.config.RPCPass != nil {
-			s.config.RPCPass.Free()
-		}
-		s.config.RPCPassPlain = pass
-		if err := s.config.InitializeSecureFields(); err != nil {
-			return fmt.Errorf("failed to reinitialize RPC password from env: %w", err)
-		}
-	}
-	if secret := os.Getenv("PEER_SECRET"); secret != "" {
-		if s.config.PeerSecret != nil {
-			s.config.PeerSecret.Free()
-		}
-		s.config.PeerSecretPlain = secret
-		if err := s.config.InitializeSecureFields(); err != nil {
-			return fmt.Errorf("failed to reinitialize peer secret from env: %w", err)
-		}
+	// Secure buffer init
+	if err := s.config.InitializeSecureFields(); err != nil {
+		return fmt.Errorf("failed to secure sensitive fields: %w", err)
 	}
 
 	// Set default peer listen port if not specified
@@ -747,12 +750,44 @@ func (s *Sprint) LoadConfig() error {
 		return fmt.Errorf("peer_secret is required for secure peer connections")
 	}
 
-	zap.L().Info("Loaded configuration",
-		zap.String("tier", s.config.Tier),
-		zap.Int("rpc_nodes", len(s.config.RPCNodes)),
-		zap.Bool("turbo_mode", s.config.TurboMode))
+	if source == "" {
+		source = "defaults"
+	}
+
+	// Store the config source for later logging (after zap is initialized)
+	s.configSource = source
 
 	return nil
+}
+
+// LogConfigSummary prints a safe summary of the configuration after zap is initialized
+func (s *Sprint) LogConfigSummary() {
+	zap.L().Info("Configuration loaded", zap.String("source", s.configSource))
+
+	// Print safe summary (masking sensitive fields)
+	safeNodes := make([]string, len(s.config.RPCNodes))
+	copy(safeNodes, s.config.RPCNodes)
+	for i, n := range safeNodes {
+		if strings.Contains(n, "://") {
+			// mask any credentials in node URL
+			u, err := url.Parse(n)
+			if err == nil && u.User != nil {
+				safeNodes[i] = u.Scheme + "://" + u.Host
+			}
+		}
+	}
+
+	zap.L().Info("Config summary",
+		zap.String("tier", s.config.Tier),
+		zap.Int("poll_interval", s.config.PollInterval),
+		zap.Bool("turbo_mode", s.config.TurboMode),
+		zap.Strings("rpc_nodes", safeNodes),
+		zap.String("rpc_user", maskIfNotEmpty(s.config.RPCUser)),
+		zap.String("peer_secret", maskIfNotEmpty(s.config.PeerSecretPlain)),
+		zap.String("license_key", maskLicenseKeyFromSecure(s.config.LicenseKey)),
+		zap.Int("max_peers", s.config.MaxPeers),
+		zap.String("log_level", s.config.LogLevel),
+	)
 }
 
 func (s *Sprint) ValidateLicense() error {
@@ -2147,6 +2182,14 @@ func maskLicenseKey(key string) string {
 		return "****"
 	}
 	return key[:4] + "****" + key[len(key)-4:]
+}
+
+// maskIfNotEmpty returns "*****" if the input is non-empty, otherwise returns "<empty>"
+func maskIfNotEmpty(val string) string {
+	if val == "" {
+		return "<empty>"
+	}
+	return "*****"
 }
 
 // maskLicenseKeyFromSecure masks a license key stored in a SecureBuffer without

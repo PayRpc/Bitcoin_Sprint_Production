@@ -1,0 +1,24 @@
+{
+	"license_key": "config_test_key_12345",
+	"tier": "pro", 
+	"poll_interval": 10,
+	"turbo_mode": true,
+	"rpc_nodes": [
+		"https://node1.example.com:8332"
+	],
+	"rpc_user": "config_user",
+	"rpc_pass": "config_pass",
+	"peer_secret": "config_secret_abc",
+	"api_base": "http://localhost:8080",
+	"metrics_url": "https://api.bitcoincab.inc/metrics",
+	"log_level": "debug",
+	"max_peers": 25,
+	"rate_limits": {
+		"/status": 1,
+		"/latest": 4,
+		"/metrics": 2,
+		"/predictive": 2,
+		"/stream": 1
+	},
+	"peer_listen_port": 8335
+}

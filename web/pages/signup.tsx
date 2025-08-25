@@ -1,6 +1,7 @@
 import Head from "next/head";
 import Image from "next/image";
 import { useState } from "react";
+import ConfigSnippet from "../components/ConfigSnippet";
 import { Error as ErrorComponent } from "../components/ui/error";
 
 interface ApiKeyResponse {
@@ -330,10 +331,15 @@ export default function Signup() {
                     </div>
                   </div>
 
-                  <div className="bg-brand-orange/20 border border-brand-orange/50 rounded-md p-3">
+                  {/* Configuration Options */}
+                  <div className="mt-6">
+                    <h4 className="text-lg font-medium text-gray-200 mb-4">🔧 Configuration Options</h4>
+                    <ConfigSnippet apiKey={response.key} />
+                  </div>
+
+                  <div className="mt-6 bg-brand-orange/20 border border-brand-orange/50 rounded-md p-3">
                     <h4 className="text-sm font-medium text-brand-orange mb-2">⚠️ Important Security Notice</h4>
                     <ul className="text-sm text-orange-200 space-y-1">
-                      <li>• Store this key securely in your <code className="bg-brand-orange/20 text-brand-orange px-1 rounded">config.json</code> as the <code className="bg-brand-orange/20 text-brand-orange px-1 rounded">license_key</code> value</li>
                       <li>• This key will only be shown once - copy it now</li>
                       <li>• Never commit API keys to version control</li>
                       <li>• Keys are revocable if compromised</li>
