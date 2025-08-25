@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client"
 import type { NextApiRequest, NextApiResponse } from "next"
-import { requireAdminAuth } from "../../lib/adminAuth"
+import { withAdminAuth } from "../../lib/adminAuth"
 import { generateApiKey } from "../../lib/generateKey"
 
 // Prisma client singleton for Next.js dev hot-reload safety
@@ -12,11 +12,7 @@ declare global {
 const prisma: PrismaClient = global.prisma || new PrismaClient()
 if (process.env.NODE_ENV !== "production") global.prisma = prisma
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (!requireAdminAuth(req)) {
-    return res.status(403).json({ error: "Forbidden" })
-  }
-
+export default withAdminAuth(async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (req.method === "POST") {
       const { email, company, tier } = (req.body || {}) as { email?: string; company?: string; tier?: string }
@@ -78,4 +74,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Do not leak internals
     return res.status(500).json({ error: "Internal server error" })
   }
-}
+})
