@@ -1,0 +1,6 @@
+{
+  "status": "healthy",
+  "timestamp": "2025-08-25T11:00:00Z",
+  "pool_healthy": true,
+  "active_connections": 5
+}

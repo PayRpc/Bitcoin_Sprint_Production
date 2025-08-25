@@ -246,6 +246,34 @@ type StatusResponse struct {
 	TurboModeEnabled bool      `json:"turbo_mode_enabled"`
 	LastBlockTime    time.Time `json:"last_block_time"`
 	RPCNodesActive   int       `json:"rpc_nodes_active"`
+
+	// Memory protection section
+	MemoryProtection struct {
+		SecureBackend       string `json:"secure_backend"`
+		LicenseKeyProtected bool   `json:"license_key_protected"`
+		RpcPassProtected    bool   `json:"rpc_pass_protected"`
+		PeerSecretProtected bool   `json:"peer_secret_protected"`
+		SelfCheck           bool   `json:"self_check"`
+	} `json:"memory_protection"`
+
+	// SecureChannel integration (Professional)
+	SecureChannel *SecureChannelStatus `json:"secure_channel,omitempty"`
+}
+
+// SecureChannelStatus represents the professional SecureChannel pool status
+type SecureChannelStatus struct {
+	Status            string    `json:"status"`
+	PoolHealthy       bool      `json:"pool_healthy"`
+	ActiveConnections int       `json:"active_connections"`
+	TotalConnections  int       `json:"total_connections"`
+	TotalReconnects   uint64    `json:"total_reconnects"`
+	TotalErrors       uint64    `json:"total_errors"`
+	ErrorRate         float64   `json:"error_rate"`
+	AvgLatencyMs      float64   `json:"avg_latency_ms"`
+	PoolP95LatencyMs  uint64    `json:"pool_p95_latency_ms"`
+	LastHealthCheck   time.Time `json:"last_health_check"`
+	Endpoint          string    `json:"endpoint"`
+	ServiceUptime     string    `json:"service_uptime"`
 }
 
 type PredictiveResponse struct {
@@ -294,22 +322,28 @@ type PerformanceMetrics struct {
 }
 
 type Sprint struct {
-	config         Config
-	configSource   string // Track configuration source for logging
-	license        License
-	peers          map[string]*PeerConnection
-	metrics        chan Metrics
-	blocksSent     int64
-	client         *http.Client
-	nodeBackoff    map[string]*BackoffState
-	rateLimiter    *RateLimiter
-	startTime      time.Time
-	lastMempool    int
-	latestMetric   *Metrics
-	perfMetrics    *PerformanceMetrics
-	circuitBreaker *CircuitBreaker
-	seenMessages   map[string]time.Time // Tracks relayed message IDs
-	seenMessagesMu sync.RWMutex
+	config                Config
+	configSource          string // Track configuration source for logging
+	secureBufferSelfCheck bool   // Track if SecureBuffer self-check passed
+	license               License
+	peers                 map[string]*PeerConnection
+	metrics               chan Metrics
+	blocksSent            int64
+	client                *http.Client
+	nodeBackoff           map[string]*BackoffState
+	rateLimiter           *RateLimiter
+	startTime             time.Time
+	lastMempool           int
+	latestMetric          *Metrics
+	perfMetrics           *PerformanceMetrics
+	circuitBreaker        *CircuitBreaker
+	seenMessages          map[string]time.Time // Tracks relayed message IDs
+	seenMessagesMu        sync.RWMutex
+
+	// SecureChannel integration (Professional)
+	secureChannelClient    *secure.SecureChannelPoolClient
+	secureChannelEnabled   bool
+	secureChannelStartTime time.Time
 
 	// Hot path optimizations
 	getBlockchainInfoReq []byte
@@ -487,6 +521,19 @@ func main() {
 	// Log configuration summary now that zap is initialized
 	s.LogConfigSummary()
 
+	// Run SecureBuffer self-check
+	s.secureBufferSelfCheck = secure.SelfCheck()
+	if s.secureBufferSelfCheck {
+		zap.L().Info("SecureBuffer self-check passed",
+			zap.String("backend", "Rust SecureBuffer"),
+			zap.String("protection", "mlock + zeroize"))
+	} else {
+		zap.L().Error("SecureBuffer self-check FAILED",
+			zap.String("backend", "Rust SecureBuffer"),
+			zap.String("protection", "mlock + zeroize"),
+			zap.String("action", "fall back to Go in-memory (unsafe)"))
+	}
+
 	if err := s.ValidateLicense(); err != nil {
 		log.Fatal("License error:", err)
 	}
@@ -574,6 +621,16 @@ func NewSprint() (*Sprint, error) {
 		return nil, fmt.Errorf("failed to marshal payload template: %w", err)
 	}
 	s.preEncodedPayload = append(payloadBytes, '\n')
+
+	// Initialize SecureChannel client (Professional)
+	secureChannelURL := os.Getenv("SECURE_CHANNEL_URL")
+	if secureChannelURL == "" {
+		secureChannelURL = "http://localhost:9090" // Default Rust pool URL
+	}
+
+	s.secureChannelClient = secure.NewSecureChannelPoolClient(secureChannelURL)
+	s.secureChannelEnabled = true
+	s.secureChannelStartTime = time.Now()
 
 	return s, nil
 }
@@ -787,6 +844,14 @@ func (s *Sprint) LogConfigSummary() {
 		zap.String("license_key", maskLicenseKeyFromSecure(s.config.LicenseKey)),
 		zap.Int("max_peers", s.config.MaxPeers),
 		zap.String("log_level", s.config.LogLevel),
+	)
+
+	// Log secure memory status
+	zap.L().Info("Secure memory initialized",
+		zap.Bool("license_key_protected", s.config.LicenseKey != nil),
+		zap.Bool("rpc_pass_protected", s.config.RPCPass != nil),
+		zap.Bool("peer_secret_protected", s.config.PeerSecret != nil),
+		zap.String("secure_backend", "Rust SecureBuffer (mlock + zeroize)"),
 	)
 }
 
@@ -1866,6 +1931,11 @@ func (s *Sprint) StartWebDashboard() {
 	mux.HandleFunc("/predictive", s.handlePredictive)
 	mux.HandleFunc("/stream", s.handleStream)
 
+	// SecureChannel Professional API endpoints
+	mux.HandleFunc("/api/v1/secure-channel/status", s.handleSecureChannelStatus)
+	mux.HandleFunc("/api/v1/secure-channel/health", s.handleSecureChannelHealth)
+	mux.HandleFunc("/api/v1/secure-channel/connections", s.handleSecureChannelConnections)
+
 	// Customer API endpoints
 	mux.HandleFunc("/api/v1/blocks/", s.handleBlocksAPI)
 	mux.HandleFunc("/api/v1/license/info", s.handleLicenseInfo)
@@ -1928,10 +1998,167 @@ func (s *Sprint) handleStatus(w http.ResponseWriter, r *http.Request) {
 		LastBlockTime:    s.lastBlockTime,
 		RPCNodesActive:   len(s.config.RPCNodes) - len(s.nodeBackoff),
 	}
+
+	// Add memory protection status
+	resp.MemoryProtection.SecureBackend = "Rust SecureBuffer (mlock + zeroize)"
+	resp.MemoryProtection.LicenseKeyProtected = s.config.LicenseKey != nil
+	resp.MemoryProtection.RpcPassProtected = s.config.RPCPass != nil
+	resp.MemoryProtection.PeerSecretProtected = s.config.PeerSecret != nil
+	resp.MemoryProtection.SelfCheck = s.secureBufferSelfCheck
+
+	// Add SecureChannel status (Professional Integration)
+	if s.secureChannelEnabled && s.secureChannelClient != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+
+		secureChannelStatus := &SecureChannelStatus{
+			ServiceUptime: time.Since(s.secureChannelStartTime).String(),
+		}
+
+		// Try to get current pool status
+		if poolStatus, err := s.secureChannelClient.GetPoolStatus(ctx); err == nil {
+			secureChannelStatus.Status = "healthy"
+			secureChannelStatus.PoolHealthy = true
+			secureChannelStatus.ActiveConnections = poolStatus.ActiveConnections
+			secureChannelStatus.TotalConnections = len(poolStatus.Connections)
+			secureChannelStatus.TotalReconnects = poolStatus.TotalReconnects
+			secureChannelStatus.TotalErrors = poolStatus.TotalErrors
+			secureChannelStatus.PoolP95LatencyMs = poolStatus.PoolP95LatencyMs
+			secureChannelStatus.Endpoint = poolStatus.Endpoint
+
+			// Calculate statistics
+			if stats, err := s.secureChannelClient.GetConnectionStats(ctx); err == nil {
+				secureChannelStatus.ErrorRate = stats.ErrorRate
+				secureChannelStatus.AvgLatencyMs = stats.AvgLatencyMs
+			}
+
+			// Get health check timestamp
+			if health, err := s.secureChannelClient.GetHealthStatus(ctx); err == nil {
+				secureChannelStatus.LastHealthCheck = health.Timestamp
+				secureChannelStatus.PoolHealthy = health.PoolHealthy
+			}
+		} else {
+			// If we can't reach the pool, check cached status
+			if cachedStatus := s.secureChannelClient.GetCachedStatus(); cachedStatus != nil {
+				secureChannelStatus.Status = "cached"
+				secureChannelStatus.PoolHealthy = true
+				secureChannelStatus.ActiveConnections = cachedStatus.ActiveConnections
+				secureChannelStatus.Endpoint = cachedStatus.Endpoint
+			} else {
+				secureChannelStatus.Status = "unavailable"
+				secureChannelStatus.PoolHealthy = false
+				secureChannelStatus.Endpoint = "unknown"
+			}
+		}
+
+		resp.SecureChannel = secureChannelStatus
+	}
+
 	s.mu.RUnlock()
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Bitcoin-Sprint-Version", Version)
+	w.Header().Set("X-SecureChannel-Enabled", fmt.Sprintf("%t", s.secureChannelEnabled))
+
+	// Set appropriate HTTP status code based on overall health
+	if resp.SecureChannel != nil && !resp.SecureChannel.PoolHealthy {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
+
 	json.NewEncoder(w).Encode(resp)
+}
+
+// ───────────────────────── SecureChannel Professional API Handlers ─────────────────────────
+
+func (s *Sprint) handleSecureChannelStatus(w http.ResponseWriter, r *http.Request) {
+	if !s.secureChannelEnabled || s.secureChannelClient == nil {
+		http.Error(w, "SecureChannel not enabled", http.StatusServiceUnavailable)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	poolStatus, err := s.secureChannelClient.GetPoolStatus(ctx)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get pool status: %v", err), http.StatusServiceUnavailable)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Bitcoin-Sprint-SecureChannel", "enabled")
+	json.NewEncoder(w).Encode(poolStatus)
+}
+
+func (s *Sprint) handleSecureChannelHealth(w http.ResponseWriter, r *http.Request) {
+	if !s.secureChannelEnabled || s.secureChannelClient == nil {
+		http.Error(w, "SecureChannel not enabled", http.StatusServiceUnavailable)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+
+	health, err := s.secureChannelClient.GetHealthStatus(ctx)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Health check failed: %v", err), http.StatusServiceUnavailable)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	// Set appropriate HTTP status code based on health
+	if health.Status == "healthy" && health.PoolHealthy {
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
+
+	json.NewEncoder(w).Encode(health)
+}
+
+func (s *Sprint) handleSecureChannelConnections(w http.ResponseWriter, r *http.Request) {
+	if !s.secureChannelEnabled || s.secureChannelClient == nil {
+		http.Error(w, "SecureChannel not enabled", http.StatusServiceUnavailable)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	poolStatus, err := s.secureChannelClient.GetPoolStatus(ctx)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get connections: %v", err), http.StatusServiceUnavailable)
+		return
+	}
+
+	// Get connection statistics
+	stats, err := s.secureChannelClient.GetConnectionStats(ctx)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get connection stats: %v", err), http.StatusServiceUnavailable)
+		return
+	}
+
+	response := map[string]interface{}{
+		"connections": poolStatus.Connections,
+		"summary": map[string]interface{}{
+			"total_connections":   stats.TotalConnections,
+			"active_connections":  stats.ActiveConnections,
+			"total_reconnects":    stats.TotalReconnects,
+			"total_errors":        stats.TotalErrors,
+			"error_rate":          stats.ErrorRate,
+			"avg_latency_ms":      stats.AvgLatencyMs,
+			"healthy_percentage":  stats.HealthyPercentage,
+			"pool_p95_latency_ms": stats.PoolP95LatencyMs,
+		},
+		"endpoint":       poolStatus.Endpoint,
+		"service_uptime": time.Since(s.secureChannelStartTime).String(),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Total-Connections", fmt.Sprintf("%d", len(poolStatus.Connections)))
+	w.Header().Set("X-Active-Connections", fmt.Sprintf("%d", poolStatus.ActiveConnections))
+	json.NewEncoder(w).Encode(response)
 }
 
 func (s *Sprint) handleLatest(w http.ResponseWriter, r *http.Request) {

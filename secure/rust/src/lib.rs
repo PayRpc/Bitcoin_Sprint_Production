@@ -113,3 +113,42 @@ pub extern "C" fn securebuffer_hmac_base64url(buf: *mut SecureBuffer, data: *con
         Err(_) => std::ptr::null_mut(),
     }
 }
+
+// Self-check function to verify SecureBuffer functionality
+#[no_mangle]
+pub extern "C" fn securebuffer_self_check() -> bool {
+    // Allocate a small buffer
+    let mut buf = match SecureBuffer::new(32) {
+        Ok(b) => b,
+        Err(_) => return false,
+    };
+
+    // Write test data
+    let test_data = b"self-check memory test data";
+    if buf.copy_from_slice(test_data).is_err() {
+        return false;
+    }
+
+    // Read the data back to verify it was written
+    let before = match buf.as_slice() {
+        Some(slice) => slice[..test_data.len()].to_vec(),
+        None => return false,
+    };
+
+    // Verify the data matches
+    if before != test_data {
+        return false;
+    }
+
+    // Zeroize explicitly
+    buf.zeroize();
+
+    // After zeroize, all bytes must be 0
+    let after = match buf.as_slice() {
+        Some(slice) => slice[..test_data.len()].to_vec(),
+        None => return false,
+    };
+
+    // Verify data was zeroized and that it's different from before
+    before != after && after.iter().all(|&b| b == 0)
+}

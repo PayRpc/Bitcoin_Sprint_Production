@@ -128,3 +128,10 @@ func SetBasicAuthHeader(req *http.Request, username string, password *SecureBuff
 		combined[i] = 0
 	}
 }
+
+// SelfCheck performs a self-test of the SecureBuffer functionality
+// Returns false for fallback implementation (no memory locking)
+func SelfCheck() bool {
+	// Fallback implementation doesn't have memory locking or Rust SecureBuffer
+	return false
+}

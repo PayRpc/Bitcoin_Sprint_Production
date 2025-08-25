@@ -1,0 +1,38 @@
+{
+  "status": "ok",
+  "timestamp": "2025-08-25T11:00:00Z",
+  "version": "1.0.0",
+  "memory_protection": {
+    "enabled": true,
+    "self_check": true
+  },
+  "secure_channel": {
+    "endpoint": "relay.bitcoin-sprint.inc:443",
+    "active_connections": 5,
+    "total_reconnects": 12,
+    "total_errors": 3,
+    "pool_p95_latency_ms": 45,
+    "connections": [
+      {
+        "connection_id": 1,
+        "last_activity": "2025-08-25T11:00:00Z",
+        "reconnects": 2,
+        "errors": 1,
+        "p95_latency_ms": 45
+      },
+      {
+        "connection_id": 2,
+        "last_activity": "2025-08-25T10:58:30Z",
+        "reconnects": 3,
+        "errors": 0,
+        "p95_latency_ms": 32
+      }
+    ]
+  },
+  "secure_channel_health": {
+    "status": "healthy",
+    "timestamp": "2025-08-25T11:00:00Z",
+    "pool_healthy": true,
+    "active_connections": 5
+  }
+}

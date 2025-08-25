@@ -1,0 +1,44 @@
+{
+  "endpoint": "relay.bitcoin-sprint.inc:443",
+  "active_connections": 5,
+  "total_reconnects": 12,
+  "total_errors": 3,
+  "pool_p95_latency_ms": 45,
+  "connections": [
+    {
+      "connection_id": 1,
+      "last_activity": "2025-08-25T11:00:00Z",
+      "reconnects": 2,
+      "errors": 1,
+      "p95_latency_ms": 45
+    },
+    {
+      "connection_id": 2,
+      "last_activity": "2025-08-25T10:58:30Z",
+      "reconnects": 3,
+      "errors": 0,
+      "p95_latency_ms": 32
+    },
+    {
+      "connection_id": 3,
+      "last_activity": "2025-08-25T10:59:45Z",
+      "reconnects": 1,
+      "errors": 2,
+      "p95_latency_ms": 67
+    },
+    {
+      "connection_id": 4,
+      "last_activity": "2025-08-25T11:00:15Z",
+      "reconnects": 0,
+      "errors": 0,
+      "p95_latency_ms": 23
+    },
+    {
+      "connection_id": 5,
+      "last_activity": "2025-08-25T10:59:12Z",
+      "reconnects": 6,
+      "errors": 0,
+      "p95_latency_ms": 41
+    }
+  ]
+}

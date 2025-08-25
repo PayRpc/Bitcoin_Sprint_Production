@@ -32,6 +32,7 @@ extern "C"
 	SECUREBUFFER_API char *securebuffer_hmac_hex(SecureBuffer *buf, const uint8_t *data, size_t data_len);
 	SECUREBUFFER_API char *securebuffer_hmac_base64url(SecureBuffer *buf, const uint8_t *data, size_t data_len);
 	SECUREBUFFER_API void securebuffer_free_cstr(char *s);
+	SECUREBUFFER_API bool securebuffer_self_check(void);
 
 #ifdef __cplusplus
 }

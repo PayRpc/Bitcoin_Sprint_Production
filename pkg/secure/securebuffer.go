@@ -154,3 +154,9 @@ func SetBasicAuthHeader(req *http.Request, user string, pass *SecureBuffer) {
 		data[i] = 0
 	}
 }
+
+// SelfCheck performs a self-test of the SecureBuffer functionality
+// Returns true if SecureBuffer is working correctly (memory locking and zeroization)
+func SelfCheck() bool {
+	return bool(C.securebuffer_self_check())
+}
