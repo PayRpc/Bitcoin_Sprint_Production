@@ -11,15 +11,23 @@
     "typecheck": "tsc --noEmit",
     "prisma:migrate": "prisma migrate dev",
     "prisma:generate": "prisma generate",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "maintenance": "node scripts/maintenance.js",
+    "maintenance:status": "node scripts/maintenance.js status",
+    "maintenance:enable": "node scripts/maintenance.js enable",
+    "maintenance:disable": "node scripts/maintenance.js disable",
+    "maintenance:health": "node scripts/maintenance.js health"
   },
   "dependencies": {
     "@prisma/client": "^5.15.0",
     "framer-motion": "^11.0.0",
     "lucide-react": "^0.400.0",
     "next": "^14.2.7",
+    "node-cache": "^5.1.2",
+    "pino": "^8.21.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@tailwindcss/forms": "^0.5.10",
