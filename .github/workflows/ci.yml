@@ -2,39 +2,72 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
+  build-matrix:
+    name: Build & Test (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - name: linux-amd64
+            runner: ubuntu-latest
+            goarch: amd64
+            rust_target: x86_64-unknown-linux-gnu
+          - name: linux-arm64
+            runner: ubuntu-latest
+            goarch: arm64
+            rust_target: aarch64-unknown-linux-gnu
+          - name: windows-amd64
+            runner: windows-latest
+            goarch: amd64
+            rust_target: x86_64-pc-windows-msvc
+          - name: windows-arm64
+            runner: windows-latest
+            goarch: arm64
+            rust_target: aarch64-pc-windows-msvc
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Setup Rust
-      uses: dtolnay/rust-toolchain@v1
-      with:
-        toolchain: stable
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
 
-    - name: Build Rust securebuffer
-      working-directory: secure/rust
-      run: |
-        cargo build --release
+      - name: Add Rust target (if needed)
+        shell: bash
+        working-directory: secure/rust
+        run: |
+          if [ "${{ matrix.rust_target }}" != "$(rustc -vV | sed -n 's/^host: //p')" ]; then rustup target add ${{ matrix.rust_target }} || true; fi
 
-    - name: Setup Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.21'
+      - name: Build Rust securebuffer
+        shell: bash
+        working-directory: secure/rust
+        run: |
+          # Try native build first; if cross-target was added, build for that target
+          if [ "${{ matrix.rust_target }}" = "$(rustc -vV | sed -n 's/^host: //p')" ]; then
+            cargo build --release
+          else
+            cargo build --release --target ${{ matrix.rust_target }}
+          fi
 
-    - name: Run Go tests (with CGO)
-      env:
-        CGO_ENABLED: '1'
-        # Make sure cgo can find the rust cdylib in the repo relative path
-        CGO_LDFLAGS: -L${{ github.workspace }}/secure/rust/target/release
-      run: |
-        go test ./...
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.21"
+
+      - name: Run Go tests (with CGO)
+        shell: bash
+        env:
+          CGO_ENABLED: "1"
+          GOARCH: ${{ matrix.goarch }}
+          # Make sure cgo can find the rust cdylib in the repo relative path
+          CGO_LDFLAGS: -L${{ github.workspace }}/secure/rust/target/release
+        run: |
+          echo "Running go test for ${{ matrix.name }} (GOARCH=${GOARCH})"
+          go env
+          go test ./...

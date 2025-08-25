@@ -8,8 +8,12 @@ on:
 
 jobs:
   build-test-windows:
+    name: Windows CGO (${{ matrix.arch }})
     runs-on: windows-latest
     timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x86_64, arm64]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,4 +38,5 @@ jobs:
       - name: Run Windows helper (CGO + build + tests)
         shell: pwsh
         run: |
-          .\tools\dev-win.ps1
+          Write-Host "Matrix arch: $(${{ matrix.arch }})"
+          .\tools\dev-win.ps1 -arch $(${{ matrix.arch }})
