@@ -1,9 +1,9 @@
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { motion } from "framer-motion";
 import { BarChart3, Shield, Zap } from "lucide-react";
 import Head from "next/head";
 import Image from "next/image";
+import Link from "next/link";
 
 export default function ApiFrontPage() {
   const configExample = `{
@@ -43,12 +43,21 @@ export default function ApiFrontPage() {
           <h1 className="text-5xl font-bold mt-6 mb-4">Bitcoin Sprint</h1>
           <p className="text-xl text-gray-300 mb-6">First to the Block, First to Profit.</p>
           <div className="flex justify-center gap-4">
-            <a href="/signup">
-              <Button size="lg" className="rounded-2xl px-6">Get API Key</Button>
-            </a>
-            <a href="/docs">
-              <Button variant="outline" size="lg" className="rounded-2xl px-6">View Docs</Button>
-            </a>
+            <Link
+              href="/signup"
+              className="inline-flex items-center justify-center rounded-2xl px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-medium"
+              aria-label="Get API Key"
+            >
+              Get API Key
+            </Link>
+
+            <Link
+              href="/docs"
+              className="inline-flex items-center justify-center rounded-2xl px-6 py-3 border border-white/20 text-white font-medium hover:bg-white/5"
+              aria-label="View Docs"
+            >
+              View Docs
+            </Link>
           </div>
         </motion.div>
       </section>

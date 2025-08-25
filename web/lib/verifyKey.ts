@@ -9,5 +9,5 @@ export async function verifyKey(key: string) {
   const now = new Date()
   if (rec.revoked) return { ok: false, revoked: true }
   if (rec.expiresAt <= now) return { ok: false, expired: true }
-  return { ok: true, tier: rec.tier, expiresAt: rec.expiresAt, email: rec.email }
+  return { ok: true, tier: rec.tier, expiresAt: rec.expiresAt, email: rec.email, requests: rec.requests, requestsToday: (rec as any).requestsToday ?? 0 }
 }

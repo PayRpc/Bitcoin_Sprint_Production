@@ -43,6 +43,16 @@ export async function updateSystemState(
     await fs.writeFile(resolved, JSON.stringify(newState, null, 2), "utf-8");
     
     logger.info({ version, rollback, path: resolved }, "System state updated successfully");
+    // Attempt to update Prometheus metrics (dynamic import to avoid circular import issues)
+    try {
+      const prom = await import('./prometheus');
+      if (prom && typeof prom.updateMaintenanceMetrics === 'function') {
+        await prom.updateMaintenanceMetrics();
+      }
+    } catch (err) {
+      // Non-fatal: metrics update failed or module not available
+      logger.debug({ err: (err as Error).message }, 'Prometheus metrics update skipped');
+    }
   } catch (error: any) {
     logger.error({ error: error.message, path: resolved }, "Failed to update system state");
     throw new Error(`Failed to update system state: ${error.message}`);
@@ -66,6 +76,15 @@ export async function createMaintenanceMode(
     await fs.writeFile(maintenancePath, JSON.stringify(maintenanceState, null, 2), "utf-8");
     
     logger.info({ reason }, "Maintenance mode enabled");
+    // Update Prometheus metrics after enabling maintenance
+    try {
+      const prom = await import('./prometheus');
+      if (prom && typeof prom.updateMaintenanceMetrics === 'function') {
+        await prom.updateMaintenanceMetrics();
+      }
+    } catch (err) {
+      logger.debug({ err: (err as Error).message }, 'Prometheus metrics update skipped');
+    }
   } catch (error: any) {
     logger.error({ error: error.message }, "Failed to enable maintenance mode");
     throw new Error(`Failed to enable maintenance mode: ${error.message}`);
@@ -78,6 +97,15 @@ export async function disableMaintenanceMode(): Promise<void> {
   try {
     await fs.unlink(maintenancePath);
     logger.info("Maintenance mode disabled");
+    // Update Prometheus metrics after disabling maintenance
+    try {
+      const prom = await import('./prometheus');
+      if (prom && typeof prom.updateMaintenanceMetrics === 'function') {
+        await prom.updateMaintenanceMetrics();
+      }
+    } catch (err) {
+      logger.debug({ err: (err as Error).message }, 'Prometheus metrics update skipped');
+    }
   } catch (error: any) {
     if (error.code !== "ENOENT") {
       logger.error({ error: error.message }, "Failed to disable maintenance mode");
@@ -85,6 +113,15 @@ export async function disableMaintenanceMode(): Promise<void> {
     }
     // File doesn't exist, maintenance mode is already disabled
     logger.info("Maintenance mode was already disabled");
+    // Still attempt to refresh metrics to ensure state is accurate
+    try {
+      const prom = await import('./prometheus');
+      if (prom && typeof prom.updateMaintenanceMetrics === 'function') {
+        await prom.updateMaintenanceMetrics();
+      }
+    } catch (err) {
+      logger.debug({ err: (err as Error).message }, 'Prometheus metrics update skipped');
+    }
   }
 }
 
@@ -154,6 +191,16 @@ export async function performSystemHealthCheck(): Promise<{
 
   const failedChecks = Object.values(checks).filter(check => check.status === "fail");
   const status = failedChecks.length === 0 ? "healthy" : "degraded";
+
+  // Update maintenance/health metrics after performing health check
+  try {
+    const prom = await import('./prometheus');
+    if (prom && typeof prom.updateMaintenanceMetrics === 'function') {
+      await prom.updateMaintenanceMetrics();
+    }
+  } catch (err) {
+    logger.debug({ err: (err as Error).message }, 'Prometheus metrics update skipped');
+  }
 
   return {
     status,

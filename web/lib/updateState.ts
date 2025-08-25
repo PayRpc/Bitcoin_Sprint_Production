@@ -3,6 +3,7 @@ import NodeCache from "node-cache";
 import path from "path";
 import pino from "pino";
 import { z } from "zod";
+import { recordCacheHit, recordCacheMiss } from "./prometheus";
 
 // ---------------------- Logger ----------------------
 const logger = pino({
@@ -42,11 +43,13 @@ export async function getUpdateState(): Promise<UpdateState> {
   const cached = cache.get<UpdateState>(cacheKey);
   if (cached) {
     logger.debug("Returning cached update state");
+    try { recordCacheHit('update_state'); } catch (e) { /* non-fatal */ }
     return cached;
   }
 
   const resolvedPath = resolveStateFilePath();
   logger.debug({ path: resolvedPath }, "Reading update state file");
+  try { recordCacheMiss('update_state'); } catch (e) { /* non-fatal */ }
 
   let data: string;
   try {

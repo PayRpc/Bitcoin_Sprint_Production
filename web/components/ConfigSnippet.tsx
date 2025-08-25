@@ -31,8 +31,8 @@ TURBO_MODE=true`;
       {/* JSON Config */}
       <div>
         <h3 className="font-semibold mb-2 text-gray-200">Option 1: config.json</h3>
-        <div className="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm relative">
-          <pre>{configJson}</pre>
+        <div className="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm relative overflow-auto">
+          <pre className="whitespace-pre text-sm">{configJson}</pre>
           <button
             onClick={() => copyToClipboard(configJson, "config")}
             className="absolute top-2 right-2 flex items-center space-x-1 text-xs text-gray-300 hover:text-white"
@@ -46,8 +46,8 @@ TURBO_MODE=true`;
       {/* ENV Config */}
       <div>
         <h3 className="font-semibold mb-2 text-gray-200">Option 2: .env.local</h3>
-        <div className="bg-gray-900 text-blue-400 p-4 rounded-lg font-mono text-sm relative">
-          <pre>{envFile}</pre>
+        <div className="bg-gray-900 text-blue-400 p-4 rounded-lg font-mono text-sm relative overflow-auto">
+          <pre className="whitespace-pre text-sm">{envFile}</pre>
           <button
             onClick={() => copyToClipboard(envFile, "env")}
             className="absolute top-2 right-2 flex items-center space-x-1 text-xs text-gray-300 hover:text-white"

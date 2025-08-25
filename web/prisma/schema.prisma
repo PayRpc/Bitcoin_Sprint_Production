@@ -20,5 +20,6 @@ model ApiKey {
   // Analytics metadata
   lastUsedAt  DateTime?
   requests    Int      @default(0)
+  requestsToday Int     @default(0)
   blocksToday Int      @default(0)
 }

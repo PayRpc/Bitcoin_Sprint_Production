@@ -55,7 +55,6 @@ export default function Signup() {
 
   async function copyToClipboard() {
     if (!response?.key) return;
-    
     try {
       await navigator.clipboard.writeText(response.key);
       setCopied(true);
@@ -102,7 +101,7 @@ export default function Signup() {
         </div>
       </div>
 
-      <main className="max-w-2xl mx-auto w-full glass shadow-xl rounded-2xl p-8 relative z-10">
+  <main className="max-w-5xl mx-auto w-full glass shadow-xl rounded-2xl p-8 relative z-10">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-6">
             <Image

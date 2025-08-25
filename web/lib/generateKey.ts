@@ -241,7 +241,8 @@ export async function updateApiKeyUsage(token: string, incrementBlocks = false):
   try {
     const updateData: any = {
       lastUsedAt: new Date(),
-      requests: { increment: 1 }
+      requests: { increment: 1 },
+      requestsToday: { increment: 1 }
     };
 
     if (incrementBlocks) {
@@ -255,6 +256,44 @@ export async function updateApiKeyUsage(token: string, incrementBlocks = false):
   } catch (error) {
     console.error('[updateApiKeyUsage] Failed to update usage:', error);
     // Don't throw - usage tracking shouldn't break API functionality
+  }
+}
+
+/**
+ * Reset daily counters (requestsToday, blocksToday) at midnight UTC.
+ * This is a helper - in production use a scheduled job (cron) or DB trigger.
+ */
+export async function resetDailyCountersIfNeeded() {
+  try {
+    // For simplicity, if any key has lastUsedAt before today UTC, reset its counters.
+    // This is not perfect but acceptable for demo/local setups.
+    const now = new Date();
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    await prisma.apiKey.updateMany({
+      where: { lastUsedAt: { lt: today } },
+      data: { requestsToday: 0, blocksToday: 0 }
+    });
+  } catch (err) {
+    console.error('[resetDailyCountersIfNeeded] Failed:', err);
+  }
+}
+
+/**
+ * Renew an API key by extending its expiry date.
+ * Returns the updated record or null on failure.
+ */
+export async function renewApiKey(token: string, extendDays = 30) {
+  try {
+    const rec = await prisma.apiKey.findUnique({ where: { key: token } });
+    if (!rec) return null;
+    const now = new Date();
+    const base = rec.expiresAt && rec.expiresAt > now ? rec.expiresAt : now;
+    const newExpiry = new Date(base.getTime() + extendDays * 24 * 60 * 60 * 1000);
+    const updated = await prisma.apiKey.update({ where: { key: token }, data: { expiresAt: newExpiry } });
+    return updated;
+  } catch (err) {
+    console.error('[renewApiKey] Failed:', err);
+    return null;
   }
 }
 

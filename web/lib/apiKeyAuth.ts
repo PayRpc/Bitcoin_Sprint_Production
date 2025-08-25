@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { ApiKeyValidation, updateApiKeyUsage, verifyApiKey } from './generateKey';
+import { isRequestAllowed } from './rateLimiter';
 
 export interface AuthenticatedRequest extends NextApiRequest {
   apiKey?: ApiKeyValidation['apiKey'];
@@ -68,10 +69,12 @@ export async function authenticateApiKey(
     const validation = await verifyApiKey(token);
     
     if (!validation.valid) {
-      res.status(401).json({
-        error: 'Invalid API key',
-        message: validation.reason
-      });
+      // If expired, return explicit 401 expired message so clients can handle renewals
+      if (validation.reason && validation.reason.startsWith('API key expired')) {
+        res.status(401).json({ error: 'API key expired', message: validation.reason });
+      } else {
+        res.status(401).json({ error: 'Invalid API key', message: validation.reason });
+      }
       return { success: false };
     }
 
@@ -82,6 +85,35 @@ export async function authenticateApiKey(
         message: `This endpoint requires ${options.requiredTier} tier or higher. Your tier: ${validation.tier}`
       });
       return { success: false };
+    }
+
+    // Per-minute rate limiting using Redis when available. Falls back to DB daily cap.
+    const apiKey = validation.apiKey;
+    if (apiKey) {
+      const limits = getTierRateLimit(apiKey.tier);
+      try {
+        const rl = await isRequestAllowed(apiKey.key, limits.requestsPerMinute);
+        if (!rl.allowed) {
+          res.setHeader('X-RateLimit-Limit', limits.requestsPerMinute);
+          res.setHeader('X-RateLimit-Remaining', '0');
+          res.setHeader('X-RateLimit-Reset', Math.ceil(Date.now() / 1000 / 60) * 60);
+          res.status(429).json({ error: 'Rate limit exceeded', message: rl.reason || 'Per-minute quota exceeded' });
+          return { success: false };
+        }
+      } catch (err) {
+        // If Redis fails, fall back to daily cap check
+        console.warn('[authenticateApiKey] rate limiter fallback:', err);
+        if (typeof (apiKey as any).requestsToday === 'number' && limits.requestsPerMinute) {
+          const dailyCap = apiKey.tier === 'FREE' ? Math.min(10000, limits.requestsPerMinute * 60 * 24) : Infinity;
+          if ((apiKey as any).requestsToday >= dailyCap) {
+            res.setHeader('X-RateLimit-Limit', dailyCap.toString());
+            res.setHeader('X-RateLimit-Remaining', '0');
+            res.setHeader('X-RateLimit-Reset', new Date().setUTCHours(24, 0, 0, 0).toString());
+            res.status(429).json({ error: 'Rate limit exceeded', message: 'Daily request quota exceeded' });
+            return { success: false };
+          }
+        }
+      }
     }
 
     // Update usage statistics if requested

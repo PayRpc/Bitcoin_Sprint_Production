@@ -1,7 +1,5 @@
-import fs from 'fs';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import path from 'path';
 
 export function middleware(request: NextRequest) {
   // Skip maintenance check for health and maintenance endpoints
@@ -15,43 +13,37 @@ export function middleware(request: NextRequest) {
   }
 
   try {
-    // Check if maintenance mode is enabled
-    const maintenancePath = path.join(process.cwd(), 'data', 'maintenance.json');
-    
-    if (fs.existsSync(maintenancePath)) {
-      const maintenanceData = fs.readFileSync(maintenancePath, 'utf-8');
-      const maintenance = JSON.parse(maintenanceData);
-      
-      if (maintenance.enabled) {
-        // Return maintenance page for web requests
-        if (!pathname.startsWith('/api/')) {
-          return NextResponse.redirect(new URL('/maintenance', request.url));
-        }
-        
-        // Return 503 for API requests
-        return new NextResponse(
-          JSON.stringify({
-            ok: false,
-            error: 'Service temporarily unavailable',
-            maintenance: {
-              enabled: true,
-              reason: maintenance.reason || 'System maintenance in progress',
-              started_at: maintenance.started_at,
-              estimated_duration: maintenance.estimated_duration
-            }
-          }),
-          {
-            status: 503,
-            headers: {
-              'Content-Type': 'application/json',
-              'Retry-After': '1800' // 30 minutes
-            }
-          }
-        );
+    // Check for maintenance mode via environment variable
+    // (Edge runtime compatible - no filesystem operations)
+    if (process.env.MAINTENANCE_MODE === 'true') {
+      // Return maintenance page for web requests
+      if (!pathname.startsWith('/api/')) {
+        return NextResponse.redirect(new URL('/maintenance', request.url));
       }
+      
+      // Return 503 for API requests
+      return new NextResponse(
+        JSON.stringify({
+          ok: false,
+          error: 'Service temporarily unavailable',
+          maintenance: {
+            enabled: true,
+            reason: process.env.MAINTENANCE_REASON || 'System maintenance in progress',
+            started_at: process.env.MAINTENANCE_STARTED_AT,
+            estimated_duration: process.env.MAINTENANCE_DURATION
+          }
+        }),
+        {
+          status: 503,
+          headers: {
+            'Content-Type': 'application/json',
+            'Retry-After': '1800' // 30 minutes
+          }
+        }
+      );
     }
   } catch (error) {
-    // If we can't read maintenance file, allow request to proceed
+    // If we can't check maintenance mode, allow request to proceed
     console.error('Error checking maintenance mode:', error);
   }
 
