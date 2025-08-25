@@ -26,6 +26,13 @@
 /web/.turbo/
 /web/.vercel/
 
+# Blanket ignores (safety net)
+**/node_modules/
+**/.next/
+**/dist/
+**/out/
+**/.turbo/
+
 # CMake
 /CMakeFiles/
 /CMakeCache.txt
