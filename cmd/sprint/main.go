@@ -744,7 +744,7 @@ func (s *Sprint) ValidateLicense() error {
 		if err := json.Unmarshal(data, &s.license); err != nil {
 			return fmt.Errorf("failed to parse license.json: %w", err)
 		}
-		if s.license.Valid && s.config.LicenseKey == s.license.LicenseKey && s.license.ExpiresAt > time.Now().Unix() {
+		if s.license.Valid && s.config.LicenseKey.String() == s.license.LicenseKey && s.license.ExpiresAt > time.Now().Unix() {
 			if s.isLicenseResetNeeded() {
 				if err := s.resetLicenseBlocks(); err != nil {
 					return fmt.Errorf("failed to reset license: %w", err)
@@ -1653,7 +1653,7 @@ func (s *Sprint) handleInboundPeer(conn net.Conn) {
 
 	// Verify signature
 	sigData := []byte(hs.LicenseKey + strconv.FormatInt(hs.Timestamp, 10))
-	mac := hmac.New(sha256.New, []byte(s.config.PeerSecret))
+	mac := hmac.New(sha256.New, s.config.PeerSecret.Data())
 	mac.Write(sigData)
 	expectedSig := hex.EncodeToString(mac.Sum(nil))
 
@@ -1855,7 +1855,7 @@ func (s *Sprint) handleStatus(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
 	resp := StatusResponse{
 		Tier:             s.license.Tier,
-		LicenseKey:       maskLicenseKey(s.config.LicenseKey),
+		LicenseKey:       maskLicenseKeyFromSecure(s.config.LicenseKey),
 		Valid:            s.license.Valid,
 		BlocksSentToday:  atomic.LoadInt64(&s.blocksSent),
 		BlockLimit:       s.license.BlockLimit,

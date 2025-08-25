@@ -76,6 +76,19 @@ func (sb *SecureBuffer) Data() []byte {
 	return unsafe.Slice((*byte)(unsafe.Pointer(ptr)), length)
 }
 
+// String returns the secure buffer contents as a string
+// WARNING: This creates a copy in Go string memory
+func (sb *SecureBuffer) String() string {
+	if sb == nil || sb.ptr == nil {
+		return ""
+	}
+	data := sb.Data()
+	if data == nil {
+		return ""
+	}
+	return string(data)
+}
+
 // WithBytes calls fn with the secure buffer's bytes while avoiding creating a Go string.
 // The callback must not retain the slice after it returns.
 func (sb *SecureBuffer) WithBytes(fn func([]byte) error) error {
