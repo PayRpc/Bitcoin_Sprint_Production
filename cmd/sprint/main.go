@@ -236,7 +236,7 @@ type StatusResponse struct {
 	Tier             string    `json:"tier"`
 	LicenseKey       string    `json:"license_key"`
 	Valid            bool      `json:"valid"`
-	BlocksSentToday  int64     `json:"blocks_sent_today"`
+	BlocksSentToday  int64     `json:"blocks_today"`
 	BlockLimit       int       `json:"block_limit"`
 	PeersConnected   int       `json:"peers_connected"`
 	UptimeSeconds    int64     `json:"uptime_seconds"`
@@ -1812,7 +1812,7 @@ func (s *Sprint) StartWebDashboard() {
 	mux.HandleFunc("/metrics", s.handleMetrics)
 	mux.HandleFunc("/predictive", s.handlePredictive)
 	mux.HandleFunc("/stream", s.handleStream)
-	
+
 	// Customer API endpoints
 	mux.HandleFunc("/api/v1/blocks/", s.handleBlocksAPI)
 	mux.HandleFunc("/api/v1/license/info", s.handleLicenseInfo)
@@ -1984,13 +1984,13 @@ func (s *Sprint) handleBlocksAPI(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/blocks/")
-	
+
 	// Handle different block API endpoints
 	if strings.HasPrefix(path, "range/") {
 		s.handleBlockRange(w, r, strings.TrimPrefix(path, "range/"))
 		return
 	}
-	
+
 	// Single block by height
 	if height := strings.TrimSpace(path); height != "" {
 		s.handleSingleBlock(w, r, height)
@@ -2069,12 +2069,12 @@ func (s *Sprint) handleLicenseInfo(w http.ResponseWriter, r *http.Request) {
 	s.mu.RUnlock()
 
 	response := map[string]interface{}{
-		"tier":           license.Tier,
-		"valid":          license.Valid,
-		"block_limit":    license.BlockLimit,
-		"expires_at":     license.ExpiresAt,
-		"blocks_today":   atomic.LoadInt64(&s.blocksSent),
-		"api_version":    "v1",
+		"tier":         license.Tier,
+		"valid":        license.Valid,
+		"block_limit":  license.BlockLimit,
+		"expires_at":   license.ExpiresAt,
+		"blocks_today": atomic.LoadInt64(&s.blocksSent),
+		"api_version":  "v1",
 	}
 
 	json.NewEncoder(w).Encode(response)
@@ -2097,7 +2097,7 @@ func (s *Sprint) handleAnalyticsSummary(w http.ResponseWriter, r *http.Request) 
 	response := map[string]interface{}{
 		"current_block_height": currentHeight,
 		"total_peers":          peersCount,
-		"blocks_sent_today":    atomic.LoadInt64(&s.blocksSent),
+		"blocks_today":         atomic.LoadInt64(&s.blocksSent),
 		"uptime_seconds":       int64(time.Since(s.startTime).Seconds()),
 		"turbo_mode":           s.config.TurboMode,
 		"api_version":          "v1",

@@ -6,7 +6,22 @@ Bitcoin Sprint provides a comprehensive REST API for enterprise customers to acc
 
 **Base URL**: `http://localhost:8080` (configurable via APIBase setting)  
 **API Version**: v1  
-**Authentication**: Rate-limited public access  
+**Security**: All sensitive data (API keys, license keys, peer secrets) secured with Rust SecureBuffer - memory locked and zeroized after use  
+
+## Authentication
+
+**Free Tier**: Rate-limited public access (no API key required)  
+**Paid Tiers** (Pro/Enterprise): API key required in Authorization header
+
+```bash
+GET /api/v1/blocks/
+Authorization: Bearer YOUR_API_KEY
+```
+
+**Rate Limits**:
+- Free: Standard rate limiting per IP
+- Pro/Enterprise: 5x higher rate limits with API key authentication
+- Rate limit exceeded: `HTTP 429 Too Many Requests`  
 
 ## Available Endpoints
 
@@ -16,12 +31,13 @@ Bitcoin Sprint provides a comprehensive REST API for enterprise customers to acc
 Returns current system status, license information, and performance metrics.
 
 **Example Response:**
+
 ```json
 {
   "tier": "Enterprise",
-  "license_key": "btc_****_****_1234",
+  "license_key": "btc_****_****_1234", 
   "valid": true,
-  "blocks_sent_today": 150,
+  "blocks_today": 150,
   "block_limit": 1000,
   "peers_connected": 8,
   "uptime_seconds": 3600,
@@ -121,11 +137,12 @@ Get detailed license information and usage statistics.
 Get comprehensive analytics summary.
 
 **Example Response:**
+
 ```json
 {
   "current_block_height": 850000,
   "total_peers": 8,
-  "blocks_sent_today": 150,
+  "blocks_today": 150,
   "uptime_seconds": 3600,
   "turbo_mode": true,
   "api_version": "v1",
@@ -140,13 +157,43 @@ Get comprehensive analytics summary.
 
 ---
 
+## OpenAPI Specification
+
+For seamless integration with Postman, Insomnia, and other API tools, download our OpenAPI 3.1 specification:
+
+- **OpenAPI YAML**: [bitcoin-sprint-api.yaml](./bitcoin-sprint-api.yaml)
+- **Swagger UI**: `http://localhost:8080/docs` *(coming soon)*
+
+Generate client SDKs in 20+ languages using the OpenAPI spec with tools like:
+
+- [OpenAPI Generator](https://openapi-generator.tech/)
+- [Swagger Codegen](https://swagger.io/tools/swagger-codegen/)
+
+---
+
+## Security Features
+
+**🔒 Memory Safety**: Bitcoin Sprint secures all sensitive data (API keys, license keys, peer secrets) with Rust SecureBuffer, ensuring memory is locked and zeroized after use. This provides enterprise-grade security that differentiates Bitcoin Sprint from standard RPC proxies.
+
+**🛡️ Protection Features**:
+- Encrypted API key storage
+- Secure peer authentication with HMAC signatures  
+- Rate limiting with circuit breakers
+- Memory-safe credential handling
+- Automatic credential cleanup on shutdown
+
+---
+
 ## Rate Limiting
 
 All API endpoints are rate-limited to prevent abuse:
-- **Default**: Standard rate limiting per IP
-- **Turbo Mode**: Higher rate limits for Enterprise customers
+
+- **Free Tier**: Standard rate limiting per IP
+- **Pro/Enterprise**: 5x higher rate limits with API key authentication
+- **Turbo Mode**: Additional performance optimizations for Enterprise customers
 
 When rate limit is exceeded, you'll receive:
+
 ```json
 HTTP 429 Too Many Requests
 "Rate limit exceeded"
@@ -155,14 +202,17 @@ HTTP 429 Too Many Requests
 ## Error Handling
 
 The API uses standard HTTP status codes:
+
 - `200` - Success
 - `400` - Bad Request (invalid parameters)
+- `401` - Unauthorized (invalid API key)
 - `429` - Rate Limit Exceeded
 - `500` - Internal Server Error
 
 ## Integration Examples
 
 ### Python Example
+
 ```python
 import requests
 
@@ -171,39 +221,50 @@ response = requests.get("http://localhost:8080/api/v1/blocks/")
 latest = response.json()
 print(f"Latest block: {latest['latest_height']}")
 
-# Get license info
-license_info = requests.get("http://localhost:8080/api/v1/license/info").json()
+# Get license info with API key
+headers = {"Authorization": "Bearer YOUR_API_KEY"}
+license_info = requests.get("http://localhost:8080/api/v1/license/info", headers=headers).json()
 print(f"Blocks remaining: {license_info['block_limit'] - license_info['blocks_today']}")
 ```
 
 ### JavaScript Example
+
 ```javascript
-// Get analytics summary
-fetch('http://localhost:8080/api/v1/analytics/summary')
+// Get analytics summary with API key
+const headers = {'Authorization': 'Bearer YOUR_API_KEY'};
+
+fetch('http://localhost:8080/api/v1/analytics/summary', {headers})
   .then(response => response.json())
   .then(data => {
     console.log(`Current block: ${data.current_block_height}`);
     console.log(`Peers connected: ${data.total_peers}`);
+    console.log(`Blocks today: ${data.blocks_today}`);
   });
 ```
 
 ### cURL Examples
+
 ```bash
-# Get system status
+# Get system status (no auth required)
 curl "http://localhost:8080/status"
 
-# Get specific block
-curl "http://localhost:8080/api/v1/blocks/850000"
+# Get specific block with API key
+curl -H "Authorization: Bearer YOUR_API_KEY" \
+     "http://localhost:8080/api/v1/blocks/850000"
 
 # Get block range
-curl "http://localhost:8080/api/v1/blocks/range/850000/850010"
+curl -H "Authorization: Bearer YOUR_API_KEY" \
+     "http://localhost:8080/api/v1/blocks/range/850000/850010"
 
 # Get license info
-curl "http://localhost:8080/api/v1/license/info"
+curl -H "Authorization: Bearer YOUR_API_KEY" \
+     "http://localhost:8080/api/v1/license/info"
 
 # Stream real-time metrics
 curl "http://localhost:8080/stream"
 ```
+
+**Note**: Current block responses include demonstration data. For production deployments, integrate with your Bitcoin Core RPC node to return full block data including transactions, fees, and technical details.
 
 ## Custom API Development
 

@@ -1,0 +1,438 @@
+openapi: 3.1.0
+info:
+  title: Bitcoin Sprint Customer API
+  description: |
+    Enterprise Bitcoin block detection and analytics API with secure memory management.
+    
+    **Security**: All sensitive data secured with Rust SecureBuffer - memory locked and zeroized after use.
+  version: 1.0.0
+  contact:
+    name: Bitcoin Sprint Support
+    url: https://github.com/PayRpc/Bitcoin-Sprint
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Development server (configurable via APIBase setting)
+
+security:
+  - ApiKeyAuth: []
+  - {}  # Some endpoints allow public access
+
+paths:
+  /status:
+    get:
+      tags:
+        - System Status
+      summary: Get system status and performance metrics
+      description: Returns current system status, license information, and performance metrics
+      security:
+        - {}  # Public access
+      responses:
+        '200':
+          description: System status information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/v1/blocks/:
+    get:
+      tags:
+        - Block Information
+      summary: Get latest block information
+      description: Returns latest block height, hash, and available endpoints
+      security:
+        - ApiKeyAuth: []
+        - {}  # Free tier access
+      responses:
+        '200':
+          description: Latest block information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlocksResponse'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/v1/blocks/{height}:
+    get:
+      tags:
+        - Block Information
+      summary: Get specific block by height
+      description: Returns information about a specific block by height
+      parameters:
+        - name: height
+          in: path
+          required: true
+          description: Block height number
+          schema:
+            type: integer
+            minimum: 0
+            example: 850000
+      security:
+        - ApiKeyAuth: []
+        - {}  # Free tier access
+      responses:
+        '200':
+          description: Block information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SingleBlockResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/v1/blocks/range/{start}/{end}:
+    get:
+      tags:
+        - Block Information
+      summary: Get block range information
+      description: Returns information about a range of blocks
+      parameters:
+        - name: start
+          in: path
+          required: true
+          description: Starting block height
+          schema:
+            type: integer
+            minimum: 0
+            example: 850000
+        - name: end
+          in: path
+          required: true
+          description: Ending block height
+          schema:
+            type: integer
+            minimum: 0
+            example: 850010
+      security:
+        - ApiKeyAuth: []
+        - {}  # Free tier access
+      responses:
+        '200':
+          description: Block range information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockRangeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/v1/license/info:
+    get:
+      tags:
+        - License Management
+      summary: Get license information and usage statistics
+      description: Returns detailed license information, limits, and current usage
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: License information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LicenseResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/v1/analytics/summary:
+    get:
+      tags:
+        - Analytics
+      summary: Get comprehensive analytics summary
+      description: Returns analytics summary including block height, peers, and performance metrics
+      security:
+        - ApiKeyAuth: []
+        - {}  # Free tier access
+      responses:
+        '200':
+          description: Analytics summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsResponse'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /metrics:
+    get:
+      tags:
+        - System Status
+      summary: Get performance metrics
+      description: Returns detailed system performance metrics and statistics
+      security:
+        - {}  # Public access
+      responses:
+        '200':
+          description: Performance metrics array
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Metric'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /stream:
+    get:
+      tags:
+        - System Status
+      summary: Real-time metrics stream
+      description: Server-sent events stream for real-time metrics updates
+      security:
+        - {}  # Public access
+      responses:
+        '200':
+          description: Server-sent events stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Stream of JSON-encoded metrics
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API_KEY
+      description: |
+        API key for Pro/Enterprise tiers. Include in Authorization header:
+        `Authorization: Bearer YOUR_API_KEY`
+
+  schemas:
+    StatusResponse:
+      type: object
+      properties:
+        tier:
+          type: string
+          example: "Enterprise"
+          description: License tier (free, pro, enterprise)
+        license_key:
+          type: string
+          example: "btc_****_****_1234"
+          description: Masked license key
+        valid:
+          type: boolean
+          example: true
+        blocks_today:
+          type: integer
+          example: 150
+          description: Blocks processed today
+        block_limit:
+          type: integer
+          example: 1000
+          description: Daily block limit for current tier
+        peers_connected:
+          type: integer
+          example: 8
+          description: Number of connected peers
+        uptime_seconds:
+          type: integer
+          example: 3600
+          description: System uptime in seconds
+        version:
+          type: string
+          example: "1.2.0"
+        turbo_mode_enabled:
+          type: boolean
+          example: true
+
+    BlocksResponse:
+      type: object
+      properties:
+        latest_height:
+          type: integer
+          example: 850000
+        latest_hash:
+          type: string
+          example: "00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72728a054"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-08-24T15:30:00Z"
+        api_version:
+          type: string
+          example: "v1"
+        endpoints:
+          type: array
+          items:
+            type: string
+          example: ["/api/v1/blocks/{height}", "/api/v1/blocks/range/{start}/{end}"]
+
+    SingleBlockResponse:
+      type: object
+      properties:
+        requested_height:
+          type: string
+          example: "850000"
+        latest_height:
+          type: integer
+          example: 850001
+        latest_hash:
+          type: string
+          example: "00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72728a054"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-08-24T15:30:00Z"
+        message:
+          type: string
+          example: "Single block lookup - integrate with your Bitcoin node for full block data"
+
+    BlockRangeResponse:
+      type: object
+      properties:
+        start_height:
+          type: string
+          example: "850000"
+        end_height:
+          type: string
+          example: "850010"
+        message:
+          type: string
+          example: "Block range lookup - integrate with your Bitcoin node for full range data"
+        tip:
+          type: string
+          example: "Consider pagination for large ranges"
+
+    LicenseResponse:
+      type: object
+      properties:
+        tier:
+          type: string
+          example: "Enterprise"
+        valid:
+          type: boolean
+          example: true
+        block_limit:
+          type: integer
+          example: 1000
+        expires_at:
+          type: integer
+          format: int64
+          example: 1735689600
+          description: Unix timestamp of license expiration
+        blocks_today:
+          type: integer
+          example: 150
+        api_version:
+          type: string
+          example: "v1"
+
+    AnalyticsResponse:
+      type: object
+      properties:
+        current_block_height:
+          type: integer
+          example: 850000
+        total_peers:
+          type: integer
+          example: 8
+        blocks_today:
+          type: integer
+          example: 150
+        uptime_seconds:
+          type: integer
+          example: 3600
+        turbo_mode:
+          type: boolean
+          example: true
+        api_version:
+          type: string
+          example: "v1"
+        analytics_features:
+          type: array
+          items:
+            type: string
+          example: ["Real-time block monitoring", "Peer connection tracking", "Performance metrics", "Predictive analytics"]
+
+    Metric:
+      type: object
+      properties:
+        block_hash:
+          type: string
+          example: "00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72728a054"
+        latency_ms:
+          type: number
+          format: double
+          example: 45.6
+        peer_count:
+          type: integer
+          example: 8
+        timestamp:
+          type: integer
+          format: int64
+          example: 1692891000
+        height:
+          type: integer
+          example: 850000
+        success:
+          type: boolean
+          example: true
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Rate limit exceeded"
+        code:
+          type: integer
+          example: 429
+
+  responses:
+    RateLimitError:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Rate limit exceeded"
+            code: 429
+
+    BadRequest:
+      description: Bad request - invalid parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Invalid parameter format"
+            code: 400
+
+    Unauthorized:
+      description: Unauthorized - invalid or missing API key
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Invalid API key"
+            code: 401
+
+tags:
+  - name: System Status
+    description: System health and status endpoints
+  - name: Block Information
+    description: Bitcoin block data and information
+  - name: License Management
+    description: License information and usage tracking
+  - name: Analytics
+    description: Analytics and performance metrics
