@@ -1812,6 +1812,11 @@ func (s *Sprint) StartWebDashboard() {
 	mux.HandleFunc("/metrics", s.handleMetrics)
 	mux.HandleFunc("/predictive", s.handlePredictive)
 	mux.HandleFunc("/stream", s.handleStream)
+	
+	// Customer API endpoints
+	mux.HandleFunc("/api/v1/blocks/", s.handleBlocksAPI)
+	mux.HandleFunc("/api/v1/license/info", s.handleLicenseInfo)
+	mux.HandleFunc("/api/v1/analytics/summary", s.handleAnalyticsSummary)
 
 	// Secure middleware
 	securedMux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1964,6 +1969,147 @@ func (s *Sprint) handleStream(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+// Customer API Handlers
+
+// handleBlocksAPI provides block information by height or range
+// GET /api/v1/blocks/{height} - Get specific block
+// GET /api/v1/blocks/range/{start}/{end} - Get block range
+func (s *Sprint) handleBlocksAPI(w http.ResponseWriter, r *http.Request) {
+	if !s.rateLimiter.Allow(r.RemoteAddr, "/api/v1/blocks", s.config.TurboMode) {
+		http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/blocks/")
+	
+	// Handle different block API endpoints
+	if strings.HasPrefix(path, "range/") {
+		s.handleBlockRange(w, r, strings.TrimPrefix(path, "range/"))
+		return
+	}
+	
+	// Single block by height
+	if height := strings.TrimSpace(path); height != "" {
+		s.handleSingleBlock(w, r, height)
+		return
+	}
+
+	// Default: return latest block info
+	s.mu.RLock()
+	currentHeight := s.currentBlockHeight
+	currentHash := s.currentBlockHash
+	lastBlock := s.lastBlockTime
+	s.mu.RUnlock()
+
+	response := map[string]interface{}{
+		"latest_height": currentHeight,
+		"latest_hash":   currentHash,
+		"timestamp":     lastBlock,
+		"api_version":   "v1",
+		"endpoints": []string{
+			"/api/v1/blocks/{height}",
+			"/api/v1/blocks/range/{start}/{end}",
+		},
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+// handleSingleBlock returns information about a specific block
+func (s *Sprint) handleSingleBlock(w http.ResponseWriter, r *http.Request, height string) {
+	s.mu.RLock()
+	currentHeight := s.currentBlockHeight
+	currentHash := s.currentBlockHash
+	lastBlock := s.lastBlockTime
+	s.mu.RUnlock()
+
+	response := map[string]interface{}{
+		"requested_height": height,
+		"latest_height":    currentHeight,
+		"latest_hash":      currentHash,
+		"timestamp":        lastBlock,
+		"message":          "Single block lookup - integrate with your Bitcoin node for full block data",
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+// handleBlockRange returns information about a range of blocks
+func (s *Sprint) handleBlockRange(w http.ResponseWriter, r *http.Request, rangeParam string) {
+	parts := strings.Split(rangeParam, "/")
+	if len(parts) != 2 {
+		http.Error(w, "Invalid range format. Use: /api/v1/blocks/range/{start}/{end}", http.StatusBadRequest)
+		return
+	}
+
+	response := map[string]interface{}{
+		"start_height": parts[0],
+		"end_height":   parts[1],
+		"message":      "Block range lookup - integrate with your Bitcoin node for full range data",
+		"tip":          "Consider pagination for large ranges",
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+// handleLicenseInfo provides license information API
+func (s *Sprint) handleLicenseInfo(w http.ResponseWriter, r *http.Request) {
+	if !s.rateLimiter.Allow(r.RemoteAddr, "/api/v1/license", s.config.TurboMode) {
+		http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	s.mu.RLock()
+	license := s.license
+	s.mu.RUnlock()
+
+	response := map[string]interface{}{
+		"tier":           license.Tier,
+		"valid":          license.Valid,
+		"block_limit":    license.BlockLimit,
+		"expires_at":     license.ExpiresAt,
+		"blocks_today":   atomic.LoadInt64(&s.blocksSent),
+		"api_version":    "v1",
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+// handleAnalyticsSummary provides analytics summary API
+func (s *Sprint) handleAnalyticsSummary(w http.ResponseWriter, r *http.Request) {
+	if !s.rateLimiter.Allow(r.RemoteAddr, "/api/v1/analytics", s.config.TurboMode) {
+		http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	s.mu.RLock()
+	currentHeight := s.currentBlockHeight
+	peersCount := len(s.peers)
+	s.mu.RUnlock()
+
+	response := map[string]interface{}{
+		"current_block_height": currentHeight,
+		"total_peers":          peersCount,
+		"blocks_sent_today":    atomic.LoadInt64(&s.blocksSent),
+		"uptime_seconds":       int64(time.Since(s.startTime).Seconds()),
+		"turbo_mode":           s.config.TurboMode,
+		"api_version":          "v1",
+		"analytics_features": []string{
+			"Real-time block monitoring",
+			"Peer connection tracking",
+			"Performance metrics",
+			"Predictive analytics",
+		},
+	}
+
+	json.NewEncoder(w).Encode(response)
 }
 
 func (s *Sprint) getDashboardPort() string {
