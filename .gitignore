@@ -1,42 +1,70 @@
-# Bitcoin Sprint - Git Ignore File
-# Updated for clean source-only repository
-
-# Compiled binaries
-*.exe
+# ────────── Core Build Artifacts ──────────
+# Go
+/bin/
+/cmd/**/bin/
+/*.exe
 *.exe~
-*.dll
-*.so
-*.dylib
-bin/
-dist/
+*.test
+*.out
 
-# Go build cache
-vendor/
-
-# Rust build artifacts
-target/
-Cargo.lock
+# Rust
+/target/
+/secure/rust/target/
+/secure/rust/Cargo.lock
 *.rlib
 *.pdb
+*.dSYM/
+*.profraw
+*.profdata
 
-# Log files
+# Node / Next.js
+/node_modules/
+/web/node_modules/
+/web/.next/
+/web/out/
+/web/dist/
+/web/.turbo/
+/web/.vercel/
+
+# CMake
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/Makefile
+/_cmake_build/
+/build/
+/cpp-example
+*.a
+*.o
+*.obj
+
+# ────────── Logs / Temp / Debug ──────────
 *.log
 logs/
-
-# Configuration with sensitive data
-config-local.json
-*.env
-.env
-
-# IDE and editor files
-.vscode/settings.json
-.vscode/launch.json
-/.vscode/
+*.tmp
+*.temp
+temp/
+*.bak
+*.backup
 *.swp
 *.swo
 *~
+debug/
+coverage.html
+*.out
+*.pprof
+*.prof
 
-# OS generated files
+# ────────── Local Config & Secrets ──────────
+*.env
+.env
+.env.local
+.env.*.local
+config-local.json
+cmd/sprint/config-local.json
+zmq-config.json
+
+# ────────── OS / Editor Files ──────────
 .DS_Store
 .DS_Store?
 ._*
@@ -44,33 +72,21 @@ config-local.json
 .Trashes
 ehthumbs.db
 Thumbs.db
+.vscode/
+.vscode/*
+.idea/
+*.iml
 
-# Test coverage
-*.out
-coverage.html
+# ────────── Project-specific ──────────
+# Binaries
+cmd/sprint/bitcoin-sprint
+cmd/sprint/bitcoin-sprint.exe
 
-# Temporary files
-*.tmp
-*.temp
-temp/
-
-# Debug files
-debug
-*.pdb
-
-# Performance profiling
-*.prof
-*.pprof
-
-# Backup files
-*.bak
-*.backup
-
-# Windows service/installer artifacts (not shipped in source-only)
+# Scripts that are not source-only
 install-*.ps1
 install-*.bat
+install-*.cmd
 Install-*.vbs
-Install-*.cmd
 Run-Installer.ps1
 BUILD-*.ps1
 build-*.ps1
@@ -79,13 +95,3 @@ run-sprint-zmq.ps1
 start-bitcoin-testnet4.ps1
 start-sprint-testnet4.ps1
 Start-MockServer.ps1
-zmq-config.json
-
-# Application-specific build outputs
-cmd/sprint/bitcoin-sprint
-cmd/sprint/bitcoin-sprint.exe
-cmd/sprint/config-local.json
-
-# Rust secure module artifacts  
-secure/rust/target/
-secure/rust/Cargo.lock
