@@ -1,12 +1,16 @@
 {
   "name": "bitcoin-sprint-web",
+  "version": "1.0.0",
+  "description": "Bitcoin Sprint Web Dashboard and API",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "lint": "next lint",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "prisma:studio": "prisma studio"
   },
   "dependencies": {
     "@prisma/client": "^5.15.0",
@@ -27,5 +31,19 @@
     "prisma": "^5.15.0",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.4.0"
-  }
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "keywords": [
+    "bitcoin",
+    "sprint",
+    "nextjs",
+    "prisma",
+    "tailwind",
+    "api"
+  ],
+  "author": "BitcoinCab.inc",
+  "license": "MIT"
 }

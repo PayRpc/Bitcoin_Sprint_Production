@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -683,8 +684,25 @@ func (s *Sprint) LoadConfig() error {
 		return fmt.Errorf("failed to read config.json: %w", err)
 	}
 
-	// Unmarshal JSON into config (this will call InitializeSecureFields via UnmarshalJSON)
-	if err := json.Unmarshal(data, &s.config); err != nil {
+	// Resolve ${VAR} placeholders using environment variables prior to unmarshalling
+	// e.g. "license_key": "${LICENSE_KEY}" will be replaced with the env value
+	re := regexp.MustCompile(`\$\{([A-Z0-9_]+)\}`)
+	resolved := re.ReplaceAllFunc(data, func(b []byte) []byte {
+		// extract var name without ${}
+		m := re.FindSubmatch(b)
+		if len(m) < 2 {
+			return b
+		}
+		name := string(m[1])
+		val := os.Getenv(name)
+		// JSON string value must be quoted; we return the JSON-escaped string
+		// If env var empty, leave empty string
+		esc, _ := json.Marshal(val)
+		// esc is a quoted JSON string like "value"; return without surrounding quotes
+		return esc
+	})
+
+	if err := json.Unmarshal(resolved, &s.config); err != nil {
 		return fmt.Errorf("failed to parse config.json: %w", err)
 	}
 
