@@ -1,10 +1,13 @@
 # Bitcoin Sprint — Enterprise Bitcoin Block Detection
 
+[![CI](https://github.com/PayRpc/BItcoin_Sprint/actions/workflows/ci.yml/badge.svg)](https://github.com/PayRpc/BItcoin_Sprint/actions/workflows/ci.yml)
+[![Windows CGO](https://github.com/PayRpc/BItcoin_Sprint/actions/workflows/windows-cgo.yml/badge.svg)](https://github.com/PayRpc/BItcoin_Sprint/actions/workflows/windows-cgo.yml)
+
 Professional Bitcoin block monitoring system with Rust FFI secure memory integration and automated build system.
 
 ## Project Structure
 
-```
+```text
 Bitcoin Sprint/
 ├── cmd/sprint/          # Application entry point
 │   └── main.go         # Complete Bitcoin Sprint application  
