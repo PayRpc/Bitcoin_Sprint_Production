@@ -44,7 +44,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             Write-Host "Non-CGO build failed, but continuing..."
           }
-          
+
           # Try CGO build
           $env:CGO_ENABLED = "1"
           Write-Host "Testing CGO build..."
