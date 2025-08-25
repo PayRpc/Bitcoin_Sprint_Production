@@ -1,3 +1,6 @@
+//go:build cgo
+// +build cgo
+
 // Package secure provides memory-locked secure buffers via Rust FFI
 package secure
 

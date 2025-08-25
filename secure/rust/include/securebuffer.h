@@ -10,11 +10,11 @@
 
 // Cross-platform API export macro
 #if defined(_WIN32) || defined(_WIN64)
-	#define SECUREBUFFER_API __declspec(dllexport)
+#define SECUREBUFFER_API __declspec(dllexport)
 #elif defined(__GNUC__) || defined(__clang__)
-	#define SECUREBUFFER_API __attribute__((visibility("default")))
+#define SECUREBUFFER_API __attribute__((visibility("default")))
 #else
-	#define SECUREBUFFER_API
+#define SECUREBUFFER_API
 #endif
 
 #ifdef __cplusplus

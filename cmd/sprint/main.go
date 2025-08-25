@@ -1818,6 +1818,10 @@ func (s *Sprint) StartWebDashboard() {
 	mux.HandleFunc("/api/v1/license/info", s.handleLicenseInfo)
 	mux.HandleFunc("/api/v1/analytics/summary", s.handleAnalyticsSummary)
 
+	// Wrap customer APIs with API key verification middleware
+	mux.HandleFunc("/api/v1/blocks/", s.apiKeyMiddleware(s.handleBlocksAPI))
+	mux.HandleFunc("/stream", s.apiKeyMiddleware(s.handleStream))
+
 	// Secure middleware
 	securedMux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -2345,4 +2349,84 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// verifyAPIKey calls the web service verify endpoint and returns (ok, tier, error)
+func (s *Sprint) verifyAPIKey(ctx context.Context, key string) (bool, string, error) {
+	if key == "" {
+		return false, "", nil
+	}
+	verifyURL := strings.TrimRight(s.config.APIBase, "/") + "/api/verify"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, verifyURL, nil)
+	if err != nil {
+		return false, "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+key)
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return false, "", err
+	}
+	defer resp.Body.Close()
+
+	var out struct {
+		Ok   bool   `json:"ok"`
+		Tier string `json:"tier"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1024)).Decode(&out); err != nil {
+		return false, "", err
+	}
+	return out.Ok, out.Tier, nil
+}
+
+// apiKeyMiddleware wraps handlers to enforce Authorization: Bearer <key> and tier-based caps
+func (s *Sprint) apiKeyMiddleware(next func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Extract bearer
+		auth := r.Header.Get("Authorization")
+		parts := strings.SplitN(auth, " ", 2)
+		var token string
+		if len(parts) == 2 && parts[0] == "Bearer" {
+			token = parts[1]
+		}
+
+		// Verify token
+		ok, tier, err := s.verifyAPIKey(r.Context(), token)
+		if err != nil {
+			zap.L().Warn("API key verification error", zap.Error(err))
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Enforce simple per-tier caps for free/pro tiers on blocks endpoint
+		if strings.HasPrefix(r.URL.Path, "/api/v1/blocks") {
+			switch tier {
+			case "free":
+				// free: allow but enforce lower block_limit
+				if s.isBlockLimitReached() && s.license.Tier == "free" {
+					http.Error(w, "Block quota reached", http.StatusPaymentRequired)
+					return
+				}
+			case "pro":
+				// pro: allow more, reuse existing license check
+				if s.isBlockLimitReached() && s.license.Tier != "enterprise" {
+					http.Error(w, "Block quota reached", http.StatusPaymentRequired)
+					return
+				}
+			case "enterprise":
+				// unlimited
+			default:
+				// unknown tier: deny
+				http.Error(w, "Forbidden", http.StatusForbidden)
+				return
+			}
+		}
+
+		// Pass through
+		next(w, r)
+	}
 }
