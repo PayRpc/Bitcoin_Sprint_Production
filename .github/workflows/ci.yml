@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@v1
+      with:
+        toolchain: stable
+
+    - name: Build Rust securebuffer
+      working-directory: secure/rust
+      run: |
+        cargo build --release
+
+    - name: Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Run Go tests (with CGO)
+      env:
+        CGO_ENABLED: '1'
+        # Make sure cgo can find the rust cdylib in the repo relative path
+        CGO_LDFLAGS: -L${{ github.workspace }}/secure/rust/target/release
+      run: |
+        go test ./...

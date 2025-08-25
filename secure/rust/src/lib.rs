@@ -51,3 +51,65 @@ pub extern "C" fn securebuffer_len(buf: *mut SecureBuffer) -> usize {
     let sb = unsafe { &*buf };
     sb.len()
 }
+
+// Compute HMAC-SHA256(hex) of data using secret held in SecureBuffer.
+// The caller must free the returned C string with securebuffer_free_cstr.
+#[no_mangle]
+pub extern "C" fn securebuffer_hmac_hex(buf: *mut SecureBuffer, data: *const u8, data_len: usize) -> *mut i8 {
+    if buf.is_null() || data.is_null() {
+        return std::ptr::null_mut();
+    }
+    let sb = unsafe { &*buf };
+    let key = match sb.as_slice() {
+        Some(s) => s,
+        None => return std::ptr::null_mut(),
+    };
+    let slice = unsafe { slice::from_raw_parts(data, data_len) };
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+    use std::ffi::CString;
+
+    type HmacSha256 = Hmac<Sha256>;
+    let mut mac = match HmacSha256::new_from_slice(key) {
+        Ok(m) => m,
+        Err(_) => return std::ptr::null_mut(),
+    };
+    mac.update(slice);
+    let result = mac.finalize().into_bytes();
+    let hex = hex::encode(result);
+    // return C string
+    match CString::new(hex) {
+        Ok(cstr) => cstr.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+// Free a C string returned by this crate
+#[no_mangle]
+pub extern "C" fn securebuffer_free_cstr(s: *mut i8) {
+    if s.is_null() { return; }
+    unsafe { let _ = std::ffi::CString::from_raw(s); }
+}
+
+// Compute base64url of provided data using secret as HMAC key and return C string (for Authorization header purposes)
+#[no_mangle]
+pub extern "C" fn securebuffer_hmac_base64url(buf: *mut SecureBuffer, data: *const u8, data_len: usize) -> *mut i8 {
+    if buf.is_null() || data.is_null() { return std::ptr::null_mut(); }
+    let sb = unsafe { &*buf };
+    let key = match sb.as_slice() { Some(s) => s, None => return std::ptr::null_mut() };
+    let slice = unsafe { slice::from_raw_parts(data, data_len) };
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+    use base64::Engine;
+    use std::ffi::CString;
+    type HmacSha256 = Hmac<Sha256>;
+    let mut mac = match HmacSha256::new_from_slice(key) { Ok(m) => m, Err(_) => return std::ptr::null_mut() };
+    mac.update(slice);
+    let result = mac.finalize().into_bytes();
+    // base64url without padding
+    let b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(result);
+    match CString::new(b64) {
+        Ok(cstr) => cstr.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}

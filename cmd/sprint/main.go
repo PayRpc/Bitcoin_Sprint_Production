@@ -162,10 +162,25 @@ func (c *Config) Cleanup() {
 
 // MarshalJSON implements custom JSON marshaling for Config
 func (c *Config) MarshalJSON() ([]byte, error) {
-	// Prepare plain text versions for JSON serialization
-	c.LicenseKeyPlain = c.GetLicenseKey()
-	c.RPCPassPlain = c.GetRPCPass()
-	c.PeerSecretPlain = c.GetPeerSecret()
+	// Prepare plain text versions for JSON serialization using WithBytes
+	if c.LicenseKey != nil {
+		_ = c.LicenseKey.WithBytes(func(b []byte) error {
+			c.LicenseKeyPlain = string(b)
+			return nil
+		})
+	}
+	if c.RPCPass != nil {
+		_ = c.RPCPass.WithBytes(func(b []byte) error {
+			c.RPCPassPlain = string(b)
+			return nil
+		})
+	}
+	if c.PeerSecret != nil {
+		_ = c.PeerSecret.WithBytes(func(b []byte) error {
+			c.PeerSecretPlain = string(b)
+			return nil
+		})
+	}
 
 	// Create a copy with plain text fields for marshaling
 	type ConfigAlias Config
@@ -698,8 +713,8 @@ func (s *Sprint) LoadConfig() error {
 		s.config.PeerListenPort = 8335
 	}
 
-	// Validate required fields using secure getters
-	if s.config.GetLicenseKey() == "" {
+	// Validate required fields using secure buffers without creating strings
+	if s.config.LicenseKey == nil || s.config.LicenseKey.Data() == nil || len(s.config.LicenseKey.Data()) == 0 {
 		return fmt.Errorf("license_key is required in config")
 	}
 	if len(s.config.RPCNodes) == 0 {
@@ -710,7 +725,7 @@ func (s *Sprint) LoadConfig() error {
 			return fmt.Errorf("RPC node %s must use HTTPS or be localhost", node)
 		}
 	}
-	if s.config.PeerSecret == "" {
+	if s.config.PeerSecret == nil || s.config.PeerSecret.Data() == nil || len(s.config.PeerSecret.Data()) == 0 {
 		return fmt.Errorf("peer_secret is required for secure peer connections")
 	}
 
@@ -750,8 +765,29 @@ func (s *Sprint) validateLicenseRemote() error {
 	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
 	defer cancel()
 
-	reqBody, _ := json.Marshal(map[string]string{"license_key": s.config.LicenseKey})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.config.MetricsURL+"/license/validate", bytes.NewReader(reqBody))
+	var req *http.Request
+	var err error
+	if s.config.LicenseKey != nil {
+		err = s.config.LicenseKey.WithBytes(func(b []byte) error {
+			// Build JSON payload transiently
+			payload := map[string]string{"license_key": string(b)}
+			rb, merr := json.Marshal(payload)
+			if merr != nil {
+				return merr
+			}
+			req, err = http.NewRequestWithContext(ctx, http.MethodPost, s.config.MetricsURL+"/license/validate", bytes.NewReader(rb))
+			// zero temporary rb
+			for i := range rb {
+				rb[i] = 0
+			}
+			return err
+		})
+		if err != nil {
+			return fmt.Errorf("failed to build license request: %w", err)
+		}
+	} else {
+		req, err = http.NewRequestWithContext(ctx, http.MethodPost, s.config.MetricsURL+"/license/validate", bytes.NewReader([]byte("{}")))
+	}
 	if err != nil {
 		return fmt.Errorf("failed to create license validation request: %w", err)
 	}
@@ -825,11 +861,26 @@ func (s *Sprint) resetLicenseBlocks() error {
 	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
 	defer cancel()
 
-	reqBody, _ := json.Marshal(map[string]string{
-		"license_key": s.config.LicenseKey,
-		"tier":        s.license.Tier,
-	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.config.MetricsURL+"/license/reset", bytes.NewReader(reqBody))
+	var req *http.Request
+	var err error
+	if s.config.LicenseKey != nil {
+		if err := s.config.LicenseKey.WithBytes(func(b []byte) error {
+			payload := map[string]string{"license_key": string(b), "tier": s.license.Tier}
+			rb, merr := json.Marshal(payload)
+			if merr != nil {
+				return merr
+			}
+			req, err = http.NewRequestWithContext(ctx, http.MethodPost, s.config.MetricsURL+"/license/reset", bytes.NewReader(rb))
+			for i := range rb {
+				rb[i] = 0
+			}
+			return err
+		}); err != nil {
+			return fmt.Errorf("failed to build license reset request: %w", err)
+		}
+	} else {
+		req, err = http.NewRequestWithContext(ctx, http.MethodPost, s.config.MetricsURL+"/license/reset", bytes.NewReader([]byte("{}")))
+	}
 	if err != nil {
 		return fmt.Errorf("failed to create license reset request: %w", err)
 	}
@@ -1079,8 +1130,8 @@ func (s *Sprint) queryNode(node string, reqBody []byte) (string, int, error) {
 	}
 
 	// Set authentication and headers
-	if s.config.RPCUser != "" || s.config.RPCPass != "" {
-		req.SetBasicAuth(s.config.RPCUser, s.config.RPCPass)
+	if s.config.RPCUser != "" || s.config.RPCPass != nil {
+		secure.SetBasicAuthHeader(req, s.config.RPCUser, s.config.RPCPass)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Connection", "keep-alive")
@@ -1235,7 +1286,7 @@ func (s *Sprint) OnNewBlock(hash string, height int, node string, messageID stri
 		Latency:    latency,
 		PeerCount:  sent,
 		Timestamp:  time.Now().Unix(),
-		LicenseKey: s.config.LicenseKey,
+		LicenseKey: maskLicenseKeyFromSecure(s.config.LicenseKey),
 		RPCNode:    node,
 		Success:    sent > 0,
 	}
@@ -1461,28 +1512,55 @@ func (s *Sprint) connectToPeersOnce() {
 }
 
 func (s *Sprint) performPeerHandshake(peer *PeerConnection) error {
-	// Create handshake message
-	handshake := PeerHandshake{
-		LicenseKey: s.config.LicenseKey,
-		Timestamp:  time.Now().Unix(),
-	}
-	sigData := []byte(s.config.LicenseKey + strconv.FormatInt(handshake.Timestamp, 10))
-	mac := hmac.New(sha256.New, []byte(s.config.PeerSecret))
-	mac.Write(sigData)
-	handshake.Signature = hex.EncodeToString(mac.Sum(nil))
+	// Create and send handshake message without copying the license into a
+	// long-lived Go string: marshal and write bytes inside WithBytes.
+	if s.config.LicenseKey != nil {
+		if err := s.config.LicenseKey.WithBytes(func(b []byte) error {
+			handshake := PeerHandshake{
+				LicenseKey: string(b),
+				Timestamp:  time.Now().Unix(),
+			}
+			sigData := []byte(string(b) + strconv.FormatInt(handshake.Timestamp, 10))
+			if s.config.PeerSecret != nil {
+				handshake.Signature = s.config.PeerSecret.HMACHex(sigData)
+			} else {
+				mac := hmac.New(sha256.New, []byte(""))
+				mac.Write(sigData)
+				handshake.Signature = hex.EncodeToString(mac.Sum(nil))
+			}
+			data, merr := json.Marshal(handshake)
+			if merr != nil {
+				return merr
+			}
+			data = append(data, '\n')
 
-	data, err := json.Marshal(handshake)
-	if err != nil {
-		return fmt.Errorf("failed to marshal handshake: %w", err)
-	}
-	data = append(data, '\n')
-
-	// Send handshake
-	if err := peer.conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
-		return fmt.Errorf("failed to set write deadline: %w", err)
-	}
-	if _, err := peer.conn.Write(data); err != nil {
-		return fmt.Errorf("failed to send handshake: %w", err)
+			if err := peer.conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+				return fmt.Errorf("failed to set write deadline: %w", err)
+			}
+			if _, werr := peer.conn.Write(data); werr != nil {
+				return fmt.Errorf("failed to send handshake: %w", werr)
+			}
+			// zero marshal buffer
+			for i := range data {
+				data[i] = 0
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	} else {
+		handshake := PeerHandshake{LicenseKey: "", Timestamp: time.Now().Unix()}
+		data, err := json.Marshal(handshake)
+		if err != nil {
+			return fmt.Errorf("failed to marshal handshake: %w", err)
+		}
+		data = append(data, '\n')
+		if err := peer.conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+			return fmt.Errorf("failed to set write deadline: %w", err)
+		}
+		if _, err := peer.conn.Write(data); err != nil {
+			return fmt.Errorf("failed to send handshake: %w", err)
+		}
 	}
 
 	// Read response
@@ -1501,9 +1579,14 @@ func (s *Sprint) performPeerHandshake(peer *PeerConnection) error {
 
 	// Verify response signature
 	respSigData := []byte(resp.LicenseKey + strconv.FormatInt(resp.Timestamp, 10))
-	mac = hmac.New(sha256.New, []byte(s.config.PeerSecret))
-	mac.Write(respSigData)
-	expectedSig := hex.EncodeToString(mac.Sum(nil))
+	var expectedSig string
+	if s.config.PeerSecret != nil {
+		expectedSig = s.config.PeerSecret.HMACHex(respSigData)
+	} else {
+		mac := hmac.New(sha256.New, []byte(""))
+		mac.Write(respSigData)
+		expectedSig = hex.EncodeToString(mac.Sum(nil))
+	}
 	if resp.Signature != expectedSig || time.Now().Unix()-resp.Timestamp > 30 {
 		return fmt.Errorf("invalid handshake signature or timestamp")
 	}
@@ -1579,26 +1662,49 @@ func (s *Sprint) handleInboundPeer(conn net.Conn) {
 		return
 	}
 
-	// Send handshake response
-	resp := PeerHandshake{
-		LicenseKey: s.config.LicenseKey,
-		Timestamp:  time.Now().Unix(),
-	}
-	respSigData := []byte(resp.LicenseKey + strconv.FormatInt(resp.Timestamp, 10))
-	mac = hmac.New(sha256.New, []byte(s.config.PeerSecret))
-	mac.Write(respSigData)
-	resp.Signature = hex.EncodeToString(mac.Sum(nil))
+	// Send handshake response without exposing license as a long-lived string.
+	if s.config.LicenseKey != nil {
+		if err := s.config.LicenseKey.WithBytes(func(b []byte) error {
+			resp := PeerHandshake{LicenseKey: string(b), Timestamp: time.Now().Unix()}
+			respSigData := []byte(string(b) + strconv.FormatInt(resp.Timestamp, 10))
+			if s.config.PeerSecret != nil {
+				resp.Signature = s.config.PeerSecret.HMACHex(respSigData)
+			} else {
+				mac = hmac.New(sha256.New, []byte(""))
+				mac.Write(respSigData)
+				resp.Signature = hex.EncodeToString(mac.Sum(nil))
+			}
+			respData, _ := json.Marshal(resp)
+			respData = append(respData, '\n')
 
-	respData, _ := json.Marshal(resp)
-	respData = append(respData, '\n')
-
-	if err := conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
-		zap.L().Error("Failed to set write deadline", zap.Error(err))
-		return
-	}
-	if _, err := conn.Write(respData); err != nil {
-		zap.L().Warn("Failed to send handshake response", zap.String("peer", peerAddr), zap.Error(err))
-		return
+			if err := conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+				zap.L().Error("Failed to set write deadline", zap.Error(err))
+				return err
+			}
+			if _, werr := conn.Write(respData); werr != nil {
+				zap.L().Warn("Failed to send handshake response", zap.String("peer", peerAddr), zap.Error(werr))
+				return werr
+			}
+			for i := range respData {
+				respData[i] = 0
+			}
+			return nil
+		}); err != nil {
+			zap.L().Warn("Failed to marshal/send handshake response", zap.Error(err))
+			return
+		}
+	} else {
+		resp := PeerHandshake{LicenseKey: "", Timestamp: time.Now().Unix()}
+		respData, _ := json.Marshal(resp)
+		respData = append(respData, '\n')
+		if err := conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+			zap.L().Error("Failed to set write deadline", zap.Error(err))
+			return
+		}
+		if _, err := conn.Write(respData); err != nil {
+			zap.L().Warn("Failed to send handshake response", zap.String("peer", peerAddr), zap.Error(err))
+			return
+		}
 	}
 
 	// Add peer
@@ -1875,6 +1981,24 @@ func maskLicenseKey(key string) string {
 	return key[:4] + "****" + key[len(key)-4:]
 }
 
+// maskLicenseKeyFromSecure masks a license key stored in a SecureBuffer without
+// copying it into a long-lived Go string.
+func maskLicenseKeyFromSecure(key *secure.SecureBuffer) string {
+	if key == nil {
+		return "****"
+	}
+	var out string
+	_ = key.WithBytes(func(b []byte) error {
+		if len(b) < 8 {
+			out = "****"
+			return nil
+		}
+		out = string(b[:4]) + "****" + string(b[len(b)-4:])
+		return nil
+	})
+	return out
+}
+
 // ───────────────────────── Predictive Monitoring ─────────────────────────
 
 func (s *Sprint) StartPredictiveMonitoring() {
@@ -1913,7 +2037,7 @@ func (s *Sprint) getMempoolSize() (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to create mempool request: %w", err)
 	}
-	req.SetBasicAuth(s.config.RPCUser, s.config.RPCPass)
+	secure.SetBasicAuthHeader(req, s.config.RPCUser, s.config.RPCPass)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := s.client.Do(req)

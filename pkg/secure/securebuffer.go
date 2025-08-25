@@ -10,6 +10,9 @@ package secure
 */
 import "C"
 import (
+	"encoding/base64"
+	"fmt"
+	"net/http"
 	"runtime"
 	"unsafe"
 )
@@ -71,4 +74,67 @@ func (sb *SecureBuffer) Data() []byte {
 	}
 
 	return unsafe.Slice((*byte)(unsafe.Pointer(ptr)), length)
+}
+
+// WithBytes calls fn with the secure buffer's bytes while avoiding creating a Go string.
+// The callback must not retain the slice after it returns.
+func (sb *SecureBuffer) WithBytes(fn func([]byte) error) error {
+	if sb == nil || sb.ptr == nil {
+		return fmt.Errorf("secure buffer is nil")
+	}
+	data := sb.Data()
+	if data == nil {
+		return fmt.Errorf("secure buffer empty")
+	}
+	return fn(data)
+}
+
+// HMACHex computes HMAC-SHA256 over data using the secret in the SecureBuffer and returns hex string
+func (sb *SecureBuffer) HMACHex(data []byte) string {
+	if sb.ptr == nil || len(data) == 0 {
+		return ""
+	}
+	cstr := C.securebuffer_hmac_hex(sb.ptr, (*C.uint8_t)(unsafe.Pointer(&data[0])), C.size_t(len(data)))
+	if cstr == nil {
+		return ""
+	}
+	defer C.securebuffer_free_cstr(cstr)
+	return C.GoString(cstr)
+}
+
+// HMACBase64URL computes HMAC-SHA256 and returns base64url (no padding)
+func (sb *SecureBuffer) HMACBase64URL(data []byte) string {
+	if sb.ptr == nil || len(data) == 0 {
+		return ""
+	}
+	cstr := C.securebuffer_hmac_base64url(sb.ptr, (*C.uint8_t)(unsafe.Pointer(&data[0])), C.size_t(len(data)))
+	if cstr == nil {
+		return ""
+	}
+	defer C.securebuffer_free_cstr(cstr)
+	return C.GoString(cstr)
+}
+
+// SetBasicAuthHeader sets the Authorization header for req using username and a SecureBuffer password.
+// This minimizes the lifetime of any plaintext password in Go.
+func SetBasicAuthHeader(req *http.Request, user string, pass *SecureBuffer) {
+	if req == nil || pass == nil {
+		return
+	}
+	// Build "user:pass" bytes
+	data := make([]byte, 0, len(user)+1+int(C.securebuffer_len(pass.ptr)))
+	data = append(data, []byte(user)...)
+	data = append(data, ':')
+	// Append password bytes directly from secure buffer
+	p := pass.Data()
+	if p != nil {
+		data = append(data, p...)
+	}
+	// Encode header
+	encoded := "Basic " + base64.StdEncoding.EncodeToString(data)
+	req.Header.Set("Authorization", encoded)
+	// Zero temporary slices
+	for i := range data {
+		data[i] = 0
+	}
 }
