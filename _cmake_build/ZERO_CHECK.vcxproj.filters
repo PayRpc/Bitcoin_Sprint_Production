@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Projects\BItcoin_Sprint\BItcoin_Sprint\_cmake_build\CMakeFiles\dad7998ea9cc2dc5e5b4918f667b6feb\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{15766B0C-254A-3E1D-B029-749CFBF1A336}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

@@ -2,7 +2,7 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "🚀 Build Bitcoin Sprint (Optimized)",
+            "label": "Build Bitcoin Sprint (Optimized)",
             "type": "shell",
             "command": "go",
             "args": [
@@ -25,7 +25,7 @@
             "problemMatcher": ["$go"]
         },
         {
-            "label": "⚡ Build Release (Maximum Optimization)",
+            "label": "Build Release (Maximum Optimization)",
             "type": "shell",
             "command": "powershell",
             "args": [
@@ -43,7 +43,7 @@
             "problemMatcher": []
         },
         {
-            "label": "🔧 Build Development",
+            "label": "Build Development",
             "type": "shell",
             "command": "go",
             "args": [
@@ -62,12 +62,12 @@
             "problemMatcher": ["$go"]
         },
         {
-            "label": "🧹 Clean Build Artifacts",
+            "label": "Clean Build Artifacts",
             "type": "shell",
             "command": "powershell",
             "args": [
                 "-Command",
-                "Remove-Item -Path '*.exe', '*.log', 'debug' -ErrorAction SilentlyContinue; Write-Host '✅ Clean complete' -ForegroundColor Green"
+                "Remove-Item -Path '*.exe', '*.log', 'debug' -ErrorAction SilentlyContinue; Write-Host 'Clean complete' -ForegroundColor Green"
             ],
             "group": "build",
             "presentation": {
@@ -78,7 +78,7 @@
             }
         },
         {
-            "label": "📊 Benchmark Build",
+            "label": "Benchmark Build",
             "type": "shell",
             "command": "powershell",
             "args": [
@@ -95,7 +95,7 @@
             }
         },
         {
-            "label": "🔍 Go Vet (Code Analysis)",
+            "label": "Go Vet (Code Analysis)",
             "type": "shell",
             "command": "go",
             "args": ["vet", "./..."],
@@ -109,7 +109,7 @@
             "problemMatcher": ["$go"]
         },
         {
-            "label": "📝 Go Format",
+            "label": "Go Format",
             "type": "shell",
             "command": "gofmt",
             "args": ["-s", "-w", "."],
@@ -122,7 +122,7 @@
             }
         },
         {
-            "label": "🔧 Install Go Tools",
+            "label": "Install Go Tools",
             "type": "shell",
             "command": "go",
             "args": [
@@ -140,7 +140,7 @@
             }
         },
         {
-            "label": "🏁 Run Go Benchmarks",
+            "label": "Run Go Benchmarks",
             "type": "shell",
             "command": "go",
             "args": [

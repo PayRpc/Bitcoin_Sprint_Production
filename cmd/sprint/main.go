@@ -576,9 +576,9 @@ func (s *Sprint) Start() error {
 	// Start advanced monitoring if turbo mode enabled
 	if s.config.TurboMode {
 		go s.StartPredictiveMonitoring()
-		zap.L().Info("⚡ Bitcoin Sprint running in TURBO mode")
+		zap.L().Info("Bitcoin Sprint running in TURBO mode")
 	} else {
-		zap.L().Info("🔒 Bitcoin Sprint running in STANDARD mode")
+		zap.L().Info("Bitcoin Sprint running in STANDARD mode")
 	}
 
 	// Log configuration

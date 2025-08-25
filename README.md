@@ -2,7 +2,7 @@
 
 Professional Bitcoin block monitoring system with Rust FFI secure memory integration and automated build system.
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 Bitcoin Sprint/
@@ -33,7 +33,7 @@ Bitcoin Sprint/
 └── INTEGRATION.md      # Complete FFI setup guide
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -101,7 +101,7 @@ $env:CGO_ENABLED = "1"
 go test ./internal/secure -v
 ```
 
-## ⚙️ Configuration
+## Configuration
 
 The application configuration is built into the binary. Environment variables can be used for deployment customization:
 
@@ -113,7 +113,7 @@ The application configuration is built into the binary. Environment variables ca
 - `SPRINT_PEER_PORT` - Peer listen port (default: 8335)
 - `SPRINT_DASH_PORT` or `PORT` - Dashboard port (default: 8080)
 
-## 🔒 Security Features
+## Security Features
 
 ### Rust FFI SecureBuffer
 
@@ -160,7 +160,7 @@ The Go-Rust integration happens automatically via CGO directives:
 
 When you run `go build`, it automatically finds and links the Rust library.
 
-## 🌐 Network Architecture
+## Network Architecture
 
 ### RPC Polling
 
@@ -183,7 +183,7 @@ When you run `go build`, it automatically finds and links the Rust library.
 - Performance analytics and latency tracking
 - RESTful API endpoints for monitoring
 
-## 📊 API Endpoints
+## API Endpoints
 
 - `GET /status` - Application status and metrics
 - `GET /peers` - Connected peer information
@@ -191,7 +191,7 @@ When you run `go build`, it automatically finds and links the Rust library.
 - `GET /metrics` - Performance metrics
 - `GET /config` - Current configuration
 
-## 🔧 Development
+## Development
 
 ### Dependencies
 
@@ -255,7 +255,7 @@ Development environment verification:
 .\check-setup.ps1    # Check Go, Rust, C compiler, artifacts
 ```
 
-## 🚀 Deployment
+## Deployment
 
 ### Single Binary
 

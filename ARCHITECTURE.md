@@ -1,6 +1,6 @@
 # Bitcoin Sprint Architecture: Hub-and-Spoke Security Model
 
-## 🏗️ **Core Architecture Overview**
+## Core Architecture Overview
 
 Bitcoin Sprint uses a **hub-and-spoke security architecture** where the Rust SecureBuffer library serves as the secure memory core, with all other components as consumers or bindings.
 
@@ -27,39 +27,39 @@ Bitcoin Sprint uses a **hub-and-spoke security architecture** where the Rust Sec
       All outputs: Memory-Locked, Zeroized, Production-Ready
 ```
 
-## 🎯 **Mental Model**
+## Mental Model
 
 1. **Build System** feeds → **Rust Core**
 2. **Rust Core** feeds → **Any Language Integration** (C++/Go)  
 3. **Final Deliverables** are always **memory-safe & production-ready**
 
-## 🔧 **Component Validation**
+## Component Validation
 
-### ✅ **Hub: Rust SecureBuffer**
+### Hub: Rust SecureBuffer
 - **Location**: `secure/rust/`
 - **Artifacts**: `securebuffer.dll` (121 KB), `securebuffer.lib` (2.7 KB)
 - **Features**: Memory locking, auto-zeroize, cross-platform FFI
-- **Status**: ✅ **Production Ready**
+- **Status**: Production Ready
 
-### ✅ **Build Systems (Multiple Entry Points)**
+### Build Systems (Multiple Entry Points)
 - **Makefile**: Unix/Linux cross-platform
 - **make.ps1**: Windows PowerShell native
 - **CMakeLists.txt**: Modern C++ project generation
-- **Status**: ✅ **All Functional**
+-- **Status**: All Functional
 
-### ✅ **Spoke 1: Go Application**
+### Spoke 1: Go Application
 - **Location**: `cmd/sprint/main.go`
 - **Integration**: Via `pkg/secure` Go wrapper
 - **Security**: Config struct using SecureBuffer for sensitive data
-- **Status**: ✅ **Fully Integrated**
+-- **Status**: Fully Integrated
 
-### ✅ **Spoke 2: C++ Example**
+### Spoke 2: C++ Example
 - **Location**: `examples/cpp/main.cpp`
 - **Integration**: RAII wrapper with move semantics
 - **Security**: Automatic cleanup, exception safety
-- **Status**: ✅ **Demonstration Ready**
+-- **Status**: Demonstration Ready
 
-## 🛡️ **Security Guarantees**
+## Security Guarantees
 
 Every component in this architecture provides:
 
@@ -68,7 +68,7 @@ Every component in this architecture provides:
 3. **Dump Protection**: No credential exposure in memory dumps
 4. **Exception Safety**: Cleanup guaranteed even on errors
 
-## 🚀 **Build Validation**
+## Build Validation
 
 ### **Quick Build Test**
 ```bash
@@ -87,7 +87,7 @@ make all           # Build everything
 .\make.ps1 all     # Build everything
 ```
 
-## 📊 **Architecture Benefits**
+## Architecture Benefits
 
 ### **For Developers**
 - **Clear separation of concerns**: Security in Rust, business logic in Go/C++
@@ -104,7 +104,7 @@ make all           # Build everything
 - **Security auditing**: Audit once (Rust core), trust everywhere
 - **Production deployment**: All outputs are production-hardened
 
-## 🔍 **Verification Commands**
+## Verification Commands
 
 ```bash
 # Verify Rust core is built
@@ -123,13 +123,13 @@ make all           # Unix/Linux
 cmake . && make    # CMake
 ```
 
-## 🎉 **Architecture Status: VALIDATED ✅**
+## Architecture Status: VALIDATED
 
 The hub-and-spoke model is **production-ready** with:
-- ✅ Rust security core built and tested
-- ✅ Go application fully integrated with SecureBuffer
-- ✅ C++ RAII wrapper demonstration working
-- ✅ Multiple build systems functional
-- ✅ All security guarantees verified
+-- Rust security core built and tested
+-- Go application fully integrated with SecureBuffer
+-- C++ RAII wrapper demonstration working
+-- Multiple build systems functional
+-- All security guarantees verified
 
 **This architecture provides maximum security with developer flexibility - exactly what enterprise Bitcoin applications need.**

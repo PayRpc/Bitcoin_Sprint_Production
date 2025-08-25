@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "🚀 Run Bitcoin Sprint (Development)",
+            "name": "Run Bitcoin Sprint (Development)",
             "type": "go",
             "request": "launch",
             "mode": "auto",
@@ -15,7 +15,7 @@
             "showLog": true
         },
         {
-            "name": "⚡ Run Bitcoin Sprint (Release Mode)",
+            "name": "Run Bitcoin Sprint (Release Mode)",
             "type": "go",
             "request": "launch",
             "mode": "auto",
@@ -30,7 +30,7 @@
             "showLog": true
         },
         {
-            "name": "🐛 Debug Bitcoin Sprint",
+            "name": "Debug Bitcoin Sprint",
             "type": "go",
             "request": "launch",
             "mode": "debug",
@@ -42,7 +42,7 @@
             "showLog": true
         },
         {
-            "name": "📊 Build Optimized Binary",
+            "name": "Build Optimized Binary",
             "type": "go",
             "request": "launch",
             "mode": "exec",

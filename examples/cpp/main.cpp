@@ -60,7 +60,7 @@ public:
 };
 
 int main() {
-    std::cout << "🔐 Bitcoin Sprint C++ SecureBuffer Example\n";
+    std::cout << "Bitcoin Sprint C++ SecureBuffer Example\n";
     std::cout << "==========================================\n\n";
 
     try {
@@ -69,7 +69,7 @@ int main() {
         SecureString apiKey(64);
         
         if (!apiKey.isValid()) {
-            std::cerr << "❌ Failed to create SecureBuffer\n";
+            std::cerr << "ERROR: Failed to create SecureBuffer\n";
             return 1;
         }
 
@@ -78,7 +78,7 @@ int main() {
         std::cout << "2. Storing sensitive data securely...\n";
         
         if (!apiKey.setData(sensitiveData)) {
-            std::cerr << "❌ Failed to store data in SecureBuffer\n";
+            std::cerr << "ERROR: Failed to store data in SecureBuffer\n";
             return 1;
         }
 
@@ -88,7 +88,7 @@ int main() {
 
         // Show that secure storage is working
         std::cout << "4. SecureBuffer length: " << apiKey.length() << " bytes\n";
-        std::cout << "✅ Sensitive data is now protected in memory-locked storage\n\n";
+    std::cout << "Sensitive data is now protected in memory-locked storage\n\n";
 
         // Demonstrate multiple secure buffers
         std::cout << "5. Creating additional secure storage...\n";
@@ -97,21 +97,21 @@ int main() {
 
         if (password.setData("MySecretPassword123!") && 
             token.setData("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9")) {
-            std::cout << "✅ Multiple secure buffers created successfully\n";
+            std::cout << "Multiple secure buffers created successfully\n";
             std::cout << "   - Password buffer: " << password.length() << " bytes\n";
             std::cout << "   - Token buffer: " << token.length() << " bytes\n";
         }
 
-        std::cout << "\n🛡️  Security Features Active:\n";
-        std::cout << "   ✓ Memory pages locked (cannot be swapped to disk)\n";
-        std::cout << "   ✓ Memory will be securely zeroed on destruction\n";
-        std::cout << "   ✓ Protected from memory dumps and core dumps\n";
-        std::cout << "   ✓ RAII ensures automatic cleanup\n";
+    std::cout << "\nSecurity Features Active:\n";
+    std::cout << "   - Memory pages locked (cannot be swapped to disk)\n";
+    std::cout << "   - Memory will be securely zeroed on destruction\n";
+    std::cout << "   - Protected from memory dumps and core dumps\n";
+    std::cout << "   - RAII ensures automatic cleanup\n";
 
-        std::cout << "\n🎉 C++ SecureBuffer integration working perfectly!\n";
+    std::cout << "\nC++ SecureBuffer integration working correctly.\n";
 
     } catch (const std::exception& e) {
-        std::cerr << "❌ Error: " << e.what() << std::endl;
+        std::cerr << "ERROR: " << e.what() << std::endl;
         return 1;
     }
 

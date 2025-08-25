@@ -72,41 +72,41 @@ help:
 
 # Check build environment
 check:
-	@echo "🔍 Checking build environment..."
+	@echo "Checking build environment..."
 	@echo "OS: $(DETECTED_OS)"
-	@command -v rustc >/dev/null 2>&1 || { echo "❌ Rust not found! Install from https://rustup.rs/"; exit 1; }
-	@command -v cargo >/dev/null 2>&1 || { echo "❌ Cargo not found!"; exit 1; }
-	@command -v go >/dev/null 2>&1 || { echo "❌ Go not found! Install from https://golang.org/"; exit 1; }
-	@command -v $(CC) >/dev/null 2>&1 || { echo "❌ C compiler ($(CC)) not found!"; exit 1; }
+	@command -v rustc >/dev/null 2>&1 || { echo "ERROR: Rust not found! Install from https://rustup.rs/"; exit 1; }
+	@command -v cargo >/dev/null 2>&1 || { echo "ERROR: Cargo not found!"; exit 1; }
+	@command -v go >/dev/null 2>&1 || { echo "ERROR: Go not found! Install from https://golang.org/"; exit 1; }
+	@command -v $(CC) >/dev/null 2>&1 || { echo "ERROR: C compiler ($(CC)) not found!"; exit 1; }
 	@rustc --version
 	@cargo --version
 	@go version
 	@$(CC) --version
-	@echo "✅ Build environment ready!"
+	@echo "Build environment ready!"
 
 # Install dependencies
 deps:
-	@echo "📦 Installing dependencies..."
+	@echo "Installing dependencies..."
 	@cd $(RUST_DIR) && cargo fetch
 	@cd $(GO_MAIN) && go mod download
-	@echo "✅ Dependencies installed!"
+	@echo "Dependencies installed!"
 
 # Build Rust SecureBuffer library
 rust:
-	@echo "🦀 Building Rust SecureBuffer library..."
+	@echo "Building Rust SecureBuffer library..."
 	@cd $(RUST_DIR) && cargo build --release --target $(CARGO_TARGET)
 ifeq ($(DETECTED_OS),Windows)
-	@echo "📦 Windows artifacts:"
+	@echo "Windows artifacts:"
 	@ls -la $(RUST_DIR)/target/release/ | grep -E "\.(dll|lib|pdb)$$" || true
 else
-	@echo "📦 Unix artifacts:"
+	@echo "Unix artifacts:"
 	@ls -la $(RUST_DIR)/target/release/ | grep -E "\.(so|a)$$" || true
 endif
-	@echo "✅ Rust build completed!"
+	@echo "Rust build completed!"
 
 # Build Go application
 go: rust
-	@echo "🚀 Building Go application..."
+	@echo "Building Go application..."
 	@mkdir -p $(BUILD_DIR)
 	@cd $(GO_MAIN) && \
 		CGO_ENABLED=1 \
@@ -117,11 +117,11 @@ go: rust
 		-ldflags "$(GO_LDFLAGS)" \
 		-o ../../$(BUILD_DIR)/$(BINARY_NAME) \
 		.
-	@echo "✅ Go build completed: $(BUILD_DIR)/$(BINARY_NAME)"
+	@echo "Go build completed: $(BUILD_DIR)/$(BINARY_NAME)"
 
 # Build demo version
 demo: rust
-	@echo "🎮 Building demo version..."
+	@echo "Building demo version..."
 	@mkdir -p $(BUILD_DIR)
 	@cd $(GO_MAIN) && \
 		CGO_ENABLED=1 \
@@ -133,11 +133,11 @@ demo: rust
 		-ldflags "$(GO_LDFLAGS) -X main.Version=$(VERSION)-demo -X main.Commit=demo" \
 		-o ../../$(BUILD_DIR)/bitcoin-sprint-demo$(EXE_EXT) \
 		.
-	@echo "✅ Demo build completed: $(BUILD_DIR)/bitcoin-sprint-demo$(EXE_EXT)"
+	@echo "Demo build completed: $(BUILD_DIR)/bitcoin-sprint-demo$(EXE_EXT)"
 
 # Run tests
 test: rust
-	@echo "🧪 Running tests..."
+	@echo "Running tests..."
 	@cd $(RUST_DIR) && cargo test
 	@cd $(GO_MAIN) && \
 		CGO_ENABLED=1 \
@@ -145,42 +145,42 @@ test: rust
 		CGO_LDFLAGS="$(CGO_LDFLAGS)" \
 		CC=$(CC) \
 		go test -v ./...
-	@echo "✅ All tests passed!"
+	@echo "All tests passed!"
 
 # Clean build artifacts
 clean:
-	@echo "🧹 Cleaning build artifacts..."
+	@echo "Cleaning build artifacts..."
 	@rm -rf $(BUILD_DIR)
 	@cd $(RUST_DIR) && cargo clean
 	@cd $(GO_MAIN) && go clean
 	@rm -f bitcoin-sprint$(EXE_EXT) bitcoin-sprint-demo$(EXE_EXT)
-	@echo "✅ Clean completed!"
+	@echo "Clean completed!"
 
 # Install to system
 install: all
-	@echo "📋 Installing Bitcoin Sprint..."
+	@echo "Installing Bitcoin Sprint..."
 ifeq ($(DETECTED_OS),Windows)
 	@copy $(BUILD_DIR)\$(BINARY_NAME) %USERPROFILE%\AppData\Local\Microsoft\WindowsApps\
 else
 	@sudo cp $(BUILD_DIR)/$(BINARY_NAME) /usr/local/bin/
 endif
-	@echo "✅ Bitcoin Sprint installed!"
+	@echo "Bitcoin Sprint installed!"
 
 # Development shortcuts
 dev: clean all
-	@echo "🔧 Development build complete!"
+	@echo "Development build complete!"
 
 release: VERSION := $(shell git describe --tags --exact-match 2>/dev/null || echo "v0.0.0")
 release: clean all
-	@echo "🚀 Release build complete: $(VERSION)"
+	@echo "Release build complete: $(VERSION)"
 
 # C++ example (if needed for extensions)
 cpp-example:
-	@echo "🔧 Building C++ example..."
+	@echo "Building C++ example..."
 	@mkdir -p $(BUILD_DIR)
 	@$(CXX) -std=c++17 -I$(RUST_DIR)/include \
 		-L$(RUST_DIR)/target/release \
 		-lsecurebuffer \
 		-o $(BUILD_DIR)/cpp-example$(EXE_EXT) \
 		examples/cpp/main.cpp
-	@echo "✅ C++ example built: $(BUILD_DIR)/cpp-example$(EXE_EXT)"
+	@echo "C++ example built: $(BUILD_DIR)/cpp-example$(EXE_EXT)"
