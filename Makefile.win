@@ -1,0 +1,103 @@
+# Bitcoin Sprint Windows Makefile
+# Optimized for Windows development with MSVC/clang-cl
+
+# Windows-specific settings
+CC = clang-cl
+CXX = clang-cl
+RUST_TARGET = x86_64-pc-windows-msvc
+EXE_EXT = .exe
+LIB_EXT = .dll
+
+# Directories
+RUST_DIR = secure\rust
+GO_MAIN = cmd\sprint
+BUILD_DIR = build
+EXAMPLES_DIR = examples
+
+# Build flags
+RUST_LIB = $(RUST_DIR)\target\release\securebuffer$(LIB_EXT)
+CGO_CFLAGS = -I$(RUST_DIR)\include
+CGO_LDFLAGS = -L$(RUST_DIR)\target\release -lsecurebuffer
+
+# Version info
+!IF "$(VERSION)" == ""
+VERSION = dev
+!ENDIF
+
+!IF "$(COMMIT)" == ""
+COMMIT = unknown
+!ENDIF
+
+GO_LDFLAGS = -X main.Version=$(VERSION) -X main.Commit=$(COMMIT)
+
+# Targets
+all: check rust go
+
+help:
+	@echo Bitcoin Sprint Windows Build System
+	@echo ===================================
+	@echo.
+	@echo Targets:
+	@echo   all       - Build everything
+	@echo   rust      - Build Rust library
+	@echo   go        - Build Go application  
+	@echo   cpp       - Build C++ example
+	@echo   clean     - Clean build artifacts
+	@echo   test      - Run tests
+	@echo   demo      - Build demo version
+	@echo.
+	@echo Usage:
+	@echo   nmake /f Makefile.win all
+	@echo   nmake /f Makefile.win cpp
+	@echo   nmake /f Makefile.win clean
+
+check:
+	@echo 🔍 Checking Windows build environment...
+	@rustc --version
+	@cargo --version  
+	@go version
+	@$(CC) --version
+	@echo ✅ Environment ready!
+
+rust:
+	@echo 🦀 Building Rust SecureBuffer...
+	@cd $(RUST_DIR) && cargo build --release --target $(RUST_TARGET)
+	@echo ✅ Rust build completed!
+
+go: rust
+	@echo 🚀 Building Go application...
+	@if not exist $(BUILD_DIR) mkdir $(BUILD_DIR)
+	@cd $(GO_MAIN) && set CGO_ENABLED=1 && set CGO_CFLAGS=$(CGO_CFLAGS) && set CGO_LDFLAGS=$(CGO_LDFLAGS) && set CC=$(CC) && go build -ldflags "$(GO_LDFLAGS)" -o ..\..\$(BUILD_DIR)\bitcoin-sprint$(EXE_EXT) .
+	@echo ✅ Go build completed!
+
+cpp: rust
+	@echo 🔧 Building C++ example...
+	@if not exist $(BUILD_DIR) mkdir $(BUILD_DIR)
+	@$(CXX) /std:c++17 /I$(RUST_DIR)\include /Fe$(BUILD_DIR)\cpp-example$(EXE_EXT) $(EXAMPLES_DIR)\cpp\main.cpp /link /LIBPATH:$(RUST_DIR)\target\release securebuffer.lib
+	@echo ✅ C++ example built!
+
+demo: rust
+	@echo 🎮 Building demo version...
+	@if not exist $(BUILD_DIR) mkdir $(BUILD_DIR)
+	@cd $(GO_MAIN) && set CGO_ENABLED=1 && set CGO_CFLAGS=$(CGO_CFLAGS) && set CGO_LDFLAGS=$(CGO_LDFLAGS) && set CC=$(CC) && go build -tags=demo -ldflags "$(GO_LDFLAGS) -X main.Version=$(VERSION)-demo" -o ..\..\$(BUILD_DIR)\bitcoin-sprint-demo$(EXE_EXT) .
+	@echo ✅ Demo build completed!
+
+test: rust
+	@echo 🧪 Running tests...
+	@cd $(RUST_DIR) && cargo test
+	@cd $(GO_MAIN) && set CGO_ENABLED=1 && set CGO_CFLAGS=$(CGO_CFLAGS) && set CGO_LDFLAGS=$(CGO_LDFLAGS) && set CC=$(CC) && go test -v .\...
+	@echo ✅ Tests completed!
+
+clean:
+	@echo 🧹 Cleaning build artifacts...
+	@if exist $(BUILD_DIR) rmdir /s /q $(BUILD_DIR)
+	@cd $(RUST_DIR) && cargo clean
+	@cd $(GO_MAIN) && go clean
+	@if exist bitcoin-sprint$(EXE_EXT) del bitcoin-sprint$(EXE_EXT)
+	@if exist bitcoin-sprint-demo$(EXE_EXT) del bitcoin-sprint-demo$(EXE_EXT)
+	@echo ✅ Clean completed!
+
+install: all
+	@echo 📋 Installing to Windows Apps...
+	@copy $(BUILD_DIR)\bitcoin-sprint$(EXE_EXT) %USERPROFILE%\AppData\Local\Microsoft\WindowsApps\
+	@echo ✅ Installed!

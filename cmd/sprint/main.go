@@ -32,6 +32,8 @@ import (
 
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
+
+	"github.com/PayRpc/Bitcoin-Sprint/pkg/secure"
 )
 
 // Versioning - populated at build time via -ldflags
@@ -43,20 +45,154 @@ var (
 // ───────────────────────── Types ─────────────────────────
 
 type Config struct {
-	LicenseKey     string         `json:"license_key"`
-	Tier           string         `json:"tier"`
-	MetricsURL     string         `json:"metrics_url"`
-	RPCNodes       []string       `json:"rpc_nodes"`
-	APIBase        string         `json:"api_base"`
-	RPCUser        string         `json:"rpc_user"`
-	RPCPass        string         `json:"rpc_pass"`
-	PollInterval   int            `json:"poll_interval"`    // seconds, default 5
-	TurboMode      bool           `json:"turbo_mode"`       // enable ultra-aggressive fan-out
-	MaxPeers       int            `json:"max_peers"`        // maximum peer connections
-	LogLevel       string         `json:"log_level"`        // debug, info, warn, error
-	RateLimits     map[string]int `json:"rate_limits"`      // e.g., {"/latest": 5}
-	PeerSecret     string         `json:"peer_secret"`      // shared secret for peer auth
-	PeerListenPort int            `json:"peer_listen_port"` // port for peer mesh networking, default 8335
+	LicenseKey     *secure.SecureBuffer `json:"-"` // Secure: license key
+	Tier           string               `json:"tier"`
+	MetricsURL     string               `json:"metrics_url"`
+	RPCNodes       []string             `json:"rpc_nodes"`
+	APIBase        string               `json:"api_base"`
+	RPCUser        string               `json:"rpc_user"`
+	RPCPass        *secure.SecureBuffer `json:"-"`                // Secure: RPC password
+	PollInterval   int                  `json:"poll_interval"`    // seconds, default 5
+	TurboMode      bool                 `json:"turbo_mode"`       // enable ultra-aggressive fan-out
+	MaxPeers       int                  `json:"max_peers"`        // maximum peer connections
+	LogLevel       string               `json:"log_level"`        // debug, info, warn, error
+	RateLimits     map[string]int       `json:"rate_limits"`      // e.g., {"/latest": 5}
+	PeerSecret     *secure.SecureBuffer `json:"-"`                // Secure: shared secret for peer auth
+	PeerListenPort int                  `json:"peer_listen_port"` // port for peer mesh networking, default 8335
+
+	// Plain text versions for JSON marshaling/unmarshaling
+	LicenseKeyPlain string `json:"license_key"`
+	RPCPassPlain    string `json:"rpc_pass"`
+	PeerSecretPlain string `json:"peer_secret"`
+}
+
+// SecureConfig provides secure memory handling for sensitive configuration data
+func (c *Config) InitializeSecureFields() error {
+	// Initialize SecureBuffers for sensitive data
+	if c.LicenseKeyPlain != "" {
+		c.LicenseKey = secure.NewSecureBuffer(len(c.LicenseKeyPlain))
+		if c.LicenseKey == nil {
+			return fmt.Errorf("failed to create secure buffer for license key")
+		}
+		if !c.LicenseKey.Copy([]byte(c.LicenseKeyPlain)) {
+			return fmt.Errorf("failed to copy license key to secure buffer")
+		}
+		// Clear plain text version
+		c.LicenseKeyPlain = ""
+	}
+
+	if c.RPCPassPlain != "" {
+		c.RPCPass = secure.NewSecureBuffer(len(c.RPCPassPlain))
+		if c.RPCPass == nil {
+			return fmt.Errorf("failed to create secure buffer for RPC password")
+		}
+		if !c.RPCPass.Copy([]byte(c.RPCPassPlain)) {
+			return fmt.Errorf("failed to copy RPC password to secure buffer")
+		}
+		// Clear plain text version
+		c.RPCPassPlain = ""
+	}
+
+	if c.PeerSecretPlain != "" {
+		c.PeerSecret = secure.NewSecureBuffer(len(c.PeerSecretPlain))
+		if c.PeerSecret == nil {
+			return fmt.Errorf("failed to create secure buffer for peer secret")
+		}
+		if !c.PeerSecret.Copy([]byte(c.PeerSecretPlain)) {
+			return fmt.Errorf("failed to copy peer secret to secure buffer")
+		}
+		// Clear plain text version
+		c.PeerSecretPlain = ""
+	}
+
+	return nil
+}
+
+// GetLicenseKey returns the license key from secure memory
+func (c *Config) GetLicenseKey() string {
+	if c.LicenseKey == nil {
+		return ""
+	}
+	data := c.LicenseKey.Data()
+	if data == nil {
+		return ""
+	}
+	return string(data)
+}
+
+// GetRPCPass returns the RPC password from secure memory
+func (c *Config) GetRPCPass() string {
+	if c.RPCPass == nil {
+		return ""
+	}
+	data := c.RPCPass.Data()
+	if data == nil {
+		return ""
+	}
+	return string(data)
+}
+
+// GetPeerSecret returns the peer secret from secure memory
+func (c *Config) GetPeerSecret() string {
+	if c.PeerSecret == nil {
+		return ""
+	}
+	data := c.PeerSecret.Data()
+	if data == nil {
+		return ""
+	}
+	return string(data)
+}
+
+// Cleanup securely frees all sensitive data
+func (c *Config) Cleanup() {
+	if c.LicenseKey != nil {
+		c.LicenseKey.Free()
+		c.LicenseKey = nil
+	}
+	if c.RPCPass != nil {
+		c.RPCPass.Free()
+		c.RPCPass = nil
+	}
+	if c.PeerSecret != nil {
+		c.PeerSecret.Free()
+		c.PeerSecret = nil
+	}
+}
+
+// MarshalJSON implements custom JSON marshaling for Config
+func (c *Config) MarshalJSON() ([]byte, error) {
+	// Prepare plain text versions for JSON serialization
+	c.LicenseKeyPlain = c.GetLicenseKey()
+	c.RPCPassPlain = c.GetRPCPass()
+	c.PeerSecretPlain = c.GetPeerSecret()
+
+	// Create a copy with plain text fields for marshaling
+	type ConfigAlias Config
+	alias := (*ConfigAlias)(c)
+
+	data, err := json.Marshal(alias)
+
+	// Immediately clear plain text versions after marshaling
+	c.LicenseKeyPlain = ""
+	c.RPCPassPlain = ""
+	c.PeerSecretPlain = ""
+
+	return data, err
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for Config
+func (c *Config) UnmarshalJSON(data []byte) error {
+	// Use alias to avoid recursion
+	type ConfigAlias Config
+	alias := (*ConfigAlias)(c)
+
+	if err := json.Unmarshal(data, alias); err != nil {
+		return err
+	}
+
+	// Initialize secure fields from plain text versions
+	return c.InitializeSecureFields()
 }
 
 type License struct {
@@ -487,6 +623,9 @@ func (s *Sprint) Shutdown() {
 
 	// Close metrics channel
 	close(s.metrics)
+
+	// Cleanup sensitive configuration data
+	s.config.Cleanup()
 }
 
 // ───────────────────────── Config and License ─────────────────────────
@@ -504,15 +643,15 @@ func (s *Sprint) LoadConfig() error {
 		RateLimits:     make(map[string]int),
 	}
 
-	// Override with env vars for sensitive fields
+	// Override with env vars for sensitive fields - use plain text versions temporarily
 	if user := os.Getenv("RPC_USER"); user != "" {
 		s.config.RPCUser = user
 	}
 	if pass := os.Getenv("RPC_PASS"); pass != "" {
-		s.config.RPCPass = pass
+		s.config.RPCPassPlain = pass
 	}
 	if secret := os.Getenv("PEER_SECRET"); secret != "" {
-		s.config.PeerSecret = secret
+		s.config.PeerSecretPlain = secret
 	}
 
 	// Read config file
@@ -520,14 +659,38 @@ func (s *Sprint) LoadConfig() error {
 	if err != nil {
 		if os.IsNotExist(err) {
 			zap.L().Warn("No config.json found, using defaults")
+			// Still need to initialize secure fields from env vars
+			if err := s.config.InitializeSecureFields(); err != nil {
+				return fmt.Errorf("failed to initialize secure fields: %w", err)
+			}
 			return nil
 		}
 		return fmt.Errorf("failed to read config.json: %w", err)
 	}
 
-	// Unmarshal JSON into config
+	// Unmarshal JSON into config (this will call InitializeSecureFields via UnmarshalJSON)
 	if err := json.Unmarshal(data, &s.config); err != nil {
 		return fmt.Errorf("failed to parse config.json: %w", err)
+	}
+
+	// Override JSON config with env vars if present
+	if pass := os.Getenv("RPC_PASS"); pass != "" {
+		if s.config.RPCPass != nil {
+			s.config.RPCPass.Free()
+		}
+		s.config.RPCPassPlain = pass
+		if err := s.config.InitializeSecureFields(); err != nil {
+			return fmt.Errorf("failed to reinitialize RPC password from env: %w", err)
+		}
+	}
+	if secret := os.Getenv("PEER_SECRET"); secret != "" {
+		if s.config.PeerSecret != nil {
+			s.config.PeerSecret.Free()
+		}
+		s.config.PeerSecretPlain = secret
+		if err := s.config.InitializeSecureFields(); err != nil {
+			return fmt.Errorf("failed to reinitialize peer secret from env: %w", err)
+		}
 	}
 
 	// Set default peer listen port if not specified
@@ -535,8 +698,8 @@ func (s *Sprint) LoadConfig() error {
 		s.config.PeerListenPort = 8335
 	}
 
-	// Validate required fields
-	if s.config.LicenseKey == "" {
+	// Validate required fields using secure getters
+	if s.config.GetLicenseKey() == "" {
 		return fmt.Errorf("license_key is required in config")
 	}
 	if len(s.config.RPCNodes) == 0 {
