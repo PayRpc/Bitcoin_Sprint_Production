@@ -5,7 +5,8 @@
 package secure
 
 /*
-#cgo windows LDFLAGS: -L${SRCDIR}/../../secure/rust/target/release -lsecurebuffer
+// Prefer the standard release dir and also include the GNU target dir on Windows for MinGW toolchains
+#cgo windows LDFLAGS: -L${SRCDIR}/../../secure/rust/target/release -L${SRCDIR}/../../secure/rust/target/x86_64-pc-windows-gnu/release -lsecurebuffer
 #cgo linux   LDFLAGS: -L${SRCDIR}/../../secure/rust/target/release -lsecurebuffer
 #cgo darwin  LDFLAGS: -L${SRCDIR}/../../secure/rust/target/release -lsecurebuffer
 

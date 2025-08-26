@@ -1,14 +1,15 @@
 {
-	"license_key": "config_test_key_12345",
-	"tier": "pro", 
-	"poll_interval": 10,
-	"turbo_mode": true,
+	"license_key": "DEMO_LICENSE_BYPASS",
+	"tier": "enterprise", 
+	"poll_interval": 2,
+	"turbo_mode": false,
 	"rpc_nodes": [
-		"https://node1.example.com:8332"
+		"http://localhost:8332"
 	],
-	"rpc_user": "config_user",
-	"rpc_pass": "config_pass",
+	"rpc_user": "test_user",
+	"rpc_pass": "strong_random_password_here",
 	"peer_secret": "config_secret_abc",
+	"dashboard_port": 8080,
 	"api_base": "http://localhost:8080",
 	"metrics_url": "https://api.bitcoincab.inc/metrics",
 	"log_level": "debug",

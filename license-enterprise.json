@@ -1,0 +1,17 @@
+{
+  "license": {
+    "tier": "enterprise",
+    "key": "ENTERPRISE-FULL-FEATURES-ACTIVE",
+    "issued_to": "Bitcoin Sprint Enterprise User",
+    "expires": "2030-12-31T23:59:59Z",
+    "features": {
+      "unlimited_blocks": true,
+      "turbo_mode": true,
+      "network_optimization": true,
+      "secure_memory": true,
+      "enterprise_api": true,
+      "predictive_monitoring": true,
+      "advanced_metrics": true
+    }
+  }
+}

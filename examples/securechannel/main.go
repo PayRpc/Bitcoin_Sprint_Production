@@ -18,7 +18,7 @@ import (
 func main() {
 	// Initialize professional SecureChannel service
 	config := &secure.ServiceConfig{
-		RustPoolURL:      getEnv("RUST_POOL_URL", "http://localhost:9090"),
+		RustPoolURL:      getEnv("RUST_POOL_URL", "http://127.0.0.1:9191"),
 		CacheTimeout:     30 * time.Second,
 		HealthTimeout:    5 * time.Second,
 		MonitorInterval:  15 * time.Second,
@@ -195,7 +195,7 @@ func getEnv(key, defaultValue string) string {
 func exampleDirectClientUsage() {
 	// Create client for direct API access
 	config := &secure.ClientConfig{
-		BaseURL:       "http://localhost:9090",
+		BaseURL:       "http://127.0.0.1:9191",
 		Timeout:       10 * time.Second,
 		RetryAttempts: 3,
 		RetryDelay:    1 * time.Second,

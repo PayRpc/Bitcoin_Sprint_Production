@@ -97,6 +97,12 @@ impl SecureBuffer {
     pub fn len(&self) -> usize { self.buffer.len() }
 }
 
+impl Zeroize for SecureBuffer {
+    fn zeroize(&mut self) {
+        self.buffer.zeroize();
+    }
+}
+
 impl Drop for SecureBuffer {
     fn drop(&mut self) {
         self.is_valid = false;

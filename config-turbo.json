@@ -1,25 +1,31 @@
 {
 	"license_key": "DEMO_LICENSE_BYPASS",
 	"tier": "enterprise",
-	"poll_interval": 2,
-	"turbo_mode": false,
+	"poll_interval": 1,
+	"turbo_mode": true,
+
 	"rpc_nodes": [
 		"http://localhost:8332"
 	],
 	"rpc_user": "test_user",
 	"rpc_pass": "strong_random_password_here",
-	"peer_secret": "test_peer_secret_xyz",
+
+	"peer_secret": "dev-peer-secret-key-for-testing",
 	"dashboard_port": 8080,
+
 	"api_base": "http://localhost:8080",
 	"metrics_url": "https://api.bitcoincab.inc/metrics",
 	"log_level": "info",
-	"max_peers": 50,
+	"max_peers": 100,
 	"rate_limits": {
-		"/status": 1,
-		"/latest": 4,
-		"/metrics": 2,
-		"/predictive": 2,
-		"/stream": 1
+		"/status": 10,
+		"/latest": 20,
+		"/metrics": 10,
+		"/predictive": 10,
+		"/stream": 5
 	},
-	"peer_listen_port": 8335
+	"peer_listen_port": 8335,
+	"network_optimization": true,
+	"memory_protection": true,
+	"performance_mode": "turbo"
 }

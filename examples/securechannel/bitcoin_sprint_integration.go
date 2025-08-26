@@ -23,7 +23,7 @@ type BitcoinSprintService struct {
 func NewBitcoinSprintService() (*BitcoinSprintService, error) {
 	// Configure SecureChannel for production
 	config := &secure.ServiceConfig{
-		RustPoolURL:      "http://localhost:9090",
+		RustPoolURL:      "http://127.0.0.1:9191",
 		CacheTimeout:     30 * time.Second,
 		HealthTimeout:    5 * time.Second,
 		MonitorInterval:  15 * time.Second,

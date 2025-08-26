@@ -4,9 +4,9 @@
   "description": "Bitcoin Sprint Web Dashboard and API",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3002",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3002",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "prisma:migrate": "prisma migrate dev",

@@ -1,3 +1,6 @@
+//go:build ignore
+// +build ignore
+
 // Integration with Bitcoin Sprint Go Service
 // Add this to your cmd/sprint/main.go to use the improved SecureChannel
 

@@ -35,7 +35,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
-	"github.com/PayRpc/Bitcoin-Sprint/pkg/secure"
+	secure "github.com/PayRpc/Bitcoin-Sprint/pkg/secure"
 )
 
 // Versioning - populated at build time via -ldflags
@@ -274,6 +274,7 @@ type SecureChannelStatus struct {
 	LastHealthCheck   time.Time `json:"last_health_check"`
 	Endpoint          string    `json:"endpoint"`
 	ServiceUptime     string    `json:"service_uptime"`
+	Backend           string    `json:"backend"`
 }
 
 type PredictiveResponse struct {
@@ -625,7 +626,7 @@ func NewSprint() (*Sprint, error) {
 	// Initialize SecureChannel client (Professional)
 	secureChannelURL := os.Getenv("SECURE_CHANNEL_URL")
 	if secureChannelURL == "" {
-		secureChannelURL = "http://localhost:9090" // Default Rust pool URL
+		secureChannelURL = "http://127.0.0.1:8181" // Default secure channel URL
 	}
 
 	s.secureChannelClient = secure.NewSecureChannelPoolClient(secureChannelURL)
@@ -661,7 +662,7 @@ func (s *Sprint) Start() error {
 
 	// Log configuration
 	dashPort := s.getDashboardPort()
-	zap.L().Info("Dashboard started", zap.String("url", "http://localhost"+dashPort))
+	zap.L().Info("Dashboard started", zap.String("url", "http://"+dashPort))
 	zap.L().Info("Configuration",
 		zap.String("tier", s.config.Tier),
 		zap.Int("nodes", len(s.config.RPCNodes)),
@@ -724,7 +725,7 @@ func (s *Sprint) LoadConfig() error {
 		Tier:           "free",
 		LogLevel:       "info",
 		MaxPeers:       100,
-		PeerListenPort: 8335,
+		PeerListenPort: 8333,
 		MetricsURL:     "https://api.bitcoincab.inc/metrics",
 		APIBase:        "http://localhost:8080",
 		RateLimits:     make(map[string]int),
@@ -788,15 +789,19 @@ func (s *Sprint) LoadConfig() error {
 
 	// Set default peer listen port if not specified
 	if s.config.PeerListenPort == 0 {
-		s.config.PeerListenPort = 8335
+		s.config.PeerListenPort = 8333
 	}
 
 	// Validate required fields using secure buffers without creating strings
 	if s.config.LicenseKey == nil || s.config.LicenseKey.Data() == nil || len(s.config.LicenseKey.Data()) == 0 {
 		return fmt.Errorf("license_key is required in config")
 	}
+	// Allow zero RPC nodes when SecureChannel is enabled by the application.
 	if len(s.config.RPCNodes) == 0 {
-		return fmt.Errorf("at least one RPC node must be specified")
+		if !s.secureChannelEnabled {
+			return fmt.Errorf("at least one RPC node must be specified")
+		}
+		// SecureChannel is enabled in NewSprint(); allow empty RPCNodes and proceed
 	}
 	for _, node := range s.config.RPCNodes {
 		if !strings.HasPrefix(node, "https://") && !strings.HasPrefix(node, "http://localhost") {
@@ -1104,6 +1109,16 @@ func (s *Sprint) getBestBlock() (string, int, string, error) {
 	var node string
 	var err error
 
+	// If there are no local RPC nodes configured, and SecureChannel is enabled,
+	// return an explicit error instead of indexing into the empty slice. The
+	// poller will handle this gracefully (no panic).
+	if len(s.config.RPCNodes) == 0 {
+		if s.secureChannelEnabled {
+			return "", 0, "", fmt.Errorf("no RPC nodes configured (secure-channel-only mode)")
+		}
+		return "", 0, "", fmt.Errorf("no RPC nodes configured")
+	}
+
 	if len(s.config.RPCNodes) > 1 && s.config.TurboMode {
 		hash, height, node, err = s.getBestBlockParallel()
 	} else {
@@ -1201,25 +1216,64 @@ func (s *Sprint) getBestBlockParallel() (string, int, string, error) {
 }
 
 func (s *Sprint) getBestBlockSingle() (string, int, string, error) {
-	node := s.config.RPCNodes[0]
+	// Prefer local RPC node when available
+	if len(s.config.RPCNodes) > 0 {
+		node := s.config.RPCNodes[0]
 
-	if s.isNodeInBackoff(node) {
-		backoff := s.nodeBackoff[node]
-		return "", 0, "", fmt.Errorf("node %s in backoff until %v (last error: %v)",
-			node, backoff.until, backoff.lastError)
+		if s.isNodeInBackoff(node) {
+			backoff := s.nodeBackoff[node]
+			return "", 0, "", fmt.Errorf("node %s in backoff until %v (last error: %v)",
+				node, backoff.until, backoff.lastError)
+		}
+
+		start := time.Now()
+		hash, height, err := s.queryNodeWithRetry(node, s.getBlockchainInfoReq, 3)
+		took := time.Since(start)
+		if err != nil {
+			s.setNodeBackoff(node, err)
+			return "", 0, "", err
+		}
+
+		s.clearNodeBackoff(node)
+		s.updateNodeLatency(node, took)
+		return hash, height, node, nil
 	}
 
-	start := time.Now()
-	hash, height, err := s.queryNodeWithRetry(node, s.getBlockchainInfoReq, 3)
-	took := time.Since(start)
-	if err != nil {
-		s.setNodeBackoff(node, err)
-		return "", 0, "", err
+	// No local RPC nodes: try SecureChannel RPC proxy if available
+	if s.secureChannelEnabled && s.secureChannelClient != nil {
+		ctx, cancel := context.WithTimeout(s.ctx, 3*time.Second)
+		defer cancel()
+
+		// Use pool's RPC proxy endpoint
+		body, err := s.secureChannelClient.QueryRPC(ctx, s.getBlockchainInfoReq)
+		if err != nil {
+			return "", 0, "", fmt.Errorf("secure RPC proxy error: %w", err)
+		}
+
+		// Decode response similar to queryNode
+		var envelope struct {
+			Result struct {
+				BestHash string `json:"bestblockhash"`
+				Height   int    `json:"blocks"`
+			} `json:"result"`
+			Error *struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(body, &envelope); err != nil {
+			return "", 0, "", fmt.Errorf("decode failed: %w", err)
+		}
+		if envelope.Error != nil {
+			return "", 0, "", fmt.Errorf("RPC error %d: %s", envelope.Error.Code, envelope.Error.Message)
+		}
+		if envelope.Result.BestHash == "" {
+			return "", 0, "", fmt.Errorf("empty block hash in secure RPC response")
+		}
+		return envelope.Result.BestHash, envelope.Result.Height, "secure-channel", nil
 	}
 
-	s.clearNodeBackoff(node)
-	s.updateNodeLatency(node, took)
-	return hash, height, node, nil
+	return "", 0, "", fmt.Errorf("no RPC nodes configured and secure channel unavailable")
 }
 
 func (s *Sprint) queryNodeWithRetry(node string, reqBody []byte, retries int) (string, int, error) {
@@ -1929,15 +1983,13 @@ func (s *Sprint) StartWebDashboard() {
 	mux.HandleFunc("/latest", s.handleLatest)
 	mux.HandleFunc("/metrics", s.handleMetrics)
 	mux.HandleFunc("/predictive", s.handlePredictive)
-	mux.HandleFunc("/stream", s.handleStream)
 
 	// SecureChannel Professional API endpoints
 	mux.HandleFunc("/api/v1/secure-channel/status", s.handleSecureChannelStatus)
 	mux.HandleFunc("/api/v1/secure-channel/health", s.handleSecureChannelHealth)
 	mux.HandleFunc("/api/v1/secure-channel/connections", s.handleSecureChannelConnections)
 
-	// Customer API endpoints
-	mux.HandleFunc("/api/v1/blocks/", s.handleBlocksAPI)
+	// Public API endpoints (no authentication required)
 	mux.HandleFunc("/api/v1/license/info", s.handleLicenseInfo)
 	mux.HandleFunc("/api/v1/analytics/summary", s.handleAnalyticsSummary)
 
@@ -2014,6 +2066,7 @@ func (s *Sprint) handleStatus(w http.ResponseWriter, r *http.Request) {
 		secureChannelStatus := &SecureChannelStatus{
 			ServiceUptime: time.Since(s.secureChannelStartTime).String(),
 		}
+		secureChannelStatus.Backend = s.secureChannelClient.Backend()
 
 		// Try to get current pool status
 		if poolStatus, err := s.secureChannelClient.GetPoolStatus(ctx); err == nil {
@@ -2059,6 +2112,9 @@ func (s *Sprint) handleStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Bitcoin-Sprint-Version", Version)
 	w.Header().Set("X-SecureChannel-Enabled", fmt.Sprintf("%t", s.secureChannelEnabled))
+	if s.secureChannelClient != nil {
+		w.Header().Set("X-SecureChannel-Backend", s.secureChannelClient.Backend())
+	}
 
 	// Set appropriate HTTP status code based on overall health
 	if resp.SecureChannel != nil && !resp.SecureChannel.PoolHealthy {
@@ -2401,7 +2457,18 @@ func (s *Sprint) getDashboardPort() string {
 	if err != nil {
 		return ":8080"
 	}
-	return u.Host
+
+	// Check if we have a port
+	host := u.Host
+	if strings.Contains(host, ":") {
+		_, port, err := net.SplitHostPort(host)
+		if err == nil && port != "" {
+			return ":" + port
+		}
+	}
+
+	// Default to 8080 (standard HTTP alternative port)
+	return ":8080"
 }
 
 func maskLicenseKey(key string) string {
