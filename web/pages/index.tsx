@@ -21,7 +21,7 @@ export default function ApiFrontPage() {
         <meta name="description" content="Bitcoin Sprint: low-latency Bitcoin relay for sub-second block detection. Keep RPC credentials on your server; use our API key to access the relay." />
         <meta property="og:title" content="Bitcoin Sprint — Fast, secure Bitcoin API" />
         <meta property="og:description" content="Low-latency relay with secure API key isolation. RPC credentials stay on your server." />
-        <meta property="og:image" content="/logo-bitcoin-sprint.svg" />
+  <meta property="og:image" content="/20250823_1017_Bitcoin Sprint Logo_.png" />
       </Head>
     
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black text-white">
@@ -33,13 +33,16 @@ export default function ApiFrontPage() {
           transition={{ duration: 0.6 }}
           className="flex flex-col items-center"
         >
-          <Image
-            src="/logo-bitcoin-sprint.svg"
-            alt="Bitcoin Sprint Logo"
-            width={220}
-            height={220}
-            priority
-          />
+          <div className="rounded-full overflow-hidden w-[220px] h-[220px]">
+            <Image
+              src="/20250823_1017_Bitcoin Sprint Logo_.png"
+              alt="Bitcoin Sprint Logo"
+              width={220}
+              height={220}
+              priority
+              className="object-cover w-full h-full"
+            />
+          </div>
           <h1 className="text-5xl font-bold mt-6 mb-4">Bitcoin Sprint</h1>
           <p className="text-xl text-gray-300 mb-6">First to the Block, First to Profit.</p>
           <div className="flex justify-center gap-4">
@@ -140,22 +143,22 @@ export default function ApiFrontPage() {
           <Card className="bg-gray-800/70 border-gray-700">
             <CardContent className="p-6 text-center">
               <Zap className="mx-auto mb-3 text-yellow-400" size={36} />
-              <p className="text-xl font-semibold">200ms Block Detection</p>
-              <p className="text-gray-400">vs 10–30s with stock bitcoind</p>
+              <p className="text-xl font-semibold">⚡ 200 ms Block Detection</p>
+              <p className="text-gray-400">vs 10–30 s with Bitcoin Core</p>
             </CardContent>
           </Card>
           <Card className="bg-gray-800/70 border-gray-700">
             <CardContent className="p-6 text-center">
               <BarChart3 className="mx-auto mb-3 text-green-400" size={36} />
-              <p className="text-xl font-semibold">200k+ req/sec</p>
-              <p className="text-gray-400">20× faster than common RPC</p>
+              <p className="text-xl font-semibold">📊 200k+ Requests/Second</p>
+              <p className="text-gray-400">20× faster than standard JSON-RPC</p>
             </CardContent>
           </Card>
           <Card className="bg-gray-800/70 border-gray-700">
             <CardContent className="p-6 text-center">
               <Shield className="mx-auto mb-3 text-blue-400" size={36} />
-              <p className="text-xl font-semibold">Rust SecureBuffer</p>
-              <p className="text-gray-400">Secrets never leak — even under stress</p>
+              <p className="text-xl font-semibold">🛡️ Rust SecureBuffer</p>
+              <p className="text-gray-400">Secrets locked in RAM, zeroized on drop, never paged — even under stress</p>
             </CardContent>
           </Card>
         </div>

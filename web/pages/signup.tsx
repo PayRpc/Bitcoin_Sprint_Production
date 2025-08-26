@@ -104,13 +104,15 @@ export default function Signup() {
   <main className="max-w-5xl mx-auto w-full glass shadow-xl rounded-2xl p-8 relative z-10">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-6">
-            <Image
-              src="/logo-bitcoin-sprint.svg"
-              alt="Bitcoin Sprint"
-              width={220}
-              height={220}
-              className="drop-shadow-sm"
-            />
+            <div className="rounded-full overflow-hidden w-[220px] h-[220px] drop-shadow-sm">
+              <Image
+                src="/20250823_1017_Bitcoin Sprint Logo_.png"
+                alt="Bitcoin Sprint"
+                width={220}
+                height={220}
+                className="object-cover w-full h-full"
+              />
+            </div>
           </div>
           <h1 className="text-3xl font-bold text-gradient mb-2">Request an API Key</h1>
           <p className="text-gray-300 leading-relaxed">

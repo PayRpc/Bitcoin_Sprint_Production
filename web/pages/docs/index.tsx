@@ -21,7 +21,9 @@ export default function DocsPage() {
       <main className="max-w-5xl mx-auto py-16 px-6">
         <header className="text-center mb-10">
           <div className="flex items-center justify-center space-x-4">
-            <Image src="/logo-bitcoin-sprint.svg" alt="Logo" width={96} height={96} />
+            <div className="rounded-full overflow-hidden w-[96px] h-[96px]">
+              <Image src="/20250823_1017_Bitcoin Sprint Logo_.png" alt="Logo" width={96} height={96} className="object-cover w-full h-full" />
+            </div>
             <div className="text-left">
               <h1 className="text-3xl font-extrabold text-white">Bitcoin Sprint — Documentation</h1>
               <div className="flex items-center space-x-3 mt-1">
