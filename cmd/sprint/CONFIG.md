@@ -8,17 +8,27 @@ Bitcoin Sprint supports multiple configuration formats with the following preced
 4. **config.json** - JSON configuration with ${VAR} placeholders
 5. **Built-in defaults** - Fallback values
 
+## Bitcoin Core Integration
+
+Bitcoin Sprint is now fully integrated with Bitcoin Core using standard ports:
+- **Bitcoin RPC**: Port 8332 (standard Bitcoin Core RPC port)
+- **Bitcoin Sprint API**: Port 8080 (standard HTTP alternative)
+- **Peer Network**: Port 8335 (Sprint peer mesh networking)
+
 ## Configuration Sources
 
 ### Environment Variables (Recommended for Production)
 Set these environment variables directly:
 ```bash
-export LICENSE_KEY="your_license_key"
-export RPC_USER="your_username" 
-export RPC_PASS="your_password"
-export PEER_SECRET="your_secret"
-export RPC_NODES="https://node1.com:8332,https://node2.com:8332"
-export TURBO_MODE="true"
+export LICENSE_KEY="DEMO_LICENSE_BYPASS"
+export RPC_USER="test_user" 
+export RPC_PASS="strong_random_password_here"
+export PEER_SECRET="demo_peer_secret_123"
+export RPC_NODES="http://localhost:8332"
+export TURBO_MODE="false"
+export TIER="enterprise"
+export API_PORT="8080"
+export PEER_LISTEN_PORT="8335"
 ```
 
 ### .env Files (Recommended for Development)
@@ -26,16 +36,34 @@ export TURBO_MODE="true"
 2. Edit `.env.local` with your actual values
 3. The service will automatically load from `.env.local` first, then `.env`
 
-### JSON Configuration with Placeholders
-Use `config.json` with environment variable placeholders:
+### JSON Configuration with Unified Credentials
+All JSON config files now use unified credentials:
 ```json
 {
-  "license_key": "${LICENSE_KEY}",
-  "rpc_user": "${RPC_USER}",
-  "rpc_pass": "${RPC_PASS}",
-  "peer_secret": "${PEER_SECRET}",
-  "rpc_nodes": ["${RPC_NODE_1}", "${RPC_NODE_2}"]
+  "license_key": "DEMO_LICENSE_BYPASS",
+  "tier": "enterprise",
+  "rpc_user": "test_user",
+  "rpc_pass": "strong_random_password_here",
+  "peer_secret": "demo_peer_secret_123",
+  "rpc_nodes": ["http://localhost:8332"],
+  "dashboard_port": 8080,
+  "peer_listen_port": 8335
 }
+```
+
+## Bitcoin Core Setup
+
+Ensure your `bitcoin.conf` includes:
+```ini
+# Bitcoin Core Configuration for Bitcoin Sprint Integration
+server=1
+rpcuser=test_user
+rpcpassword=strong_random_password_here
+rpcport=8332
+rpcbind=127.0.0.1
+rpcallowip=127.0.0.1
+txindex=1
+disablewallet=1
 ```
 
 ## Security Notes
@@ -44,6 +72,7 @@ Use `config.json` with environment variable placeholders:
 - Use placeholder format in `config.json` for shared configurations  
 - Sensitive values are automatically masked in logs
 - SecureBuffer is used for in-memory protection of secrets
+- Bitcoin RPC is restricted to localhost only for security
 
 ## Configuration Logging
 
@@ -51,9 +80,11 @@ On startup, Bitcoin Sprint logs:
 - Configuration source used (env vars, .env.local, .env, config.json, defaults)
 - Safe summary with masked sensitive fields
 - Validation results
+- Bitcoin Core connection status
 
 Example startup log:
 ```
 INFO Configuration loaded source=.env.local
-INFO Config summary tier=pro turbo_mode=true license_key=abcd****wxyz
+INFO Config summary tier=enterprise turbo_mode=false license_key=DEMO****PASS rpc_port=8332 api_port=8080
+INFO Bitcoin Core connection status=connected rpc_host=localhost:8332
 ```

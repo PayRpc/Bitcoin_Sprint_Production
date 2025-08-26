@@ -46,10 +46,10 @@ type ServiceConfig struct {
 	LogLevel         string        `json:"log_level"`
 }
 
-// DefaultServiceConfig returns production-ready service configuration
+// DefaultServiceConfig returns production-ready service configuration for Bitcoin Core integration
 func DefaultServiceConfig() *ServiceConfig {
 	return &ServiceConfig{
-	RustPoolURL:      "http://127.0.0.1:9191",
+		RustPoolURL:      "http://127.0.0.1:8335", // Bitcoin Core peer networking port
 		CacheTimeout:     30 * time.Second,
 		HealthTimeout:    5 * time.Second,
 		MonitorInterval:  15 * time.Second,

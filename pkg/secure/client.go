@@ -18,10 +18,10 @@ type ClientConfig struct {
 	HealthInterval time.Duration `json:"health_interval"`
 }
 
-// DefaultConfig returns a production-ready configuration
+// DefaultConfig returns a production-ready configuration for Bitcoin Core integration
 func DefaultConfig() *ClientConfig {
 	return &ClientConfig{
-		BaseURL:        "http://127.0.0.1:9191",
+		BaseURL:        "http://127.0.0.1:8335", // Bitcoin Core peer networking port
 		Timeout:        10 * time.Second,
 		RetryAttempts:  3,
 		RetryDelay:     1 * time.Second,

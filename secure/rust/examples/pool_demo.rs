@@ -1,125 +1,96 @@
 use anyhow::Result;
-use secure_channel_improved::SecureChannelPool;
+use securebuffer::SecureBuffer;
 use tracing::{info, warn};
 use std::time::Duration;
-use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize tracing
     tracing_subscriber::fmt::init();
 
-    // Create pool using builder pattern with custom configuration
-    let pool = Arc::new(
-        SecureChannelPool::builder("relay.bitcoin-sprint.inc:443")
-            .with_namespace("btc_sprint")
-            .with_max_connections(50)
-            .with_min_idle(5)
-            .with_max_latency_ms(300)
-            .with_metrics_port(9090)
-            .with_metrics_host("0.0.0.0")
-            .with_cleanup_interval(Duration::from_secs(180)) // 3 minutes
-            .build()?
-    );
+    info!("Starting Bitcoin Sprint SecureBuffer Pool Demo");
 
-    info!("SecureChannelPool created with custom configuration");
-
-    // Explicitly spawn background tasks (you choose what to run!)
-    let pool_cleanup = pool.clone();
-    tokio::spawn(async move {
-        info!("Starting cleanup task...");
-        pool_cleanup.run_cleanup_task().await;
-    });
-
-    let pool_metrics = pool.clone();
-    tokio::spawn(async move {
-        info!("Starting metrics server...");
-        if let Err(e) = pool_metrics.run_metrics_task().await {
-            warn!("Metrics server failed: {}", e);
-        }
-    });
-
-    info!("Background tasks started");
-    info!("Metrics available at:");
-    info!("  - http://localhost:9090/metrics (Prometheus)");
-    info!("  - http://localhost:9090/status/connections (JSON pool status)");
-    info!("  - http://localhost:9090/healthz (Health check)");
-
-    // Example worker task using the pool
-    let pool_worker = pool.clone();
-    let worker_task = tokio::spawn(async move {
-        let mut iteration = 0;
-        loop {
-            iteration += 1;
-            info!("Worker iteration #{}", iteration);
-
-            match pool_worker.get_connection().await {
-                Ok(mut conn) => {
-                    info!("Successfully got connection from pool");
-                    
-                    // Simulate some work
-                    match conn.write_all(b"PING\n").await {
-                        Ok(_) => {
-                            let mut buf = [0u8; 1024];
-                            match conn.read(&mut buf).await {
-                                Ok(bytes_read) => {
-                                    info!("Read {} bytes from connection", bytes_read);
-                                }
-                                Err(e) => warn!("Read failed: {}", e),
-                            }
-                        }
-                        Err(e) => warn!("Write failed: {}", e),
-                    }
-
-                    // Connection automatically returned to pool when dropped
-                }
-                Err(e) => {
-                    warn!("Failed to get connection: {}", e);
-                }
-            }
-
-            // Wait before next iteration
-            tokio::time::sleep(Duration::from_secs(5)).await;
-
-            // Stop after 20 iterations for demo
-            if iteration >= 20 {
-                break;
-            }
-        }
-        info!("Worker task completed");
-    });
-
-    // You could also run without the worker (just pool + metrics)
-    // Or run multiple pools on different ports:
-    /*
-    let secondary_pool = Arc::new(
-        SecureChannelPool::builder("backup.bitcoin-sprint.inc:443")
-            .with_namespace("btc_sprint_backup")
-            .with_metrics_port(9091)  // Different port!
-            .build()?
-    );
-    */
-
-    // Wait for worker to complete or Ctrl+C
-    tokio::select! {
-        _ = worker_task => {
-            info!("Worker finished, but metrics server continues...");
-        }
-        _ = tokio::signal::ctrl_c() => {
-            info!("Received Ctrl+C, shutting down...");
-        }
+    // Create multiple secure buffers (simulating a pool)
+    let mut buffers = Vec::new();
+    
+    // Create a pool of 5 secure buffers for Bitcoin operations
+    for i in 0..5 {
+        let buffer = SecureBuffer::new(64)?; // 64 bytes for various Bitcoin data
+        buffers.push(buffer);
+        info!("Created SecureBuffer #{} (64 bytes)", i + 1);
     }
 
-    info!("Demo completed. Background tasks continue running...");
-    
-    // In a real application, you might want to:
-    // 1. Gracefully shutdown the pool
-    // 2. Stop the metrics server
-    // 3. Wait for all connections to close
-    
-    // For demo, keep metrics server alive briefly
-    tokio::time::sleep(Duration::from_secs(10)).await;
-    info!("Shutdown complete");
+    info!("SecureBuffer pool created with {} buffers", buffers.len());
+    info!("Pool ready for Bitcoin Core integration operations");
+
+    // Simulate Bitcoin Core integration usage
+    demonstrate_bitcoin_core_integration(&mut buffers).await?;
+
+    // Demonstrate concurrent access simulation
+    demonstrate_concurrent_operations(&mut buffers).await?;
+
+    info!("Demo completed. All SecureBuffers will be securely zeroized.");
     
     Ok(())
 }
+
+/// Demonstrate Bitcoin Core integration patterns
+async fn demonstrate_bitcoin_core_integration(buffers: &mut Vec<SecureBuffer>) -> Result<()> {
+    info!("=== Bitcoin Core Integration Demo ===");
+    
+    // Simulate different types of Bitcoin data
+    let bitcoin_data_types = [
+        ("Private Key", b"bitcoin_private_key_32_bytes_secure_storage_demo_padding_here!" as &[u8]),
+        ("Transaction Hash", b"bitcoin_transaction_hash_32_bytes_secure_demo_padding_here!!" as &[u8]),
+        ("Signature", b"bitcoin_signature_data_64_bytes_secure_storage_demonstration!" as &[u8]),
+        ("RPC Response", b"bitcoin_core_rpc_response_secure_temporary_storage_demo_data!" as &[u8]),
+        ("Wallet Seed", b"bitcoin_wallet_seed_phrase_secure_storage_demo_padding_here!!" as &[u8]),
+    ];
+    
+    for (i, (data_type, sample_data)) in bitcoin_data_types.iter().enumerate() {
+        if let Some(buffer) = buffers.get_mut(i) {
+            buffer.copy_from_slice(*sample_data)?;
+            info!("Buffer #{}: Stored {} securely", i + 1, data_type);
+            
+            // Simulate processing delay
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            
+            // Demonstrate secure access
+            if let Some(_secure_data) = buffer.as_slice() {
+                info!("Buffer #{}: {} ready for Bitcoin Core operations", i + 1, data_type);
+            }
+        }
+    }
+    
+    info!("Bitcoin Core integration demo completed");
+    Ok(())
+}
+
+/// Demonstrate concurrent operations simulation
+async fn demonstrate_concurrent_operations(buffers: &mut Vec<SecureBuffer>) -> Result<()> {
+    info!("=== Concurrent Operations Demo ===");
+    
+    // Simulate concurrent Bitcoin operations
+    let tasks = (0..buffers.len()).map(|i| {
+        tokio::spawn(async move {
+            info!("Worker #{}: Processing Bitcoin operation", i + 1);
+            
+            // Simulate work
+            tokio::time::sleep(Duration::from_millis(200 + i as u64 * 50)).await;
+            
+            info!("Worker #{}: Bitcoin operation completed", i + 1);
+        })
+    }).collect::<Vec<_>>();
+    
+    // Wait for all workers to complete
+    for (i, task) in tasks.into_iter().enumerate() {
+        match task.await {
+            Ok(_) => info!("Worker #{}: Task completed successfully", i + 1),
+            Err(e) => warn!("Worker #{}: Task failed: {}", i + 1, e),
+        }
+    }
+    
+    info!("All concurrent operations completed");
+    Ok(())
+}
+

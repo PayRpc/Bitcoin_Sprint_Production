@@ -5,7 +5,7 @@ mod securebuffer;
 pub use securebuffer::{SecureBuffer, SecureBufferError};
 
 use std::slice;
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -34,7 +34,7 @@ pub extern "C" fn securebuffer_copy(buf: *mut SecureBuffer, data: *const u8, len
     }
     let sb = unsafe { &mut *buf };
     let slice = unsafe { slice::from_raw_parts(data, len) };
-    sb.copy_from_slice(slice).is_ok()
+    sb.write(slice).is_ok()
 }
 
 #[no_mangle]
@@ -43,9 +43,9 @@ pub extern "C" fn securebuffer_data(buf: *mut SecureBuffer) -> *mut u8 {
         return std::ptr::null_mut();
     }
     let sb = unsafe { &mut *buf };
-    match sb.as_mut_slice() {
-        Some(slice) => slice.as_mut_ptr(),
-        None => std::ptr::null_mut(),
+    match sb.as_slice() {
+        Ok(slice) => slice.as_ptr() as *mut u8,
+        Err(_) => std::ptr::null_mut(),
     }
 }
 
@@ -67,8 +67,8 @@ pub extern "C" fn securebuffer_hmac_hex(buf: *mut SecureBuffer, data: *const u8,
     }
     let sb = unsafe { &*buf };
     let key = match sb.as_slice() {
-        Some(s) => s,
-        None => return std::ptr::null_mut(),
+        Ok(s) => s,
+        Err(_) => return std::ptr::null_mut(),
     };
     let slice = unsafe { slice::from_raw_parts(data, data_len) };
     use hmac::{Hmac, Mac};
@@ -102,7 +102,7 @@ pub extern "C" fn securebuffer_free_cstr(s: *mut i8) {
 pub extern "C" fn securebuffer_hmac_base64url(buf: *mut SecureBuffer, data: *const u8, data_len: usize) -> *mut i8 {
     if buf.is_null() || data.is_null() { return std::ptr::null_mut(); }
     let sb = unsafe { &*buf };
-    let key = match sb.as_slice() { Some(s) => s, None => return std::ptr::null_mut() };
+    let key = match sb.as_slice() { Ok(s) => s, Err(_) => return std::ptr::null_mut() };
     let slice = unsafe { slice::from_raw_parts(data, data_len) };
     use hmac::{Hmac, Mac};
     use sha2::Sha256;
@@ -131,14 +131,14 @@ pub extern "C" fn securebuffer_self_check() -> bool {
 
     // Write test data
     let test_data = b"RUST_NATIVE_MEMORY_GUARD_ACTIVE";
-    if buf.copy_from_slice(test_data).is_err() {
+    if buf.write(test_data).is_err() {
         return false;
     }
 
     // Read and verify - this confirms native implementation is working
     match buf.as_slice() {
-        Some(slice) => slice[..test_data.len()] == *test_data,
-        None => false,
+        Ok(slice) => slice[..test_data.len()] == *test_data,
+        Err(_) => false,
     }
 }
 

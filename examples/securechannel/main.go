@@ -16,9 +16,9 @@ import (
 )
 
 func main() {
-	// Initialize professional SecureChannel service
+	// Initialize professional SecureChannel service for Bitcoin Core integration
 	config := &secure.ServiceConfig{
-		RustPoolURL:      getEnv("RUST_POOL_URL", "http://127.0.0.1:9191"),
+		RustPoolURL:      getEnv("RUST_POOL_URL", "http://127.0.0.1:8335"),
 		CacheTimeout:     30 * time.Second,
 		HealthTimeout:    5 * time.Second,
 		MonitorInterval:  15 * time.Second,
@@ -191,11 +191,11 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-// Example of using the SecureChannel client directly
+// Example of using the SecureChannel client directly for Bitcoin Core integration
 func exampleDirectClientUsage() {
-	// Create client for direct API access
+	// Create client for direct API access to Bitcoin Core integrated pool
 	config := &secure.ClientConfig{
-		BaseURL:       "http://127.0.0.1:9191",
+		BaseURL:       "http://127.0.0.1:8335",
 		Timeout:       10 * time.Second,
 		RetryAttempts: 3,
 		RetryDelay:    1 * time.Second,

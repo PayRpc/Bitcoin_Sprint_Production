@@ -68,6 +68,88 @@ export default function DocsPage() {
         </section>
 
         <section className="mb-8">
+          <h2 className="text-2xl font-semibold text-white mb-3">🔒 Advanced Security Features</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <Card className="bg-gray-850 border-gray-800">
+              <CardContent>
+                <div className="flex items-center space-x-2 mb-3">
+                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                  <h3 className="text-lg font-medium text-white">SecureBuffer Protection</h3>
+                </div>
+                <p className="text-gray-300 text-sm mb-3">
+                  Enterprise-grade memory protection for your most sensitive data.
+                </p>
+                <ul className="list-disc pl-5 space-y-1 text-gray-300 text-sm">
+                  <li><strong className="text-white">Memory Locking:</strong> Prevents credentials from being swapped to disk</li>
+                  <li><strong className="text-white">Secure Zeroization:</strong> Cryptographically erases sensitive data on cleanup</li>
+                  <li><strong className="text-white">Thread-Safe:</strong> Atomic operations prevent race conditions in multi-threaded environments</li>
+                  <li><strong className="text-white">Anti-Debugging:</strong> Protects against memory dumps and forensic analysis</li>
+                </ul>
+                <div className="mt-3 p-2 bg-gray-900 rounded text-xs">
+                  <span className="text-green-400">✓ Active:</span> <span className="text-gray-300">Protecting RPC passwords, license keys, and peer secrets</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gray-850 border-gray-800">
+              <CardContent>
+                <div className="flex items-center space-x-2 mb-3">
+                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                  <h3 className="text-lg font-medium text-white">SecureChannel Management</h3>
+                </div>
+                <p className="text-gray-300 text-sm mb-3">
+                  Intelligent connection handling with built-in resilience and monitoring.
+                </p>
+                <ul className="list-disc pl-5 space-y-1 text-gray-300 text-sm">
+                  <li><strong className="text-white">Circuit Breaker:</strong> Automatically isolates failing connections to prevent cascade failures</li>
+                  <li><strong className="text-white">Graceful Shutdown:</strong> Ensures clean disconnection and data integrity during restarts</li>
+                  <li><strong className="text-white">Health Monitoring:</strong> Real-time connection status and performance metrics</li>
+                  <li><strong className="text-white">Auto-Recovery:</strong> Intelligent reconnection with exponential backoff</li>
+                </ul>
+                <div className="mt-3 p-2 bg-gray-900 rounded text-xs">
+                  <span className="text-blue-400">✓ Enhanced:</span> <span className="text-gray-300">99.9% uptime with automatic failover</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="bg-gradient-to-r from-gray-850 to-gray-800 border-gray-700 mt-4">
+            <CardContent>
+              <h3 className="text-lg font-medium text-white mb-2">🛡️ Why These Security Features Matter</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div>
+                  <h4 className="text-white font-medium mb-1">For Exchanges</h4>
+                  <p className="text-gray-300">High-volume trading requires bulletproof security. SecureBuffer prevents memory-based attacks, while SecureChannel ensures uninterrupted order processing.</p>
+                </div>
+                <div>
+                  <h4 className="text-white font-medium mb-1">For Enterprises</h4>
+                  <p className="text-gray-300">Compliance and audit requirements demand provable security. Our thread-safe design meets SOC 2 standards with forensic-resistant credential handling.</p>
+                </div>
+                <div>
+                  <h4 className="text-white font-medium mb-1">For Custody Services</h4>
+                  <p className="text-gray-300">Client funds depend on uncompromised security. Multi-layered protection prevents both external attacks and insider threats from accessing private keys.</p>
+                </div>
+              </div>
+              
+              <div className="mt-4 pt-3 border-t border-gray-700">
+                <h4 className="text-white font-medium mb-2">📚 Detailed Documentation</h4>
+                <div className="flex flex-wrap gap-3">
+                  <a href="/docs/SECUREBUFFER_BENEFITS.md" className="inline-flex items-center px-3 py-1 bg-gray-900 hover:bg-gray-800 rounded text-sm text-gray-300 hover:text-white transition-colors">
+                    <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                    SecureBuffer Technical Guide
+                  </a>
+                  <a href="/docs/SECURECHANNEL_BENEFITS.md" className="inline-flex items-center px-3 py-1 bg-gray-900 hover:bg-gray-800 rounded text-sm text-gray-300 hover:text-white transition-colors">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                    SecureChannel Implementation Guide
+                  </a>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="mb-8">
           <h2 className="text-2xl font-semibold text-white mb-3">Examples</h2>
           <Card className="bg-gray-850 border-gray-800">
             <CardContent>

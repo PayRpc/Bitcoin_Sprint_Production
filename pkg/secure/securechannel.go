@@ -78,7 +78,7 @@ func (e *APIError) Error() string {
 // NewSecureChannelPoolClient creates a new client for the SecureChannelPool
 func NewSecureChannelPoolClient(baseURL string) *SecureChannelPoolClient {
 	if baseURL == "" {
-		baseURL = "http://127.0.0.1:9191"
+		baseURL = "http://127.0.0.1:8335" // Bitcoin Core peer networking port
 	}
 
 	// Initialize the global secure channel manager if not already done

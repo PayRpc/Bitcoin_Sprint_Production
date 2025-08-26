@@ -21,9 +21,9 @@ type BitcoinSprintService struct {
 
 // NewBitcoinSprintService creates a new service with SecureChannel integration
 func NewBitcoinSprintService() (*BitcoinSprintService, error) {
-	// Configure SecureChannel for production
+	// Configure SecureChannel for Bitcoin Core integration
 	config := &secure.ServiceConfig{
-		RustPoolURL:      "http://127.0.0.1:9191",
+		RustPoolURL:      "http://127.0.0.1:8335",
 		CacheTimeout:     30 * time.Second,
 		HealthTimeout:    5 * time.Second,
 		MonitorInterval:  15 * time.Second,

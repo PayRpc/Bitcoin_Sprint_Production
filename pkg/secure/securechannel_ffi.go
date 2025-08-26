@@ -29,13 +29,13 @@ type SecureChannelManager struct {
 	metricsPort uint16
 }
 
-// NewSecureChannelManager creates a new secure channel manager
+// NewSecureChannelManager creates a new secure channel manager for Bitcoin Core integration
 // Note: keep signature consistent with non-CGO build.
 func NewSecureChannelManager() *SecureChannelManager {
 	return &SecureChannelManager{
-		endpoint:    "http://127.0.0.1:9191",
+		endpoint:    "http://127.0.0.1:8335", // Bitcoin Core peer networking port
 		isRunning:   false,
-		metricsPort: 9191,
+		metricsPort: 8335, // Bitcoin Core peer networking port
 	}
 }
 

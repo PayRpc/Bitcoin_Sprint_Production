@@ -48,19 +48,19 @@ func (scm *SecureChannelManager) IsRunning() bool {
 	return scm.isRunning
 }
 
-// GetStatus returns the secure channel status (stub for non-CGO builds)
+// GetStatus returns the secure channel status (stub for non-CGO builds) - Bitcoin Core integration
 func (scm *SecureChannelManager) GetStatus() map[string]interface{} {
 	return map[string]interface{}{
 		"running":      scm.isRunning,
 		"backend":      "Go-native",
 		"mode":         "compatibility",
 		"available":    true,
-		"metrics_port": 9191,
-		"endpoint":     "http://127.0.0.1:9191",
+		"metrics_port": 8335,                    // Bitcoin Core peer networking port
+		"endpoint":     "http://127.0.0.1:8335", // Bitcoin Core peer networking port
 	}
 }
 
-// GetMetricsPort returns the metrics server port (stub for non-CGO builds)
+// GetMetricsPort returns the metrics server port (stub for non-CGO builds) - Bitcoin Core integration
 func (scm *SecureChannelManager) GetMetricsPort() uint16 {
-	return 9191 // Return unified default port in Go mode
+	return 8335 // Return Bitcoin Core peer networking port in Go mode
 }

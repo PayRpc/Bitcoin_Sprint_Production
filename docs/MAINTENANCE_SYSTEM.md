@@ -323,9 +323,15 @@ The maintenance system automatically intercepts requests:
 ### Service Integration
 The maintenance system integrates with the main Bitcoin Sprint service:
 
-```go
-// In Go service, check maintenance status
+```bash
+# Check Bitcoin Sprint API health (running on Bitcoin Core standard port)
+curl http://localhost:8080/api/v1/status
+
+# Check web maintenance status
 curl http://localhost:3000/api/health
+
+# Bitcoin Core RPC (standard port)
+curl http://test_user:strong_random_password_here@localhost:8332/
 ```
 
 ## Troubleshooting

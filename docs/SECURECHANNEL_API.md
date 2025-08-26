@@ -196,6 +196,17 @@ curl -X GET http://localhost:8080/status \
   -H "Accept: application/json" | jq '.secure_channel'
 ```
 
+### Bitcoin Core Integration Check
+```bash
+# Check Bitcoin Sprint API (Bitcoin Core standard port)
+curl -X GET http://localhost:8080/api/v1/status
+
+# Verify Bitcoin Core RPC connection
+curl -u test_user:strong_random_password_here \
+  http://localhost:8332/ \
+  -d '{"jsonrpc":"1.0","id":"test","method":"getblockchaininfo","params":[]}'
+```
+
 ## Error Handling
 
 ### Common Error Responses
@@ -241,13 +252,19 @@ curl -X GET http://localhost:8080/status \
 - **Resource Management**: Automatic cleanup and memory management
 - **Security Headers**: Professional security practices
 
-## Deployment Considerations
+### Deployment Considerations
 
 ### Production Readiness
 - All endpoints include proper timeout handling
-- Professional error responses with appropriate HTTP status codes
+- Professional error responses with appropriate HTTP status codes  
 - Comprehensive logging for operational monitoring
 - Memory-efficient caching with automatic cleanup
+
+### Bitcoin Core Integration
+- Bitcoin Sprint runs on port 8080 (Bitcoin Core standard HTTP alternative)
+- Bitcoin Core RPC available on port 8332 (standard Bitcoin RPC port)
+- Peer networking on port 8335 (Sprint peer mesh)
+- Production bitcoin.conf with security hardening
 
 ### Monitoring Integration
 - Health endpoints follow standard patterns for load balancers

@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, Duration, Instant};
 use anyhow::{Result, Context, anyhow};
@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 use tokio::time::{interval, Duration as TokioDuration};
 use tokio_rustls::{TlsConnector, client::TlsStream};
 use rustls::{ClientConfig, RootCertStore, ClientSessionMemoryCache, ServerName};
-use tracing::{info, warn, span, Level};
+use tracing::{info, warn, error, span, Level};
 use url::Url;
 use async_trait::async_trait;
 use backoff::{ExponentialBackoff, future::retry};
@@ -22,6 +22,8 @@ use serde::Serialize;
 use std::sync::RwLock;
 
 static CONNECTION_ESTABLISHED: AtomicBool = AtomicBool::new(false);
+static CIRCUIT_BREAKER_FAILURES: AtomicU64 = AtomicU64::new(0);
+static CIRCUIT_BREAKER_LAST_FAILURE: AtomicU64 = AtomicU64::new(0);
 
 /// Connection pool configuration
 #[derive(Clone)]
@@ -35,6 +37,9 @@ struct PoolConfig {
     metrics_host: String,
     metrics_port: u16,
     namespace: String,
+    circuit_breaker_failure_threshold: u64,
+    circuit_breaker_cooldown: Duration,
+    metrics_auth_token: Option<String>,
 }
 
 impl Default for PoolConfig {
@@ -49,6 +54,9 @@ impl Default for PoolConfig {
             metrics_host: "0.0.0.0".to_string(),
             metrics_port: 9090,
             namespace: "secure_channel".to_string(),
+            circuit_breaker_failure_threshold: 5, // 5 consecutive failures
+            circuit_breaker_cooldown: Duration::from_secs(60), // 1 minute cooldown
+            metrics_auth_token: None, // No auth by default
         }
     }
 }
@@ -230,6 +238,8 @@ impl ConnectionMetrics {
 
     fn increment_errors(&mut self) {
         self.error_count += 1;
+        // Only increment connection-level errors
+        // Pool metrics should aggregate from connections
     }
 
     fn get_status(&self) -> ConnectionStatus {
@@ -328,6 +338,24 @@ impl PoolBuilder {
         self
     }
 
+    /// Set metrics authentication token for production security
+    pub fn with_metrics_auth_token(mut self, token: &str) -> Self {
+        self.config.metrics_auth_token = Some(token.to_string());
+        self
+    }
+
+    /// Set circuit breaker failure threshold (default: 5)
+    pub fn with_circuit_breaker_failure_threshold(mut self, threshold: u64) -> Self {
+        self.config.circuit_breaker_failure_threshold = threshold;
+        self
+    }
+
+    /// Set circuit breaker cooldown period (default: 60 seconds)
+    pub fn with_circuit_breaker_cooldown(mut self, cooldown: Duration) -> Self {
+        self.config.circuit_breaker_cooldown = cooldown;
+        self
+    }
+
     /// Build the SecureChannelPool (no background tasks started)
     pub fn build(self) -> Result<SecureChannelPool> {
         let registry = Arc::new(Registry::new());
@@ -405,7 +433,16 @@ impl SecureChannelPool {
     /// Get or create a connection from the pool
     pub async fn get_connection(&self) -> Result<SecureChannel> {
         let _span = span!(Level::INFO, "get_connection", endpoint = self.endpoint);
+        
+        // Check circuit breaker
+        self.check_circuit_breaker()?;
+        
         let mut connections = self.connections.lock().await;
+
+        // Enforce connection pool upper bound
+        if connections.len() >= self.config.max_connections {
+            return Err(anyhow!("Connection pool exhausted: {} connections active", connections.len()));
+        }
 
         // Try to reuse an existing connection
         while let Some(mut conn) = connections.pop() {
@@ -419,8 +456,10 @@ impl SecureChannelPool {
                         conn.metrics.connection_id, 
                         conn.metrics.get_p95_latency()
                     );
-                    let _ = conn.shutdown().await; // Ignore shutdown errors
+                    let _ = conn.shutdown().await; // Graceful shutdown
                 }
+            } else {
+                let _ = conn.shutdown().await; // Graceful shutdown of invalid connection
             }
         }
 
@@ -434,8 +473,33 @@ impl SecureChannelPool {
             self.create_connection().await
         }).await.context("Failed to create connection after retries")?;
 
+        // Reset circuit breaker on successful connection
+        CIRCUIT_BREAKER_FAILURES.store(0, Ordering::Relaxed);
+
         self.pool_metrics.set_active_connections(connections.len() + 1);
         Ok(conn)
+    }
+
+    fn check_circuit_breaker(&self) -> Result<()> {
+        let failures = CIRCUIT_BREAKER_FAILURES.load(Ordering::Relaxed);
+        if failures >= self.config.circuit_breaker_failure_threshold {
+            let last_failure = CIRCUIT_BREAKER_LAST_FAILURE.load(Ordering::Relaxed);
+            let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap_or_default().as_secs();
+            
+            if now - last_failure < self.config.circuit_breaker_cooldown.as_secs() {
+                return Err(anyhow!(
+                    "Circuit breaker open: {} consecutive failures, cooldown until {}s",
+                    failures,
+                    last_failure + self.config.circuit_breaker_cooldown.as_secs()
+                ));
+            } else {
+                // Reset after cooldown
+                CIRCUIT_BREAKER_FAILURES.store(0, Ordering::Relaxed);
+                info!("Circuit breaker reset after cooldown");
+            }
+        }
+        Ok(())
     }
 
     async fn create_connection(&self) -> Result<SecureChannel> {
@@ -447,11 +511,21 @@ impl SecureChannelPool {
         let port = endpoint_url.port_or_known_default().unwrap_or(443);
         let tcp_endpoint = format!("{}:{}", domain_str, port);
 
-        // Optimized TLS config with support for pinned certs
+        // Optimized TLS config with safe root cert loading
         let root_store = self.root_store.clone().unwrap_or_else(|| {
             let mut store = RootCertStore::empty();
-            for cert in rustls_native_certs::load_native_certs().expect("Failed to load native certs") {
-                store.add(&rustls::Certificate(cert.0)).expect("Failed to add native cert");
+            match rustls_native_certs::load_native_certs() {
+                Ok(certs) => {
+                    for cert in certs {
+                        if let Err(e) = store.add(&rustls::Certificate(cert.0)) {
+                            warn!("Skipping invalid system cert: {:?}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to load native certs: {:?}", e);
+                    // Continue with empty store - will fail TLS verification but won't crash
+                }
             }
             store
         });
@@ -479,6 +553,16 @@ impl SecureChannelPool {
         let stream = TcpStream::from_std(stream)?;
 
         let tls_stream = connector.connect(server_name, stream).await
+            .map_err(|e| {
+                // Record circuit breaker failure
+                CIRCUIT_BREAKER_FAILURES.fetch_add(1, Ordering::Relaxed);
+                CIRCUIT_BREAKER_LAST_FAILURE.store(
+                    SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap_or_default().as_secs(),
+                    Ordering::Relaxed
+                );
+                e
+            })
             .context("TLS handshake failed")?;
 
         CONNECTION_ESTABLISHED.store(true, Ordering::Relaxed);
@@ -512,23 +596,41 @@ impl SecureChannelPool {
             let mut connections = self.connections.lock().await;
             let initial_count = connections.len();
             
-            connections.retain(|conn| {
+            // Force histogram rotation for all connections
+            for conn in connections.iter_mut() {
+                conn.metrics.rotate_histogram_if_needed(self.config.histogram_rotation_interval);
+            }
+            
+            // Gracefully shutdown and remove invalid connections
+            let mut valid_connections = Vec::new();
+            for mut conn in connections.drain(..) {
                 let is_valid = conn.last_rotated.elapsed().map_or(false, |elapsed| {
                     elapsed < self.config.max_lifetime && !conn.metrics.is_slow(self.config.max_latency_ms)
                 });
-                if !is_valid {
+                
+                if is_valid {
+                    valid_connections.push(conn);
+                } else {
                     warn!("Removing connection {}: lifetime={:?}, slow={}", 
                         conn.metrics.connection_id,
                         conn.last_rotated.elapsed().unwrap_or(Duration::from_secs(0)),
                         conn.metrics.is_slow(self.config.max_latency_ms)
                     );
+                    // Gracefully shutdown dropped connection
+                    let _ = conn.shutdown().await;
                 }
-                is_valid
-            });
+            }
+            *connections = valid_connections;
             
             let dropped = initial_count - connections.len();
             if dropped > 0 {
                 info!("Dropped {} stale or slow connections", dropped);
+            }
+
+            // Reset CONNECTION_ESTABLISHED if pool is empty
+            if connections.is_empty() {
+                CONNECTION_ESTABLISHED.store(false, Ordering::Relaxed);
+                info!("Connection pool empty - reset CONNECTION_ESTABLISHED flag");
             }
 
             // Ensure minimum idle connections
@@ -559,17 +661,53 @@ impl SecureChannelPool {
         let registry = self.pool_metrics.registry.clone();
         let endpoint = self.endpoint.clone();
         let connections = self.connections.clone();
+        let auth_token = self.config.metrics_auth_token.clone();
 
         let make_service = make_service_fn(move |_| {
             let registry = registry.clone();
             let endpoint = endpoint.clone();
             let connections = connections.clone();
+            let auth_token = auth_token.clone();
             async move {
                 Ok::<_, hyper::Error>(service_fn(move |req: hyper::Request<Body>| {
                     let registry = registry.clone();
                     let endpoint = endpoint.clone();
                     let connections = connections.clone();
+                    let auth_token = auth_token.clone();
                     async move {
+                        // Check authentication for protected endpoints
+                        if let Some(expected_token) = &auth_token {
+                            if req.uri().path().starts_with("/metrics") || 
+                               req.uri().path().starts_with("/status") {
+                                if let Some(auth_header) = req.headers().get("X-Auth-Token") {
+                                    if let Ok(token) = auth_header.to_str() {
+                                        if token != expected_token {
+                                            return Ok::<_, hyper::Error>(
+                                                Response::builder()
+                                                    .status(StatusCode::UNAUTHORIZED)
+                                                    .body(Body::from("Unauthorized: Invalid token"))
+                                                    .expect("Failed to build response")
+                                            );
+                                        }
+                                    } else {
+                                        return Ok::<_, hyper::Error>(
+                                            Response::builder()
+                                                .status(StatusCode::UNAUTHORIZED)
+                                                .body(Body::from("Unauthorized: Invalid token format"))
+                                                .expect("Failed to build response")
+                                        );
+                                    }
+                                } else {
+                                    return Ok::<_, hyper::Error>(
+                                        Response::builder()
+                                            .status(StatusCode::UNAUTHORIZED)
+                                            .body(Body::from("Unauthorized: Missing X-Auth-Token header"))
+                                            .expect("Failed to build response")
+                                    );
+                                }
+                            }
+                        }
+
                         match req.uri().path() {
                             "/metrics" => {
                                 let encoder = TextEncoder::new();
@@ -593,6 +731,7 @@ impl SecureChannelPool {
                                 };
 
                                 let total_reconnects = connection_statuses.iter().map(|c| c.reconnects).sum();
+                                // Calculate total errors from all connections (no double counting)
                                 let total_errors = connection_statuses.iter().map(|c| c.errors).sum();
 
                                 let status = PoolStatus {
@@ -685,7 +824,7 @@ impl SecureChannel {
         let result = self.stream.write(buf).await
             .map_err(|e| {
                 self.metrics.increment_errors();
-                self.pool_metrics.increment_errors();
+                // Don't double-count pool errors - they are aggregated from connections
                 e
             })
             .context("Failed to write to secure channel");
@@ -702,7 +841,7 @@ impl SecureChannel {
         let result = self.stream.read(buf).await
             .map_err(|e| {
                 self.metrics.increment_errors();
-                self.pool_metrics.increment_errors();
+                // Don't double-count pool errors - they are aggregated from connections
                 e
             })
             .context("Failed to read from secure channel");
@@ -722,7 +861,7 @@ impl SecureTransport for SecureChannel {
         let result = self.stream.write_all(buf).await
             .map_err(|e| {
                 self.metrics.increment_errors();
-                self.pool_metrics.increment_errors();
+                // Don't double-count pool errors - they are aggregated from connections
                 e
             })
             .context("Failed to write_all to secure channel");
@@ -739,7 +878,7 @@ impl SecureTransport for SecureChannel {
         let result = self.stream.read_exact(buf).await
             .map_err(|e| {
                 self.metrics.increment_errors();
-                self.pool_metrics.increment_errors();
+                // Don't double-count pool errors - they are aggregated from connections
                 e
             })
             .context("Failed to read_exact from secure channel");
@@ -754,11 +893,23 @@ impl SecureTransport for SecureChannel {
         let result = self.stream.shutdown().await
             .map_err(|e| {
                 self.metrics.increment_errors();
-                self.pool_metrics.increment_errors();
+                // Don't double-count pool errors - they are aggregated from connections
                 e
             })
             .context("Failed to shutdown secure channel");
         result
+    }
+}
+
+// Implement Drop for graceful async shutdown
+impl Drop for SecureChannel {
+    fn drop(&mut self) {
+        let connection_id = self.metrics.connection_id;
+        info!("Dropping SecureChannel {}, initiating graceful shutdown", connection_id);
+        
+        // Note: We can't do async work in Drop, but we can spawn a task
+        // In practice, the connection cleanup in the pool handles graceful shutdown
+        // This is just for logging and any synchronous cleanup
     }
 }
 
@@ -786,6 +937,9 @@ mod tests {
             .with_max_latency_ms(200)
             .with_metrics_port(9999)
             .with_metrics_host("127.0.0.1")
+            .with_metrics_auth_token("secret123")
+            .with_circuit_breaker_failure_threshold(3)
+            .with_circuit_breaker_cooldown(Duration::from_secs(30))
             .build()?;
         
         assert_eq!(pool.endpoint, "example.com:443");
@@ -795,6 +949,9 @@ mod tests {
         assert_eq!(pool.config.max_latency_ms, 200);
         assert_eq!(pool.config.metrics_port, 9999);
         assert_eq!(pool.config.metrics_host, "127.0.0.1");
+        assert_eq!(pool.config.metrics_auth_token, Some("secret123".to_string()));
+        assert_eq!(pool.config.circuit_breaker_failure_threshold, 3);
+        assert_eq!(pool.config.circuit_breaker_cooldown, Duration::from_secs(30));
         Ok(())
     }
 
@@ -809,6 +966,9 @@ mod tests {
         assert_eq!(pool.config.max_latency_ms, 500); // Default
         assert_eq!(pool.config.metrics_port, 9090); // Default
         assert_eq!(pool.config.metrics_host, "0.0.0.0"); // Default
+        assert_eq!(pool.config.circuit_breaker_failure_threshold, 5); // Default
+        assert_eq!(pool.config.circuit_breaker_cooldown, Duration::from_secs(60)); // Default
+        assert_eq!(pool.config.metrics_auth_token, None); // Default
         Ok(())
     }
 
@@ -856,6 +1016,58 @@ mod tests {
         // Different ports to avoid conflicts
         assert_eq!(pool1.config.metrics_port, 9090);
         assert_eq!(pool2.config.metrics_port, 9091);
+        
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_functionality() -> Result<()> {
+        // Test that circuit breaker rejects requests after threshold failures
+        CIRCUIT_BREAKER_FAILURES.store(10, Ordering::Relaxed); // Above threshold
+        CIRCUIT_BREAKER_LAST_FAILURE.store(
+            SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap_or_default().as_secs(),
+            Ordering::Relaxed
+        );
+
+        let pool = SecureChannelPool::builder("unreachable.example.com:443")
+            .with_circuit_breaker_failure_threshold(5)
+            .with_circuit_breaker_cooldown(Duration::from_secs(3600)) // Long cooldown
+            .build()?;
+
+        // Should fail due to circuit breaker
+        let result = pool.get_connection().await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Circuit breaker open"));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_connection_pool_upper_bound() -> Result<()> {
+        let pool = SecureChannelPool::builder("example.com:443")
+            .with_max_connections(0) // Force immediate exhaustion
+            .build()?;
+
+        let result = pool.get_connection().await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Connection pool exhausted"));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_metrics_auth_configuration() -> Result<()> {
+        let pool_with_auth = SecureChannelPool::builder("example.com:443")
+            .with_metrics_auth_token("secret123")
+            .build()?;
+        
+        assert_eq!(pool_with_auth.config.metrics_auth_token, Some("secret123".to_string()));
+
+        let pool_without_auth = SecureChannelPool::builder("example.com:443")
+            .build()?;
+        
+        assert_eq!(pool_without_auth.config.metrics_auth_token, None);
         
         Ok(())
     }

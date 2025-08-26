@@ -623,10 +623,10 @@ func NewSprint() (*Sprint, error) {
 	}
 	s.preEncodedPayload = append(payloadBytes, '\n')
 
-	// Initialize SecureChannel client (Professional)
+	// Initialize SecureChannel client (Professional) for Bitcoin Core integration
 	secureChannelURL := os.Getenv("SECURE_CHANNEL_URL")
 	if secureChannelURL == "" {
-		secureChannelURL = "http://127.0.0.1:8181" // Default secure channel URL
+		secureChannelURL = "http://127.0.0.1:8335" // Bitcoin Core peer networking port
 	}
 
 	s.secureChannelClient = secure.NewSecureChannelPoolClient(secureChannelURL)
@@ -725,7 +725,7 @@ func (s *Sprint) LoadConfig() error {
 		Tier:           "free",
 		LogLevel:       "info",
 		MaxPeers:       100,
-		PeerListenPort: 8333,
+		PeerListenPort: 8335, // Bitcoin Sprint peer networking port (avoiding Bitcoin Core's 8333)
 		MetricsURL:     "https://api.bitcoincab.inc/metrics",
 		APIBase:        "http://localhost:8080",
 		RateLimits:     make(map[string]int),
@@ -787,9 +787,9 @@ func (s *Sprint) LoadConfig() error {
 		return fmt.Errorf("failed to secure sensitive fields: %w", err)
 	}
 
-	// Set default peer listen port if not specified
+	// Set default peer listen port if not specified (Bitcoin Core integration)
 	if s.config.PeerListenPort == 0 {
-		s.config.PeerListenPort = 8333
+		s.config.PeerListenPort = 8335 // Bitcoin Sprint peer port (avoiding Bitcoin Core's 8333)
 	}
 
 	// Validate required fields using secure buffers without creating strings

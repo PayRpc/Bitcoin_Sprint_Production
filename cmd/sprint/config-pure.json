@@ -8,7 +8,7 @@
 	],
 	"rpc_user": "test_user",
 	"rpc_pass": "strong_random_password_here",
-	"peer_secret": "config_secret_abc",
+	"peer_secret": "demo_peer_secret_123",
 	"dashboard_port": 8080,
 	"api_base": "http://localhost:8080",
 	"metrics_url": "https://api.bitcoincab.inc/metrics",
