@@ -15,6 +15,13 @@
 #define SECUREBUFFER_VERSION_PATCH 0
 #define SECUREBUFFER_VERSION_STRING "2.1.0"
 
+// Enterprise configuration constants
+#define SECUREBUFFER_MAX_BUFFER_LIFETIME_DEFAULT 86400 // 24 hours in seconds
+#define SECUREBUFFER_ZEROIZATION_INTERVAL_DEFAULT 3600 // 1 hour in seconds
+#define SECUREBUFFER_HARDWARE_TIMEOUT_MS 5000		   // 5 seconds for hardware operations
+#define SECUREBUFFER_BATCH_MAX_SIZE 1024			   // Maximum batch operation size
+#define SECUREBUFFER_UUID_LENGTH 37					   // UUID string length including null terminator
+
 // Cross-platform API export macro
 #if defined(_WIN32) || defined(_WIN64)
 #define SECUREBUFFER_API __declspec(dllexport)
@@ -34,7 +41,14 @@ typedef enum
 	SECUREBUFFER_ERROR_BUFFER_OVERFLOW = -4,
 	SECUREBUFFER_ERROR_INTEGRITY_CHECK_FAILED = -5,
 	SECUREBUFFER_ERROR_CRYPTO_OPERATION_FAILED = -6,
-	SECUREBUFFER_ERROR_THREAD_SAFETY_VIOLATION = -7
+	SECUREBUFFER_ERROR_THREAD_SAFETY_VIOLATION = -7,
+	SECUREBUFFER_ERROR_HARDWARE_NOT_AVAILABLE = -8,
+	SECUREBUFFER_ERROR_TAMPER_DETECTED = -9,
+	SECUREBUFFER_ERROR_POLICY_VIOLATION = -10,
+	SECUREBUFFER_ERROR_EXPIRED = -11,
+	SECUREBUFFER_ERROR_SIDE_CHANNEL_ATTACK = -12,
+	SECUREBUFFER_ERROR_ZERO_COPY_FAILED = -13,
+	SECUREBUFFER_ERROR_BATCH_OPERATION_FAILED = -14
 } SecureBufferError;
 
 // Security levels
@@ -43,7 +57,8 @@ typedef enum
 	SECUREBUFFER_SECURITY_STANDARD = 0,
 	SECUREBUFFER_SECURITY_HIGH = 1,
 	SECUREBUFFER_SECURITY_ENTERPRISE = 2,
-	SECUREBUFFER_SECURITY_FORENSIC_RESISTANT = 3
+	SECUREBUFFER_SECURITY_FORENSIC_RESISTANT = 3,
+	SECUREBUFFER_SECURITY_HARDWARE = 4 // TPM/HSM/SGX integration
 } SecureBufferSecurityLevel;
 
 // Hash algorithms
@@ -67,6 +82,11 @@ typedef struct
 	uint64_t integrity_check_failures;
 	double average_operation_time_ns;
 	uint64_t crypto_operations_count;
+	uint64_t hardware_operations_count;
+	uint64_t batch_operations_count;
+	uint64_t zero_copy_operations_count;
+	uint64_t tamper_detection_events;
+	uint64_t side_channel_protection_activations;
 } SecureBufferMetrics;
 
 #ifdef __cplusplus
@@ -102,12 +122,41 @@ extern "C"
 	SECUREBUFFER_API SecureBufferError securebuffer_derive_key(SecureBuffer *buf, const uint8_t *password, size_t password_len, const uint8_t *salt, size_t salt_len, uint32_t iterations);
 	SECUREBUFFER_API SecureBufferError securebuffer_encrypt_aes256_gcm(SecureBuffer *buf, const uint8_t *key, const uint8_t *nonce, SecureBuffer *output);
 	SECUREBUFFER_API SecureBufferError securebuffer_decrypt_aes256_gcm(SecureBuffer *buf, const uint8_t *key, const uint8_t *nonce, SecureBuffer *output);
+	SECUREBUFFER_API SecureBufferError securebuffer_rotate_key(SecureBuffer *buf);
+
+	// === Hardware-backed Security ===
+	SECUREBUFFER_API SecureBufferError securebuffer_bind_to_hardware(SecureBuffer *buf);
+	SECUREBUFFER_API bool securebuffer_is_hardware_backed(const SecureBuffer *buf);
+	SECUREBUFFER_API SecureBufferError securebuffer_enable_side_channel_protection(SecureBuffer *buf);
+	SECUREBUFFER_API bool securebuffer_constant_time_compare(const SecureBuffer *buf1, const SecureBuffer *buf2);
+
+// === Zero-copy IPC ===
+#if defined(__unix__) || defined(__unix) || defined(__APPLE__)
+	SECUREBUFFER_API int securebuffer_as_fd(const SecureBuffer *buf);
+	SECUREBUFFER_API SecureBufferError securebuffer_share_with_process(SecureBuffer *buf, int pid);
+#endif
+
+	// === Batch Crypto Operations ===
+	SECUREBUFFER_API char **securebuffer_hmac_batch(
+		SecureBuffer *buf,
+		const uint8_t **data_list,
+		size_t *data_lens,
+		size_t count);
+	SECUREBUFFER_API void securebuffer_free_batch_results(char **results, size_t count);
 
 	// === Thread Safety ===
 	SECUREBUFFER_API SecureBufferError securebuffer_acquire_read_lock(SecureBuffer *buf);
 	SECUREBUFFER_API SecureBufferError securebuffer_acquire_write_lock(SecureBuffer *buf);
 	SECUREBUFFER_API SecureBufferError securebuffer_release_lock(SecureBuffer *buf);
 	SECUREBUFFER_API bool securebuffer_is_thread_safe(const SecureBuffer *buf);
+
+	// === Metadata and Compliance ===
+	SECUREBUFFER_API char *securebuffer_get_uuid(const SecureBuffer *buf);
+	SECUREBUFFER_API bool securebuffer_verify_metadata(const SecureBuffer *buf);
+	SECUREBUFFER_API SecureBufferError securebuffer_set_max_lifetime(SecureBuffer *buf, uint64_t max_lifetime_seconds);
+	SECUREBUFFER_API uint64_t securebuffer_get_creation_timestamp(const SecureBuffer *buf);
+	SECUREBUFFER_API uint64_t securebuffer_get_last_access_timestamp(const SecureBuffer *buf);
+	SECUREBUFFER_API bool securebuffer_is_expired(const SecureBuffer *buf);
 
 	// === SecureChannelPool Operations ===
 	SECUREBUFFER_API SecureChannelPool *securechannel_pool_new(size_t max_connections, const char *endpoint);
@@ -129,6 +178,19 @@ extern "C"
 	SECUREBUFFER_API char *securebuffer_get_version_info(void);
 	SECUREBUFFER_API bool securebuffer_is_enterprise_build(void);
 	SECUREBUFFER_API char *securebuffer_get_build_info(void);
+
+	// === Advanced Enterprise Features ===
+	SECUREBUFFER_API SecureBufferError securebuffer_enable_tamper_detection(SecureBuffer *buf);
+	SECUREBUFFER_API bool securebuffer_is_tampered(const SecureBuffer *buf);
+	SECUREBUFFER_API SecureBufferError securebuffer_force_zeroization_schedule(SecureBuffer *buf, uint64_t interval_seconds);
+	SECUREBUFFER_API char *securebuffer_get_security_audit_log(const SecureBuffer *buf);
+	SECUREBUFFER_API SecureBufferError securebuffer_validate_policy_compliance(const SecureBuffer *buf);
+
+	// === Performance Optimizations ===
+	SECUREBUFFER_API bool securebuffer_has_hardware_acceleration(void);
+	SECUREBUFFER_API char *securebuffer_get_acceleration_info(void);
+	SECUREBUFFER_API SecureBufferError securebuffer_prefault_pages(SecureBuffer *buf);
+	SECUREBUFFER_API double securebuffer_benchmark_operations(size_t buffer_size, size_t iterations);
 
 	// === Enterprise Features ===
 	SECUREBUFFER_API SecureBufferError securebuffer_enable_audit_logging(const char *log_path);
