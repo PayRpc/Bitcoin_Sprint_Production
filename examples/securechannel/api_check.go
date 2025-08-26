@@ -1,3 +1,6 @@
+//go:build example
+// +build example
+
 // Professional SecureChannel API Integration Test
 // This demonstrates the enterprise-grade SecureChannel integration with Bitcoin Sprint
 

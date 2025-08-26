@@ -1,3 +1,6 @@
+//go:build example
+// +build example
+
 // Bitcoin Sprint SecureChannel Integration
 // Professional integration with the main Bitcoin Sprint service
 package main
@@ -10,7 +13,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/bitcoin-sprint/pkg/secure"
+	"github.com/PayRpc/Bitcoin-Sprint/pkg/secure"
 )
 
 // BitcoinSprintService integrates SecureChannel with the main Bitcoin Sprint API

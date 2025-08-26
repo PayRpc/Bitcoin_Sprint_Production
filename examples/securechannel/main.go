@@ -1,5 +1,8 @@
 // Bitcoin Sprint SecureChannel Integration Example
 // This example demonstrates professional integration of the SecureChannelPool
+//go:build example
+// +build example
+
 package main
 
 import (
@@ -11,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bitcoin-sprint/pkg/secure"
+	"github.com/PayRpc/Bitcoin-Sprint/pkg/secure"
 	"github.com/gin-gonic/gin"
 )
 
