@@ -12,9 +12,9 @@ import (
 )
 
 func TestWithBytesRoundtrip(t *testing.T) {
-	sb := NewSecureBuffer(16)
-	defer sb.Free()
 	data := []byte("supersecret123456")
+	sb := NewSecureBuffer(len(data))
+	defer sb.Free()
 	if !sb.Copy(data) {
 		t.Fatal("Copy failed")
 	}

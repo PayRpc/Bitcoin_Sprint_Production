@@ -57,7 +57,9 @@ func (sb *SecureBuffer) Copy(data []byte) bool {
 		return false
 	}
 
-	return bool(C.securebuffer_copy(sb.ptr, (*C.uint8_t)(unsafe.Pointer(&data[0])), C.size_t(len(data))))
+	var err C.SecureBufferError = C.securebuffer_copy(sb.ptr, (*C.uint8_t)(unsafe.Pointer(&data[0])), C.size_t(len(data)))
+	var success C.SecureBufferError
+	return err == success
 }
 
 // Data returns a slice view of the secure buffer's contents
@@ -159,5 +161,10 @@ func SetBasicAuthHeader(req *http.Request, user string, pass *SecureBuffer) {
 // SelfCheck performs a self-test of the SecureBuffer functionality
 // Returns true if SecureBuffer is working correctly (memory locking and zeroization)
 func SelfCheck() bool {
-	return bool(C.securebuffer_self_check())
+	var ok C._Bool = C.securebuffer_self_check()
+	var zero C._Bool
+	if ok == zero {
+		return false
+	}
+	return true
 }

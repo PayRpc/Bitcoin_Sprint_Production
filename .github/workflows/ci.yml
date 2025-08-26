@@ -17,6 +17,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Go private module auth (optional)
+        if: secrets.GH_PAT != ''
+        run: |
+          git config --global url."https://${{ secrets.GH_PAT }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -46,6 +53,13 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Go private module auth (optional)
+        if: secrets.GH_PAT != ''
+        run: |
+          git config --global url."https://${{ secrets.GH_PAT }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
 
       - name: Setup Go
         uses: actions/setup-go@v5
