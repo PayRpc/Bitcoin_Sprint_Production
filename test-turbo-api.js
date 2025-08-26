@@ -1,5 +1,6 @@
 // Turbo Mode Tier Testing Script
 const fs = require('fs');
+const fetch = require('node-fetch'); // <-- fix: use node-fetch for compatibility
 
 const BASE_URL = 'http://localhost:3002';
 
@@ -10,6 +11,18 @@ const TIER_TESTS = [
     { tier: 'ENTERPRISE', expectedTurbo: true },
     { tier: 'ENTERPRISE_PLUS', expectedTurbo: true }
 ];
+
+// Helper with timeout support
+async function fetchWithTimeout(url, options = {}, timeout = 5000) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    try {
+        const res = await fetch(url, { ...options, signal: controller.signal });
+        return res;
+    } finally {
+        clearTimeout(id);
+    }
+}
 
 async function testTier(tierConfig) {
     const { tier, expectedTurbo } = tierConfig;
@@ -58,7 +71,7 @@ async function testTier(tierConfig) {
         }
         
         const licenseData = await licenseResponse.json();
-        const actualTurboFromLicense = licenseData.performance.turbo_mode;
+        const actualTurboFromLicense = licenseData.performance?.turbo_mode ?? licenseData.turbo_mode;
         
         // 4. Verify results
         const statusPassed = actualTurbo === expectedTurbo;
@@ -91,7 +104,7 @@ async function runTests() {
     
     // Test web server availability
     try {
-        const healthResponse = await fetch(`${BASE_URL}/api/health`, { timeout: 5000 });
+        const healthResponse = await fetchWithTimeout(`${BASE_URL}/api/health`, {}, 5000);
         if (!healthResponse.ok) {
             throw new Error('Health check failed');
         }

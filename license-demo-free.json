@@ -1,0 +1,10 @@
+{
+  "license_key": "FREE-DEMO-7084",
+  "expires": "2025-09-25",
+  "features": {
+    "max_peers": 0,
+    "api_rate_limit": 20,
+    "turbo_mode": false
+  },
+  "tier": "free"
+}
