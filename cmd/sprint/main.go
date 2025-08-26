@@ -649,6 +649,7 @@ func (s *Sprint) Start() error {
 	go s.StartMetricsReporter()
 	go s.StartPerformanceMonitor()
 	go s.StartLicenseMonitor()
+	go s.StartSecureChannelMonitor()                                    // Start SecureChannel continuous monitoring
 	go s.StartPeerListener(":" + strconv.Itoa(s.config.PeerListenPort)) // Start inbound listener for peer mesh networking
 	go s.cleanupSeenMessages()                                          // Start cleanup for seen messages
 
@@ -2784,4 +2785,137 @@ func (s *Sprint) apiKeyMiddleware(next func(http.ResponseWriter, *http.Request))
 		// Pass through
 		next(w, r)
 	}
+}
+
+// ───────────────────────── SecureChannel Monitor ─────────────────────────
+
+func (s *Sprint) StartSecureChannelMonitor() {
+	if !s.secureChannelEnabled || s.secureChannelClient == nil {
+		zap.L().Warn("SecureChannel monitoring disabled - client not available")
+		return
+	}
+
+	zap.L().Info("Starting SecureChannel continuous monitoring with auto-reconnect")
+
+	// Create a wrapped client for monitoring
+	config := secure.DefaultConfig()
+	wrappedClient := secure.NewClient(config)
+
+	// Create monitor with 30-second intervals
+	ctx := context.Background()
+	monitor := secure.NewMonitor(wrappedClient, 30*time.Second)
+
+	// Track consecutive failures for reconnection logic
+	var consecutiveFailures int32
+	const maxFailures = 3
+
+	// Start monitoring with enhanced callback
+	monitor.Start(ctx, func(pool *secure.PoolStatus, health *secure.HealthStatus, err error) {
+		if err != nil {
+			atomic.AddInt32(&consecutiveFailures, 1)
+			failures := atomic.LoadInt32(&consecutiveFailures)
+
+			zap.L().Error("SecureChannel monitor error",
+				zap.Error(err),
+				zap.Int32("consecutive_failures", failures))
+
+			// Trigger reconnection after max failures
+			if failures >= maxFailures {
+				zap.L().Warn("SecureChannel reconnection triggered",
+					zap.Int32("failure_count", failures))
+				go s.reconnectSecureChannel()
+				atomic.StoreInt32(&consecutiveFailures, 0)
+			}
+			return
+		}
+
+		// Reset failure counter on successful monitoring
+		atomic.StoreInt32(&consecutiveFailures, 0)
+
+		if pool != nil {
+			zap.L().Debug("SecureChannel pool status",
+				zap.Int("active_connections", pool.ActiveConnections),
+				zap.String("endpoint", pool.Endpoint),
+				zap.Uint64("total_errors", pool.TotalErrors),
+				zap.Uint64("p95_latency_ms", pool.PoolP95LatencyMs))
+
+			// Log warnings for high error rates
+			if pool.TotalErrors > 0 && pool.ActiveConnections > 0 {
+				errorRate := float64(pool.TotalErrors) / float64(pool.ActiveConnections)
+				if errorRate > 0.1 { // More than 10% error rate
+					zap.L().Warn("High SecureChannel error rate detected",
+						zap.Float64("error_rate", errorRate),
+						zap.Uint64("total_errors", pool.TotalErrors))
+				}
+			}
+		}
+
+		if health != nil {
+			if health.Status == "healthy" && health.PoolHealthy {
+				zap.L().Debug("SecureChannel pool healthy",
+					zap.Int("active_connections", health.ActiveConnections),
+					zap.Time("last_check", health.Timestamp))
+			} else {
+				zap.L().Warn("SecureChannel pool unhealthy",
+					zap.String("status", health.Status),
+					zap.Bool("pool_healthy", health.PoolHealthy),
+					zap.Time("last_check", health.Timestamp))
+			}
+		}
+	})
+
+	// Wait for initial health check
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		// Perform periodic health checks until healthy
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				zap.L().Error("SecureChannel initial health check timeout")
+				return
+			case <-ticker.C:
+				if health, err := s.secureChannelClient.GetHealthStatus(ctx); err == nil {
+					if health.Status == "healthy" && health.PoolHealthy {
+						zap.L().Info("SecureChannel is now healthy and monitoring",
+							zap.Int("active_connections", health.ActiveConnections))
+						return
+					}
+				}
+			}
+		}
+	}()
+}
+
+// reconnectSecureChannel attempts to reconnect the SecureChannel client
+func (s *Sprint) reconnectSecureChannel() {
+	zap.L().Info("Attempting SecureChannel reconnection...")
+
+	// Get current URL
+	secureChannelURL := os.Getenv("SECURE_CHANNEL_URL")
+	if secureChannelURL == "" {
+		secureChannelURL = "http://127.0.0.1:8335"
+	}
+
+	// Create new client
+	newClient := secure.NewSecureChannelPoolClient(secureChannelURL)
+
+	// Test connectivity
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if _, err := newClient.GetHealthStatus(ctx); err != nil {
+		zap.L().Error("SecureChannel reconnection failed", zap.Error(err))
+		return
+	}
+
+	// Replace client if successful
+	s.secureChannelClient = newClient
+	s.secureChannelStartTime = time.Now()
+
+	zap.L().Info("SecureChannel reconnection successful")
 }

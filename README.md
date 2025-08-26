@@ -3,7 +3,29 @@
 [![CI](https://github.com/PayRpc/BItcoin_Sprint/actions/workflows/ci.yml/badge.svg)](https://github.com/PayRpc/BItcoin_Sprint/actions/workflows/ci.yml)
 [![Windows CGO](https://github.com/PayRpc/BItcoin_Sprint/actions/workflows/windows-cgo.yml/badge.svg)](https://github.com/PayRpc/BItcoin_Sprint/actions/workflows/windows-cgo.yml)
 
-Professional Bitcoin block monitoring system with Rust FFI secure memory integration and automated build system.
+**Enterprise-grade Bitcoin block detection and monitoring system** that transforms how businesses interact with the Bitcoin blockchain. We provide real-time Bitcoin block monitoring, secure API access, and enterprise-level integrations that scale from individual developers to large financial institutions.
+
+## 🚀 What We Offer
+
+### Service Tiers
+- **🆓 FREE**: Basic API access, rate-limited endpoints, community support
+- **💼 PRO**: 5x higher rate limits, priority authentication, enhanced monitoring, email support
+- **🏆 ENTERPRISE**: Unlimited requests, 99.9% uptime SLA, 24/7 support, custom integrations
+
+### Key Features
+- ⚡ **Real-time block detection** with sub-second latency
+- 🔒 **Enterprise-grade security** with Rust-powered memory protection  
+- 📡 **Scalable API infrastructure** from prototype to production
+- 🛠 **Professional Bitcoin Core integration** without the complexity
+
+**[📋 Complete Service Overview →](WHAT_WE_OFFER.md)**
+
+## 📖 Documentation
+
+- **[📚 Complete API Documentation](API.md)** - REST endpoints, authentication, rate limits
+- **[🏗 Architecture Guide](ARCHITECTURE.md)** - Hub-and-spoke security model
+- **[🌐 Web Documentation](web/pages/docs/index.tsx)** - Interactive docs with examples
+- **[📋 What We Offer](WHAT_WE_OFFER.md)** - Comprehensive service overview
 
 ## Project Structure
 

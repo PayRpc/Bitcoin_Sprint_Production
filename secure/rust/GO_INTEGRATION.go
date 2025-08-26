@@ -40,6 +40,11 @@ type HealthStatus struct {
 	ActiveConnections int       `json:"active_connections"`
 }
 
+type MemoryProtectionStatus struct {
+	Enabled   bool `json:"enabled"`
+	SelfCheck bool `json:"self_check"`
+}
+
 // SecureChannelMonitor wraps the Rust SecureChannel pool monitoring
 type SecureChannelMonitor struct {
 	metricsBaseURL string

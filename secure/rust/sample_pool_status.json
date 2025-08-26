@@ -1,44 +1,173 @@
 {
+  "timestamp": "2025-08-25T11:00:00Z",
+  "pool_status": "HEALTHY",
+  "pool_health_score": 97.8,
   "endpoint": "relay.bitcoin-sprint.inc:443",
   "active_connections": 5,
+  "max_connections": 10,
+  "target_connections": 8,
   "total_reconnects": 12,
   "total_errors": 3,
-  "pool_p95_latency_ms": 45,
+  "uptime_seconds": 86400,
+  "pool_metrics": {
+    "p50_latency_ms": 28,
+    "p95_latency_ms": 45,
+    "p99_latency_ms": 78,
+    "avg_latency_ms": 31.5,
+    "throughput_ops_per_sec": 2450,
+    "error_rate_percent": 0.12,
+    "success_rate_percent": 99.88
+  },
+  "security_status": {
+    "secure_channel_active": true,
+    "encryption_strength": "AES-256-GCM",
+    "certificate_valid": true,
+    "certificate_expires": "2026-08-25T11:00:00Z",
+    "tls_version": "1.3",
+    "cipher_suite": "TLS_AES_256_GCM_SHA384",
+    "peer_verification": "VERIFIED",
+    "security_score": 98.5
+  },
+  "memory_protection": {
+    "secure_buffer_active": true,
+    "buffer_utilization_percent": 34.2,
+    "memory_lock_enabled": true,
+    "canary_checks_passed": true,
+    "memory_integrity_score": 99.1
+  },
+  "circuit_breaker": {
+    "state": "CLOSED",
+    "failure_threshold": 10,
+    "current_failures": 0,
+    "success_threshold": 5,
+    "timeout_ms": 30000,
+    "half_open_max_calls": 3
+  },
+  "load_balancing": {
+    "algorithm": "round_robin_weighted",
+    "current_strategy": "performance_aware",
+    "connection_weights": [0.95, 1.0, 0.85, 1.0, 0.9]
+  },
   "connections": [
     {
       "connection_id": 1,
+      "status": "ACTIVE",
       "last_activity": "2025-08-25T11:00:00Z",
+      "connection_age_seconds": 3600,
       "reconnects": 2,
       "errors": 1,
-      "p95_latency_ms": 45
+      "p95_latency_ms": 45,
+      "bytes_sent": 2847592,
+      "bytes_received": 5749382,
+      "security_context": {
+        "authenticated": true,
+        "session_key_rotated": "2025-08-25T10:30:00Z",
+        "encryption_active": true
+      },
+      "health_score": 96.5
     },
     {
       "connection_id": 2,
+      "status": "ACTIVE",
       "last_activity": "2025-08-25T10:58:30Z",
+      "connection_age_seconds": 3720,
       "reconnects": 3,
       "errors": 0,
-      "p95_latency_ms": 32
+      "p95_latency_ms": 32,
+      "bytes_sent": 3249871,
+      "bytes_received": 6582947,
+      "security_context": {
+        "authenticated": true,
+        "session_key_rotated": "2025-08-25T10:28:30Z",
+        "encryption_active": true
+      },
+      "health_score": 99.2
     },
     {
       "connection_id": 3,
+      "status": "DEGRADED",
       "last_activity": "2025-08-25T10:59:45Z",
+      "connection_age_seconds": 3615,
       "reconnects": 1,
       "errors": 2,
-      "p95_latency_ms": 67
+      "p95_latency_ms": 67,
+      "bytes_sent": 1847293,
+      "bytes_received": 3928472,
+      "security_context": {
+        "authenticated": true,
+        "session_key_rotated": "2025-08-25T10:29:45Z",
+        "encryption_active": true
+      },
+      "health_score": 85.3
     },
     {
       "connection_id": 4,
+      "status": "ACTIVE",
       "last_activity": "2025-08-25T11:00:15Z",
+      "connection_age_seconds": 3585,
       "reconnects": 0,
       "errors": 0,
-      "p95_latency_ms": 23
+      "p95_latency_ms": 23,
+      "bytes_sent": 4129583,
+      "bytes_received": 8473629,
+      "security_context": {
+        "authenticated": true,
+        "session_key_rotated": "2025-08-25T10:30:15Z",
+        "encryption_active": true
+      },
+      "health_score": 99.8
     },
     {
       "connection_id": 5,
+      "status": "ACTIVE",
       "last_activity": "2025-08-25T10:59:12Z",
+      "connection_age_seconds": 3648,
       "reconnects": 6,
       "errors": 0,
-      "p95_latency_ms": 41
+      "p95_latency_ms": 41,
+      "bytes_sent": 2749382,
+      "bytes_received": 5847291,
+      "security_context": {
+        "authenticated": true,
+        "session_key_rotated": "2025-08-25T10:29:12Z",
+        "encryption_active": true
+      },
+      "health_score": 92.7
     }
-  ]
+  ],
+  "alerting": {
+    "active_alerts": 0,
+    "warning_threshold_latency_ms": 100,
+    "critical_threshold_latency_ms": 500,
+    "error_rate_threshold_percent": 5.0,
+    "connection_threshold_min": 3
+  },
+  "compliance": {
+    "audit_logging_enabled": true,
+    "compliance_checks_passed": true,
+    "last_compliance_scan": "2025-08-25T10:00:00Z",
+    "regulatory_compliance": ["SOC2", "PCI-DSS"],
+    "data_residency": "US-EAST"
+  },
+  "enterprise_features": {
+    "high_availability": true,
+    "disaster_recovery_ready": true,
+    "multi_region_support": true,
+    "enterprise_monitoring": true,
+    "sla_compliance": 99.95,
+    "support_tier": "ENTERPRISE_PLATINUM"
+  },
+  "go_integration": {
+    "cgo_bindings_active": true,
+    "ffi_safety_checks": true,
+    "memory_synchronization": "SAFE",
+    "thread_safety_level": "FULL",
+    "integration_health": "OPTIMAL"
+  },
+  "monitoring_endpoints": {
+    "health": "/api/v1/pool/health",
+    "metrics": "/api/v1/pool/metrics",
+    "detailed_status": "/api/v1/pool/status/detailed",
+    "prometheus_metrics": "/metrics"
+  }
 }

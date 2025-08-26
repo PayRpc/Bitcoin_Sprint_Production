@@ -37,6 +37,89 @@ export default function DocsPage() {
         <section className="grid grid-cols-1 gap-6 mb-8">
           <Card className="bg-gray-850 border-gray-800">
             <CardContent>
+              <h2 className="text-2xl font-semibold text-white mb-4">🚀 What is Bitcoin Sprint?</h2>
+              <p className="text-gray-300 mb-4">
+                Bitcoin Sprint is an <strong className="text-white">enterprise-grade Bitcoin block detection and monitoring system</strong> that transforms how businesses interact with the Bitcoin blockchain. We provide real-time Bitcoin block monitoring, secure API access, and enterprise-level integrations that scale from individual developers to large financial institutions.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <div className="bg-gray-900 p-4 rounded-lg">
+                  <h4 className="text-green-400 font-semibold mb-2">✅ With Bitcoin Sprint</h4>
+                  <ul className="text-sm text-gray-300 space-y-1">
+                    <li>• Plug-and-play integration</li>
+                    <li>• Secure memory handling (Rust-powered)</li>
+                    <li>• Real-time block notifications</li>
+                    <li>• Enterprise support & SLA</li>
+                    <li>• Scalable architecture</li>
+                  </ul>
+                </div>
+                <div className="bg-gray-900 p-4 rounded-lg">
+                  <h4 className="text-red-400 font-semibold mb-2">❌ Before Bitcoin Sprint</h4>
+                  <ul className="text-sm text-gray-300 space-y-1">
+                    <li>• Complex Bitcoin Core setup</li>
+                    <li>• Manual RPC security management</li>
+                    <li>• Unreliable block detection delays</li>
+                    <li>• Memory vulnerabilities</li>
+                    <li>• No enterprise support</li>
+                  </ul>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gray-850 border-gray-800">
+            <CardContent>
+              <h2 className="text-2xl font-semibold text-white mb-4">🏢 Service Tiers</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-gray-900 p-4 rounded-lg border border-gray-700">
+                  <h3 className="text-lg font-semibold text-white mb-2">🆓 FREE</h3>
+                  <p className="text-gray-400 text-sm mb-3">Perfect for developers</p>
+                  <ul className="text-sm text-gray-300 space-y-1">
+                    <li>• Basic API access</li>
+                    <li>• Rate-limited endpoints</li>
+                    <li>• Community support</li>
+                    <li>• Documentation & examples</li>
+                  </ul>
+                  <div className="mt-3 pt-3 border-t border-gray-700">
+                    <span className="text-green-400 font-semibold">Free forever</span>
+                  </div>
+                </div>
+                
+                <div className="bg-gray-900 p-4 rounded-lg border border-blue-500 relative">
+                  <div className="absolute -top-2 left-4 bg-blue-500 text-white text-xs px-2 py-1 rounded">
+                    POPULAR
+                  </div>
+                  <h3 className="text-lg font-semibold text-white mb-2">💼 PRO</h3>
+                  <p className="text-gray-400 text-sm mb-3">Growing businesses</p>
+                  <ul className="text-sm text-gray-300 space-y-1">
+                    <li>• 5x higher rate limits</li>
+                    <li>• Priority authentication</li>
+                    <li>• Enhanced monitoring</li>
+                    <li>• Email support (48hr)</li>
+                  </ul>
+                  <div className="mt-3 pt-3 border-t border-gray-700">
+                    <span className="text-blue-400 font-semibold">Monthly subscription</span>
+                  </div>
+                </div>
+                
+                <div className="bg-gray-900 p-4 rounded-lg border border-yellow-500">
+                  <h3 className="text-lg font-semibold text-white mb-2">🏆 ENTERPRISE</h3>
+                  <p className="text-gray-400 text-sm mb-3">Mission-critical ops</p>
+                  <ul className="text-sm text-gray-300 space-y-1">
+                    <li>• Unlimited requests</li>
+                    <li>• 99.9% uptime SLA</li>
+                    <li>• 24/7 support</li>
+                    <li>• Custom integrations</li>
+                  </ul>
+                  <div className="mt-3 pt-3 border-t border-gray-700">
+                    <span className="text-yellow-400 font-semibold">Custom pricing</span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gray-850 border-gray-800">
+            <CardContent>
               <h2 className="text-2xl font-semibold text-white mb-2">Quick Start</h2>
               <p className="text-gray-300">Drop a <code className="bg-gray-900 px-1 rounded">config.json</code> on your server, set your RPC credentials, and launch the relay. The relay authenticates requests using a per-license API key. See examples below.</p>
             </CardContent>
@@ -68,7 +151,86 @@ export default function DocsPage() {
         </section>
 
         <section className="mb-8">
-          <h2 className="text-2xl font-semibold text-white mb-3">🔒 Advanced Security Features</h2>
+          <h2 className="text-2xl font-semibold text-white mb-3">� Technical Capabilities</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            
+            <Card className="bg-gray-850 border-gray-800">
+              <CardContent>
+                <h3 className="text-lg font-medium text-white mb-3">⚡ Bitcoin Integration</h3>
+                <ul className="list-disc pl-5 space-y-1 text-gray-300 text-sm">
+                  <li><strong className="text-white">Real-time block monitoring</strong> with WebSocket and HTTP APIs</li>
+                  <li><strong className="text-white">Bitcoin Core RPC proxy</strong> with enhanced security</li>
+                  <li><strong className="text-white">P2P network integration</strong> for direct blockchain access</li>
+                  <li><strong className="text-white">Transaction monitoring</strong> and analysis tools</li>
+                </ul>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gray-850 border-gray-800">
+              <CardContent>
+                <h3 className="text-lg font-medium text-white mb-3">👨‍💻 Developer Experience</h3>
+                <ul className="list-disc pl-5 space-y-1 text-gray-300 text-sm">
+                  <li><strong className="text-white">RESTful APIs</strong> with comprehensive OpenAPI docs</li>
+                  <li><strong className="text-white">Multiple languages</strong> supported (Go, Rust, C++, JS)</li>
+                  <li><strong className="text-white">Docker containers</strong> and cloud deployment ready</li>
+                  <li><strong className="text-white">Extensive examples</strong> and integration guides</li>
+                </ul>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gray-850 border-gray-800">
+              <CardContent>
+                <h3 className="text-lg font-medium text-white mb-3">📊 Monitoring & Analytics</h3>
+                <ul className="list-disc pl-5 space-y-1 text-gray-300 text-sm">
+                  <li><strong className="text-white">Real-time dashboards</strong> with block and transaction metrics</li>
+                  <li><strong className="text-white">Performance monitoring</strong> with Prometheus integration</li>
+                  <li><strong className="text-white">Health checks</strong> and automated alerting</li>
+                  <li><strong className="text-white">Custom analytics</strong> for enterprise customers</li>
+                </ul>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gray-850 border-gray-800">
+              <CardContent>
+                <h3 className="text-lg font-medium text-white mb-3">🌐 Deployment Options</h3>
+                <ul className="list-disc pl-5 space-y-1 text-gray-300 text-sm">
+                  <li><strong className="text-white">Cloud-hosted</strong> fully managed service</li>
+                  <li><strong className="text-white">On-premise enterprise</strong> with source code access</li>
+                  <li><strong className="text-white">Hybrid solutions</strong> for data sovereignty</li>
+                  <li><strong className="text-white">Global infrastructure</strong> with 99.9% uptime</li>
+                </ul>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="bg-gradient-to-r from-blue-900/20 to-purple-900/20 border-blue-500/30">
+            <CardContent>
+              <h3 className="text-xl font-semibold text-white mb-3">🚀 Quick Integration Example</h3>
+              <div className="bg-gray-950 p-4 rounded-lg">
+                <pre className="text-green-400 text-sm overflow-x-auto">
+{`// Real-time block monitoring
+const response = await fetch('https://api.bitcoinsprint.com/v1/blocks/latest', {
+  headers: { 'Authorization': 'Bearer YOUR_API_KEY' }
+});
+const block = await response.json();
+console.log(\`New block: \${block.hash}\`);
+
+// WebSocket for real-time updates
+const ws = new WebSocket('wss://api.bitcoinsprint.com/v1/ws');
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  if (data.type === 'new_block') {
+    console.log('Block detected:', data.block);
+  }
+};`}
+                </pre>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="mb-8">
+          <h2 className="text-2xl font-semibold text-white mb-3">�🔒 Advanced Security Features</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
             <Card className="bg-gray-850 border-gray-800">
@@ -143,6 +305,20 @@ export default function DocsPage() {
                     <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
                     SecureChannel Implementation Guide
                   </a>
+                </div>
+              </div>
+              
+              <div className="mt-3">
+                <h4 className="text-white font-medium mb-2">🔗 Go Integration Features</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  <div className="bg-gray-900 p-2 rounded">
+                    <span className="text-orange-400">⚡ Real-time Monitoring:</span>
+                    <p className="text-gray-300 mt-1">HTTP endpoints for connection health, metrics, and Prometheus integration</p>
+                  </div>
+                  <div className="bg-gray-900 p-2 rounded">
+                    <span className="text-purple-400">🔄 CGO Integration:</span>
+                    <p className="text-gray-300 mt-1">Seamless FFI bindings between Go services and Rust security components</p>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -229,7 +405,119 @@ export default function DocsPage() {
           </Card>
         </section>
 
-        <footer className="mt-12 text-sm text-gray-400">If you need enterprise onboarding or SLA details, contact sales.</footer>
+        <section className="mb-8">
+          <h2 className="text-2xl font-semibold text-white mb-4">📞 Contact & Support</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            <Card className="bg-gradient-to-br from-blue-900/30 to-blue-800/20 border-blue-500/30">
+              <CardContent>
+                <h3 className="text-lg font-semibold text-white mb-3">💼 Sales & Enterprise</h3>
+                <div className="space-y-2 text-sm">
+                  <div>
+                    <strong className="text-blue-400">Email:</strong>
+                    <p className="text-gray-300">enterprise@bitcoinsprint.com</p>
+                  </div>
+                  <div>
+                    <strong className="text-blue-400">Phone:</strong>
+                    <p className="text-gray-300">+1-800-BITCOIN-SPRINT</p>
+                  </div>
+                  <div>
+                    <strong className="text-blue-400">Schedule Demo:</strong>
+                    <a href="https://calendly.com/bitcoinsprint" className="text-blue-300 hover:text-blue-200 block">
+                      calendly.com/bitcoinsprint
+                    </a>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-green-900/30 to-green-800/20 border-green-500/30">
+              <CardContent>
+                <h3 className="text-lg font-semibold text-white mb-3">🛠 Technical Support</h3>
+                <div className="space-y-2 text-sm">
+                  <div>
+                    <strong className="text-green-400">Documentation:</strong>
+                    <a href="https://docs.bitcoinsprint.com" className="text-green-300 hover:text-green-200 block">
+                      docs.bitcoinsprint.com
+                    </a>
+                  </div>
+                  <div>
+                    <strong className="text-green-400">Community:</strong>
+                    <a href="https://github.com/PayRpc/Bitcoin_Sprint" className="text-green-300 hover:text-green-200 block">
+                      GitHub Repository
+                    </a>
+                  </div>
+                  <div>
+                    <strong className="text-green-400">Support Portal:</strong>
+                    <a href="https://support.bitcoinsprint.com" className="text-green-300 hover:text-green-200 block">
+                      support.bitcoinsprint.com
+                    </a>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-purple-900/30 to-purple-800/20 border-purple-500/30">
+              <CardContent>
+                <h3 className="text-lg font-semibold text-white mb-3">👨‍💻 Developer Resources</h3>
+                <div className="space-y-2 text-sm">
+                  <div>
+                    <strong className="text-purple-400">API Reference:</strong>
+                    <p className="text-gray-300">Complete OpenAPI 3.0 spec</p>
+                  </div>
+                  <div>
+                    <strong className="text-purple-400">SDKs:</strong>
+                    <p className="text-gray-300">Official libraries for major languages</p>
+                  </div>
+                  <div>
+                    <strong className="text-purple-400">Examples:</strong>
+                    <p className="text-gray-300">Production-ready code samples</p>
+                  </div>
+                  <div>
+                    <strong className="text-purple-400">Webhooks:</strong>
+                    <p className="text-gray-300">Real-time event notifications</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="bg-gradient-to-r from-orange-900/20 to-red-900/20 border-orange-500/30 mt-6">
+            <CardContent>
+              <div className="text-center">
+                <h3 className="text-xl font-semibold text-white mb-2">🚀 Ready to Get Started?</h3>
+                <p className="text-gray-300 mb-4">
+                  Start with our free tier today or schedule an enterprise demo to see Bitcoin Sprint in action.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <a 
+                    href="/signup" 
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    Start Free Trial
+                  </a>
+                  <a 
+                    href="mailto:enterprise@bitcoinsprint.com" 
+                    className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    Enterprise Demo
+                  </a>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <footer className="mt-12 text-sm text-gray-400 text-center">
+          <div className="border-t border-gray-800 pt-6">
+            <p className="mb-2">
+              <strong className="text-white">Bitcoin Sprint</strong> — Making Bitcoin integration sprint-fast for everyone.
+            </p>
+            <p>
+              If you need enterprise onboarding, custom integrations, or SLA details, contact our sales team.
+            </p>
+          </div>
+        </footer>
       </main>
     </div>
   );

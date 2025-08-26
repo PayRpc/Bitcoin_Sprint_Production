@@ -3,9 +3,16 @@
 /bin/
 /cmd/**/bin/
 /*.exe
+*.exe
 *.exe~
 *.test
 *.out
+*-sprint*.exe
+bitcoin-sprint*.exe
+sprint*.exe
+selfcheck*.exe
+debug-check*.exe
+test-*.exe
 
 # Rust
 /target/
@@ -62,6 +69,11 @@ coverage.html
 *.pprof
 *.prof
 
+# Audit and session logs
+audit-*.json
+session-*.json
+enterprise-*.log
+
 # ────────── Local Config & Secrets ──────────
 # DO NOT COMMIT sensitive configs (RPC nodes, creds, secrets)
 *.env
@@ -71,7 +83,9 @@ coverage.html
 !*.env.example
 
 config.json
+config-*.json
 config-local.json
+config-turbo.json
 cmd/sprint/config.json
 cmd/sprint/config-local.json
 license.json
@@ -112,3 +126,26 @@ run-sprint-zmq.ps1
 start-bitcoin-testnet4.ps1
 start-sprint-testnet4.ps1
 Start-MockServer.ps1
+
+# Demo and test scripts (generated)
+*-demo*.ps1
+customer-*.ps1
+production-demo*.ps1
+integration-test*.ps1
+test-*.ps1
+
+# Third-party installers
+rustup-init.exe
+*-installer.exe
+
+# Tool outputs and enterprise logs
+tools/*.log
+tools/audit-*.json
+tools/session-*.json
+
+# Command line artifacts and stray files
+--version
+--help
+--*
+-v
+-h
