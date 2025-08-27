@@ -1,0 +1,31 @@
+{
+  "dashboard_url": "http://localhost:8888",
+  "test_parameters": {
+    "provider": "both",
+    "test_type": "full",
+    "duration": 60
+  },
+  "timestamp": "2025-08-27 07:38:31",
+  "api_url": "http://localhost:9090",
+  "test_results": [
+    {
+      "SuccessfulRequests": 15,
+      "AvgResponseTime": 2035.8451066666669,
+      "MaxResponseTime": 2051,
+      "SuccessRate": 100,
+      "TotalRequests": 15,
+      "Provider": "electrum",
+      "MinResponseTime": 2017.5898
+    },
+    {
+      "SuccessfulRequests": 15,
+      "AvgResponseTime": 2036.2666933333335,
+      "MaxResponseTime": 2059,
+      "SuccessRate": 100,
+      "TotalRequests": 15,
+      "Provider": "bitcoin-core",
+      "MinResponseTime": 2020.6158
+    }
+  ],
+  "multi_provider_config": true
+}

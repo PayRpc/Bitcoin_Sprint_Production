@@ -12,6 +12,7 @@ import (
 
 	"github.com/PayRpc/Bitcoin-Sprint/internal/api"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/cache"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/license"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
@@ -34,6 +35,10 @@ func main() {
 	// Initialize logger
 	logger := initLogger(cfg)
 	defer logger.Sync()
+
+	// Create context for background workers
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// Apply performance optimizations FIRST (permanent for all tiers)
 	perfManager := performance.New(cfg, logger)
@@ -73,8 +78,15 @@ func main() {
 	}
 	go p2pModule.Run()
 
-	// Initialize API server
-	apiServer := api.New(cfg, blockChan, mempoolModule, logger)
+	// Initialize cache layer for ultra-low latency
+	blockCache := cache.New(1000, logger) // Cache up to 1000 recent blocks
+
+	// Initialize prefetch worker to continuously update cache
+	prefetchWorker := cache.NewPrefetchWorker(blockCache, blockChan, logger)
+	prefetchWorker.Start(ctx)
+
+	// Initialize API server with cache layer
+	apiServer := api.NewWithCache(cfg, blockChan, mempoolModule, blockCache, logger)
 	go func() {
 		logger.Info("Starting API server", zap.String("address", fmt.Sprintf("%s:%d", cfg.APIHost, cfg.APIPort)))
 		apiServer.Run()

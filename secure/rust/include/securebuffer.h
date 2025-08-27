@@ -201,47 +201,43 @@ extern "C"
 
 	// === Entropy Integration ===
 	// Fill existing buffer with fast entropy (OS RNG + timing jitter)
-	SECUREBUFFER_API int securebuffer_fill_fast_entropy(void* buffer);
-	
+	SECUREBUFFER_API int securebuffer_fill_fast_entropy(void *buffer);
+
 	// Fill existing buffer with hybrid entropy (OS RNG + Bitcoin headers + jitter)
 	SECUREBUFFER_API int securebuffer_fill_hybrid_entropy(
-		void* buffer,
-		const uint8_t* headers_ptr,
+		void *buffer,
+		const uint8_t *headers_ptr,
 		size_t headers_len,
-		size_t header_count
-	);
-	
+		size_t header_count);
+
 	// Fill existing buffer with enterprise-grade entropy
 	SECUREBUFFER_API int securebuffer_fill_enterprise_entropy(
-		void* buffer,
-		const uint8_t* headers_ptr,
+		void *buffer,
+		const uint8_t *headers_ptr,
 		size_t headers_len,
 		size_t header_count,
-		const uint8_t* additional_data_ptr,
-		size_t additional_data_len
-	);
-	
+		const uint8_t *additional_data_ptr,
+		size_t additional_data_len);
+
 	// Create new buffer pre-filled with fast entropy
-	SECUREBUFFER_API void* securebuffer_new_with_fast_entropy(size_t capacity);
-	
+	SECUREBUFFER_API void *securebuffer_new_with_fast_entropy(size_t capacity);
+
 	// Create new buffer pre-filled with hybrid entropy
-	SECUREBUFFER_API void* securebuffer_new_with_hybrid_entropy(
+	SECUREBUFFER_API void *securebuffer_new_with_hybrid_entropy(
 		size_t capacity,
-		const uint8_t* headers_ptr,
+		const uint8_t *headers_ptr,
 		size_t headers_len,
-		size_t header_count
-	);
-	
+		size_t header_count);
+
 	// Refresh buffer contents with new entropy
-	SECUREBUFFER_API int securebuffer_refresh_entropy(void* buffer);
-	
+	SECUREBUFFER_API int securebuffer_refresh_entropy(void *buffer);
+
 	// Mix additional entropy into existing buffer content
 	SECUREBUFFER_API int securebuffer_mix_entropy(
-		void* buffer,
-		const uint8_t* headers_ptr,
+		void *buffer,
+		const uint8_t *headers_ptr,
 		size_t headers_len,
-		size_t header_count
-	);
+		size_t header_count);
 
 	// === Error Handling ===
 	SECUREBUFFER_API const char *securebuffer_error_string(SecureBufferError error);

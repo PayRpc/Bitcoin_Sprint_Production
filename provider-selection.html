@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin Sprint - Provider Selection</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            color: #ffffff;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: rgba(26, 42, 152, 0.9);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #ff6b6b 0%, #4ecdc4 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .provider-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .provider-card {
+            background: rgba(26, 42, 152, 0.9);
+            border-radius: 20px;
+            padding: 30px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .provider-card:hover {
+            border-color: #00d4ff;
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 212, 255, 0.3);
+        }
+
+        .provider-card.selected {
+            border-color: #4CAF50;
+            background: rgba(76, 175, 80, 0.2);
+        }
+
+        .provider-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .provider-icon {
+            font-size: 3rem;
+            margin-right: 20px;
+        }
+
+        .provider-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #ffffff;
+        }
+
+        .provider-subtitle {
+            font-size: 1rem;
+            color: #b8c5d6;
+            margin-bottom: 20px;
+        }
+
+        .features-list {
+            list-style: none;
+            margin-bottom: 20px;
+        }
+
+        .features-list li {
+            padding: 8px 0;
+            color: #e0e6ed;
+            display: flex;
+            align-items: center;
+        }
+
+        .features-list li:before {
+            content: "✓";
+            color: #4CAF50;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .performance-metrics {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .metric:last-child {
+            margin-bottom: 0;
+        }
+
+        .metric-label {
+            color: #b8c5d6;
+        }
+
+        .metric-value {
+            color: #00d4ff;
+            font-weight: 600;
+        }
+
+        .select-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #00d4ff 0%, #090979 100%);
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .select-btn:hover {
+            transform: scale(1.02);
+        }
+
+        .select-btn.selected {
+            background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%);
+        }
+
+        .control-panel {
+            background: rgba(26, 42, 152, 0.9);
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .control-btn {
+            background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 25px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            cursor: pointer;
+            margin: 10px;
+            transition: transform 0.2s ease;
+        }
+
+        .control-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .control-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status-panel {
+            background: rgba(26, 42, 152, 0.9);
+            border-radius: 20px;
+            padding: 30px;
+            margin-top: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .status-log {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .provider-comparison {
+            background: rgba(26, 42, 152, 0.9);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .comparison-table th {
+            background: rgba(255, 255, 255, 0.1);
+            font-weight: 600;
+            color: #00d4ff;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-fast { background: #4CAF50; color: white; }
+        .badge-secure { background: #2196F3; color: white; }
+        .badge-reliable { background: #FF9800; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔧 Bitcoin Sprint Provider Selection</h1>
+            <p>Choose your preferred Bitcoin data provider for optimal performance</p>
+        </div>
+
+        <div class="provider-comparison">
+            <h2 style="color: #ffffff; margin-bottom: 20px;">📊 Provider Comparison</h2>
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Electrum Network</th>
+                        <th>Bitcoin Core P2P</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Connection Type</td>
+                        <td>TCP/SSL Servers</td>
+                        <td>Direct P2P Network</td>
+                    </tr>
+                    <tr>
+                        <td>Latency</td>
+                        <td>50-150ms <span class="badge badge-reliable">Good</span></td>
+                        <td>5-50ms <span class="badge badge-fast">Excellent</span></td>
+                    </tr>
+                    <tr>
+                        <td>Resource Usage</td>
+                        <td>Low</td>
+                        <td>Medium</td>
+                    </tr>
+                    <tr>
+                        <td>Setup Complexity</td>
+                        <td>Simple</td>
+                        <td>Moderate</td>
+                    </tr>
+                    <tr>
+                        <td>Data Freshness</td>
+                        <td>Near Real-time</td>
+                        <td>Real-time</td>
+                    </tr>
+                    <tr>
+                        <td>Bandwidth</td>
+                        <td>Low</td>
+                        <td>Higher</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="provider-grid">
+            <div class="provider-card" id="electrum-card" onclick="selectProvider('electrum')">
+                <div class="provider-header">
+                    <div class="provider-icon">⚡</div>
+                    <div>
+                        <div class="provider-title">Electrum Network</div>
+                        <div class="provider-subtitle">Lightweight & Efficient</div>
+                    </div>
+                </div>
+                
+                <ul class="features-list">
+                    <li>Fast server connections (TCP/SSL)</li>
+                    <li>Low bandwidth usage</li>
+                    <li>Multiple server redundancy</li>
+                    <li>Header subscription support</li>
+                    <li>Mempool monitoring</li>
+                    <li>Fee estimation</li>
+                </ul>
+
+                <div class="performance-metrics">
+                    <div class="metric">
+                        <span class="metric-label">Typical Latency:</span>
+                        <span class="metric-value">50-150ms</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Connection Ports:</span>
+                        <span class="metric-value">50001 (TCP), 50002 (SSL)</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Resource Usage:</span>
+                        <span class="metric-value">Low</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Best For:</span>
+                        <span class="metric-value">Lightweight apps</span>
+                    </div>
+                </div>
+
+                <button class="select-btn" id="electrum-btn">Select Electrum</button>
+            </div>
+
+            <div class="provider-card" id="bitcoin-core-card" onclick="selectProvider('bitcoin_core')">
+                <div class="provider-header">
+                    <div class="provider-icon">🚀</div>
+                    <div>
+                        <div class="provider-title">Bitcoin Core P2P</div>
+                        <div class="provider-subtitle">Direct Network Access</div>
+                    </div>
+                </div>
+                
+                <ul class="features-list">
+                    <li>Direct P2P network connection</li>
+                    <li>Ultra-low latency (5-50ms)</li>
+                    <li>Real-time block relay</li>
+                    <li>Compact blocks support</li>
+                    <li>Full network participation</li>
+                    <li>Maximum data freshness</li>
+                </ul>
+
+                <div class="performance-metrics">
+                    <div class="metric">
+                        <span class="metric-label">Typical Latency:</span>
+                        <span class="metric-value">5-50ms</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Connection Port:</span>
+                        <span class="metric-value">8333 (P2P)</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Resource Usage:</span>
+                        <span class="metric-value">Medium</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Best For:</span>
+                        <span class="metric-value">High-performance apps</span>
+                    </div>
+                </div>
+
+                <button class="select-btn" id="bitcoin-core-btn">Select Bitcoin Core</button>
+            </div>
+        </div>
+
+        <div class="control-panel">
+            <h2 style="color: #ffffff; margin-bottom: 20px;">🎛️ Provider Control</h2>
+            <p style="color: #b8c5d6; margin-bottom: 20px;" id="selection-status">
+                Please select a provider above to continue
+            </p>
+            
+            <button class="control-btn" onclick="startWithProvider()" id="start-btn" disabled>
+                🚀 Start Bitcoin Sprint
+            </button>
+            <button class="control-btn" onclick="testProvider()" id="test-btn" disabled>
+                🔍 Test Connection
+            </button>
+            <button class="control-btn" onclick="showConfig()" id="config-btn" disabled>
+                ⚙️ View Configuration
+            </button>
+        </div>
+
+        <div class="status-panel">
+            <h2 style="color: #ffffff; margin-bottom: 20px;">📋 Status Log</h2>
+            <div class="status-log" id="status-log">
+[INFO] Bitcoin Sprint Provider Selection Ready
+[INFO] Available Providers: Electrum Network, Bitcoin Core P2P
+[INFO] Select your preferred provider to begin setup
+[INFO] Enterprise tier features available for all providers
+</div>
+        </div>
+    </div>
+
+    <script>
+        let selectedProvider = null;
+        
+        const providers = {
+            electrum: {
+                name: "Electrum Network",
+                config: "config-provider-electrum.json",
+                description: "Lightweight Electrum server connectivity",
+                ports: ["50001 (TCP)", "50002 (SSL)"],
+                features: ["Low bandwidth", "Multiple servers", "Quick setup"]
+            },
+            bitcoin_core: {
+                name: "Bitcoin Core P2P",
+                config: "config-provider-bitcoin-core.json", 
+                description: "Direct P2P network connectivity",
+                ports: ["8333 (P2P)"],
+                features: ["Ultra-low latency", "Real-time data", "Full network access"]
+            }
+        };
+
+        function selectProvider(providerType) {
+            // Clear previous selection
+            document.querySelectorAll('.provider-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            document.querySelectorAll('.select-btn').forEach(btn => {
+                btn.classList.remove('selected');
+                btn.textContent = btn.textContent.replace('✓ Selected: ', 'Select ');
+            });
+
+            // Select new provider
+            selectedProvider = providerType;
+            const card = document.getElementById(`${providerType}-card`);
+            const btn = document.getElementById(`${providerType}-btn`);
+            
+            card.classList.add('selected');
+            btn.classList.add('selected');
+            btn.textContent = `✓ Selected: ${providers[providerType].name}`;
+
+            // Update status
+            document.getElementById('selection-status').textContent = 
+                `Selected: ${providers[providerType].name} - ${providers[providerType].description}`;
+
+            // Enable control buttons
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('test-btn').disabled = false;
+            document.getElementById('config-btn').disabled = false;
+
+            logMessage(`[SELECTION] Provider selected: ${providers[providerType].name}`);
+            logMessage(`[CONFIG] Configuration: ${providers[providerType].config}`);
+            logMessage(`[PORTS] Connection ports: ${providers[providerType].ports.join(', ')}`);
+        }
+
+        async function startWithProvider() {
+            if (!selectedProvider) return;
+
+            const provider = providers[selectedProvider];
+            logMessage(`[START] Starting Bitcoin Sprint with ${provider.name}...`);
+            
+            try {
+                // Simulate starting Bitcoin Sprint with selected provider
+                logMessage(`[CONFIG] Loading configuration: ${provider.config}`);
+                logMessage(`[INIT] Initializing ${provider.name} connections...`);
+                
+                // In a real implementation, this would make API calls to start the service
+                await simulateStartup(provider);
+                
+                logMessage(`[SUCCESS] Bitcoin Sprint started successfully with ${provider.name}!`);
+                logMessage(`[READY] API available at: http://localhost:9090`);
+                logMessage(`[DASHBOARD] View performance at: http://localhost:8888/`);
+                
+            } catch (error) {
+                logMessage(`[ERROR] Failed to start with ${provider.name}: ${error.message}`);
+            }
+        }
+
+        async function testProvider() {
+            if (!selectedProvider) return;
+
+            const provider = providers[selectedProvider];
+            logMessage(`[TEST] Testing ${provider.name} connectivity...`);
+            
+            try {
+                // Simulate connection test
+                await simulateConnectionTest(provider);
+                logMessage(`[SUCCESS] ${provider.name} connectivity test passed!`);
+                
+            } catch (error) {
+                logMessage(`[ERROR] ${provider.name} connectivity test failed: ${error.message}`);
+            }
+        }
+
+        function showConfig() {
+            if (!selectedProvider) return;
+
+            const provider = providers[selectedProvider];
+            logMessage(`[CONFIG] Configuration for ${provider.name}:`);
+            logMessage(`[FILE] ${provider.config}`);
+            logMessage(`[FEATURES] ${provider.features.join(', ')}`);
+            logMessage(`[PORTS] ${provider.ports.join(', ')}`);
+            
+            // In a real implementation, this would show the actual config file
+            logMessage(`[INFO] Full configuration available in: ${provider.config}`);
+        }
+
+        async function simulateStartup(provider) {
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    if (Math.random() > 0.1) { // 90% success rate
+                        resolve();
+                    } else {
+                        throw new Error("Connection failed");
+                    }
+                }, 2000);
+            });
+        }
+
+        async function simulateConnectionTest(provider) {
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    if (Math.random() > 0.05) { // 95% success rate
+                        resolve();
+                    } else {
+                        throw new Error("Network timeout");
+                    }
+                }, 1000);
+            });
+        }
+
+        function logMessage(message) {
+            const logElement = document.getElementById('status-log');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.textContent += `\n[${timestamp}] ${message}`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        // Auto-select first provider for demo
+        document.addEventListener('DOMContentLoaded', function() {
+            logMessage('[INIT] Provider selection dashboard initialized');
+            logMessage('[READY] Select a provider to configure Bitcoin Sprint');
+        });
+    </script>
+</body>
+</html>

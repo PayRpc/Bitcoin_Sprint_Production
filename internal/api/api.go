@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/cache"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/entropy"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/license"
@@ -24,6 +25,7 @@ type Server struct {
 	cfg       config.Config
 	blockChan chan blocks.BlockEvent
 	mem       *mempool.Mempool
+	cache     *cache.Cache
 	logger    *zap.Logger
 	srv       *http.Server
 }
@@ -37,6 +39,16 @@ func New(cfg config.Config, blockChan chan blocks.BlockEvent, mem *mempool.Mempo
 	}
 }
 
+func NewWithCache(cfg config.Config, blockChan chan blocks.BlockEvent, mem *mempool.Mempool, cache *cache.Cache, logger *zap.Logger) *Server {
+	return &Server{
+		cfg:       cfg,
+		blockChan: blockChan,
+		mem:       mem,
+		cache:     cache,
+		logger:    logger,
+	}
+}
+
 func (s *Server) Run() {
 	mux := http.NewServeMux()
 
@@ -45,6 +57,7 @@ func (s *Server) Run() {
 	mux.HandleFunc("/version", s.versionHandler) // No auth for version endpoint
 	mux.HandleFunc("/latest", s.auth(s.latestHandler))
 	mux.HandleFunc("/metrics", s.auth(s.metricsHandler))
+	mux.HandleFunc("/cache-status", s.auth(s.cacheStatusHandler))
 	mux.HandleFunc("/stream", s.auth(s.streamHandler))
 	mux.HandleFunc("/turbo-status", s.turboStatusHandler)
 
@@ -135,6 +148,17 @@ func (s *Server) statusHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) latestHandler(w http.ResponseWriter, r *http.Request) {
+	// Try to get from cache first for ultra-low latency
+	if s.cache != nil {
+		if block, ok := s.cache.GetLatestBlock(); ok {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("X-Cache-Status", "HIT")
+			json.NewEncoder(w).Encode(block)
+			return
+		}
+	}
+
+	// Fallback to direct channel read if cache miss
 	select {
 	case blk := <-s.blockChan:
 		json.NewEncoder(w).Encode(blk)
@@ -176,6 +200,13 @@ relay_cpu_temperature %.2f
 entropy_sources_active %d
 entropy_system_fingerprint_available %d
 entropy_hardware_sources_available %d
+
+# Cache Performance Metrics
+cache_blocks_cached %d
+cache_max_blocks %d
+cache_latest_height %d
+cache_is_stale %d
+cache_stale_seconds %.2f
 `,
 		p2pMetrics.activePeers,
 		p2pMetrics.blocksDetected,
@@ -197,7 +228,23 @@ entropy_hardware_sources_available %d
 		entropyMetrics.activeSources,
 		entropyMetrics.systemFingerprintAvailable,
 		entropyMetrics.hardwareSourcesAvailable,
+		s.getCacheMetrics().blocksCached,
+		s.getCacheMetrics().maxBlocks,
+		s.getCacheMetrics().latestHeight,
+		s.getCacheMetrics().isStale,
+		s.getCacheMetrics().staleSeconds,
 	)))
+}
+
+func (s *Server) cacheStatusHandler(w http.ResponseWriter, r *http.Request) {
+	if s.cache == nil {
+		http.Error(w, "Cache not enabled", http.StatusServiceUnavailable)
+		return
+	}
+
+	status := s.cache.GetStatus()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(status)
 }
 
 // P2PMetrics holds P2P performance metrics
@@ -279,6 +326,36 @@ func (s *Server) getEntropyMetrics() EntropyMetrics {
 	}
 	
 	return metrics
+}
+
+// CacheMetrics holds cache performance metrics
+type CacheMetrics struct {
+	blocksCached  int
+	maxBlocks     int
+	latestHeight  int64
+	isStale       int
+	staleSeconds  float64
+}
+
+// getCacheMetrics collects cache performance metrics
+func (s *Server) getCacheMetrics() CacheMetrics {
+	if s.cache == nil {
+		return CacheMetrics{}
+	}
+
+	stats := s.cache.GetCacheStats()
+	isStale := 0
+	if stats["is_stale"].(bool) {
+		isStale = 1
+	}
+
+	return CacheMetrics{
+		blocksCached: stats["cached_blocks"].(int),
+		maxBlocks:    stats["max_blocks"].(int),
+		latestHeight: stats["latest_height"].(int64),
+		isStale:      isStale,
+		staleSeconds: stats["stale_seconds"].(float64),
+	}
 }
 
 func (s *Server) streamHandler(w http.ResponseWriter, r *http.Request) {

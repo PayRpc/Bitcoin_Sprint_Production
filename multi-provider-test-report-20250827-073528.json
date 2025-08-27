@@ -1,0 +1,12 @@
+{
+  "dashboard_url": "http://localhost:8888",
+  "test_parameters": {
+    "provider": "both",
+    "test_type": "full",
+    "duration": 60
+  },
+  "timestamp": "2025-08-27 07:35:28",
+  "api_url": "http://localhost:9090",
+  "test_results": [],
+  "multi_provider_config": true
+}
