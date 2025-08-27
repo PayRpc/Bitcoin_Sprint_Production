@@ -1,5 +1,5 @@
-//go:build !cgo
-// +build !cgo
+//go:build cgo
+// +build cgo
 
 // Package cgobindings provides Go bindings for Rust entropy functions
 package cgobindings

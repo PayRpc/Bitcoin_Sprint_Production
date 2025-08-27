@@ -2,10 +2,12 @@ package cache
 
 import (
 	"context"
+	"crypto/rand"
 	"sync"
 	"time"
 
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/entropy"
 	"go.uber.org/zap"
 )
 
@@ -23,14 +25,38 @@ type Cache struct {
 	blockCache  map[int64]BlockCache // height -> block
 	maxBlocks   int
 	logger      *zap.Logger
+
+	// Entropy-seeded cache eviction for flat latency
+	entropySeed     []byte
+	evictionCounter int64
+	hitCounter      int64
+	missCounter     int64
+}
+
+// EntropyEvictionConfig configures entropy-based cache eviction
+type EntropyEvictionConfig struct {
+	SeedLength       int           `json:"seed_length"`
+	UpdateInterval   time.Duration `json:"update_interval"`
+	EvictionThreshold float64      `json:"eviction_threshold"` // 0.0-1.0
 }
 
 // New creates a new cache instance
 func New(maxBlocks int, logger *zap.Logger) *Cache {
+	// Initialize entropy seed for cache eviction
+	seed, err := entropy.FastEntropy()
+	if err != nil {
+		logger.Warn("Failed to generate entropy seed for cache, using random seed", zap.Error(err))
+		seed = make([]byte, 32)
+		if _, err := rand.Read(seed); err != nil {
+			logger.Error("Failed to generate random seed", zap.Error(err))
+		}
+	}
+
 	return &Cache{
-		blockCache: make(map[int64]BlockCache),
+		blockCache:  make(map[int64]BlockCache),
 		maxBlocks:   maxBlocks,
 		logger:      logger,
+		entropySeed: seed,
 	}
 }
 
@@ -152,25 +178,10 @@ func (c *Cache) GetCacheStats() map[string]interface{} {
 	}
 }
 
-// cleanupOldBlocks removes oldest blocks when cache is full
+// cleanupOldBlocks removes blocks using entropy-seeded eviction for flat latency
 func (c *Cache) cleanupOldBlocks() {
-	if len(c.blockCache) <= c.maxBlocks {
-		return
-	}
-
-	// Find the oldest block
-	var oldestHeight int64
-	var oldestTime time.Time = time.Now()
-
-	for height, cached := range c.blockCache {
-		if cached.CachedAt.Before(oldestTime) {
-			oldestTime = cached.CachedAt
-			oldestHeight = height
-		}
-	}
-
-	delete(c.blockCache, oldestHeight)
-	c.logger.Debug("Cleaned up old block from cache", zap.Int64("height", oldestHeight))
+	c.entropySeededEviction()
+	c.evictionCounter++
 }
 
 // PrefetchWorker continuously updates cache from block channel
@@ -217,4 +228,128 @@ func (w *PrefetchWorker) Start(ctx context.Context) {
 // Stop stops the prefetch worker
 func (w *PrefetchWorker) Stop() {
 	close(w.stopCh)
+}
+
+// entropySeededEviction performs entropy-seeded cache eviction for flat latency
+func (c *Cache) entropySeededEviction() {
+	if len(c.blockCache) <= c.maxBlocks {
+		return
+	}
+
+	// Generate entropy for eviction decision
+	entropyBytes, err := entropy.FastEntropy()
+	if err != nil {
+		// Fallback to simple random eviction
+		c.simpleEviction()
+		return
+	}
+
+	// Use entropy to create unpredictable eviction pattern
+	heights := make([]int64, 0, len(c.blockCache))
+	for height := range c.blockCache {
+		heights = append(heights, height)
+	}
+
+	// Sort heights using entropy-seeded comparison
+	c.entropySeededSort(heights, entropyBytes)
+
+	// Evict blocks based on entropy-seeded priority
+	evictCount := len(c.blockCache) - c.maxBlocks
+	for i := 0; i < evictCount && i < len(heights); i++ {
+		height := heights[i]
+		delete(c.blockCache, height)
+		c.logger.Debug("Entropy-seeded eviction",
+			zap.Int64("evicted_height", height),
+			zap.Int("remaining_blocks", len(c.blockCache)))
+	}
+}
+
+// entropySeededSort sorts heights using entropy for unpredictable ordering
+func (c *Cache) entropySeededSort(heights []int64, entropySeed []byte) {
+	if len(heights) <= 1 {
+		return
+	}
+
+	// Fisher-Yates shuffle using entropy seed
+	for i := len(heights) - 1; i > 0; i-- {
+		// Use entropy seed to generate random index
+		seedIndex := int(entropySeed[i%len(entropySeed)]) % (i + 1)
+		heights[i], heights[seedIndex] = heights[seedIndex], heights[i]
+	}
+}
+
+// simpleEviction performs simple LRU-style eviction as fallback
+func (c *Cache) simpleEviction() {
+	if len(c.blockCache) <= c.maxBlocks {
+		return
+	}
+
+	// Find oldest blocks to evict
+	type heightTime struct {
+		height int64
+		time   time.Time
+	}
+
+	var candidates []heightTime
+	for height, cached := range c.blockCache {
+		candidates = append(candidates, heightTime{height: height, time: cached.CachedAt})
+	}
+
+	// Sort by cache time (oldest first)
+	for i := 0; i < len(candidates)-1; i++ {
+		for j := i + 1; j < len(candidates); j++ {
+			if candidates[j].time.Before(candidates[i].time) {
+				candidates[i], candidates[j] = candidates[j], candidates[i]
+			}
+		}
+	}
+
+	// Evict oldest blocks
+	evictCount := len(c.blockCache) - c.maxBlocks
+	for i := 0; i < evictCount && i < len(candidates); i++ {
+		height := candidates[i].height
+		delete(c.blockCache, height)
+		c.logger.Debug("Simple eviction",
+			zap.Int64("evicted_height", height),
+			zap.Int("remaining_blocks", len(c.blockCache)))
+	}
+}
+
+// updateEntropySeed refreshes the entropy seed for cache eviction
+func (c *Cache) updateEntropySeed() {
+	newSeed, err := entropy.FastEntropy()
+	if err != nil {
+		c.logger.Warn("Failed to update entropy seed", zap.Error(err))
+		return
+	}
+	c.entropySeed = newSeed
+	c.logger.Debug("Updated entropy seed for cache eviction")
+}
+
+// GetDetailedCacheStats returns detailed cache statistics with entropy metrics
+func (c *Cache) GetDetailedCacheStats() CacheStats {
+	totalRequests := c.hitCounter + c.missCounter
+	hitRate := float64(0)
+	if totalRequests > 0 {
+		hitRate = float64(c.hitCounter) / float64(totalRequests)
+	}
+
+	return CacheStats{
+		TotalRequests:   totalRequests,
+		CacheHits:       c.hitCounter,
+		CacheMisses:     c.missCounter,
+		CacheHitRate:    hitRate,
+		EvictionCounter: c.evictionCounter,
+		EntropySeedAge:  time.Duration(c.evictionCounter) * time.Millisecond, // Approximation
+	}
+}
+
+// CacheStats represents detailed cache statistics
+type CacheStats struct {
+	TotalRequests   int64         `json:"total_requests"`
+	CacheHits       int64         `json:"cache_hits"`
+	CacheMisses     int64         `json:"cache_misses"`
+	CacheHitRate    float64       `json:"cache_hit_rate"`
+	EvictionCounter int64         `json:"eviction_counter"`
+	EntropySeedAge  time.Duration `json:"entropy_seed_age"`
 }

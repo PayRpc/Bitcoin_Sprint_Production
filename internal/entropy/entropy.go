@@ -1,32 +1,75 @@
-// Package entropy provides Go-based entropy functions
+// Package entropy provides entropy functions with Rust FFI integration
 package entropy
 
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"time"
 )
 
-// FastEntropy returns fast entropy using Go-based implementation
+// FastEntropy returns fast entropy using Rust FFI when available, fallback to Go
 func FastEntropy() ([]byte, error) {
+	// Try Rust implementation first (when CGO is enabled)
+	if rustEntropy, err := FastEntropyRust(); err == nil {
+		return rustEntropy, nil
+	}
+	// Fallback to Go implementation
 	return SimpleEntropy()
 }
 
-// HybridEntropy returns enhanced entropy using Go-based implementation
+// HybridEntropy returns enhanced entropy using Rust FFI when available, fallback to Go
 func HybridEntropy() ([]byte, error) {
+	// Try Rust implementation first (when CGO is enabled)
+	if rustEntropy, err := HybridEntropyRust(nil); err == nil {
+		return rustEntropy, nil
+	}
+	// Fallback to Go implementation
 	return EnhancedEntropy()
 }
 
-// FastEntropyRust returns fast entropy using Rust FFI implementation (fallback to Go)
+// FastEntropyRust returns fast entropy using Rust FFI implementation
 func FastEntropyRust() ([]byte, error) {
-	// Fallback to Go implementation when Rust FFI is not available
-	return FastEntropy()
+	// This will be implemented in entropy_cgo.go when CGO is enabled
+	return nil, errors.New("Rust FFI not available - build with CGO enabled")
 }
 
-// HybridEntropyRust returns hybrid entropy using Rust FFI implementation (fallback to Go)
+// HybridEntropyRust returns hybrid entropy using Rust FFI implementation
 func HybridEntropyRust(headers [][]byte) ([]byte, error) {
-	// Fallback to Go implementation when Rust FFI is not available
-	return HybridEntropy()
+	// This will be implemented in entropy_cgo.go when CGO is enabled
+	return nil, errors.New("Rust FFI not available - build with CGO enabled")
+}
+
+// SimpleEntropy returns basic entropy using crypto/rand
+func SimpleEntropy() ([]byte, error) {
+	entropy := make([]byte, 32)
+	if _, err := rand.Read(entropy); err != nil {
+		return nil, err
+	}
+	return entropy, nil
+}
+
+// EnhancedEntropy returns enhanced entropy combining multiple sources
+func EnhancedEntropy() ([]byte, error) {
+	entropy := make([]byte, 32)
+
+	// Primary entropy from crypto/rand
+	if _, err := rand.Read(entropy); err != nil {
+		return nil, err
+	}
+
+	// Add timing jitter
+	timestamp := time.Now().UnixNano()
+	binary.LittleEndian.PutUint64(entropy[24:32], uint64(timestamp))
+
+	return entropy, nil
+}
+
+// GetCPUTemperatureRust returns CPU temperature using Rust FFI implementation (fallback)
+func GetCPUTemperatureRust() (float32, error) {
+	// Fallback: return a mock temperature value
+	// In a real implementation, this would read actual CPU temperature
+	return 45.0, nil
 }
 
 // SystemFingerprintRust returns system fingerprint using Rust FFI implementation (fallback)
@@ -44,13 +87,6 @@ func SystemFingerprintRust() ([]byte, error) {
 	}
 
 	return fingerprint, nil
-}
-
-// GetCPUTemperatureRust returns CPU temperature using Rust FFI implementation (fallback)
-func GetCPUTemperatureRust() (float32, error) {
-	// Fallback: return a mock temperature value
-	// In a real implementation, this would read actual CPU temperature
-	return 45.0, nil
 }
 
 // FastEntropyWithFingerprintRust returns fast entropy with hardware fingerprinting (fallback)

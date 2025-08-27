@@ -8,8 +8,8 @@ import (
 	"unsafe"
 )
 
-// SimpleEntropy generates 32 bytes of entropy using Go's crypto/rand
-func SimpleEntropy() ([]byte, error) {
+// SimpleEntropyGo generates 32 bytes of entropy using Go's crypto/rand
+func SimpleEntropyGo() ([]byte, error) {
 	data := make([]byte, 32)
 	_, err := rand.Read(data)
 	if err != nil {
@@ -46,8 +46,8 @@ func TimingEntropy() ([]byte, error) {
 	return hasher.Sum(nil), nil
 }
 
-// EnhancedEntropy provides multiple entropy sources mixed together
-func EnhancedEntropy() ([]byte, error) {
+// EnhancedEntropyGo provides multiple entropy sources mixed together
+func EnhancedEntropyGo() ([]byte, error) {
 	// Multiple entropy sources
 	sources := make([][]byte, 0, 3)
 	
