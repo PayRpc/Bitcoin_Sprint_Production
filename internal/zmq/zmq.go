@@ -7,6 +7,7 @@ import (
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/tiers"
 	"github.com/pebbe/zmq4"
 	"go.uber.org/zap"
 )
@@ -114,27 +115,56 @@ func (c *Client) realZMQSubscription() {
 }
 
 func (c *Client) handleBlockHash(data string) {
+	detectionTime := time.Now()
+	
 	// In a real implementation, you would:
 	// 1. Parse the block hash from the data
 	// 2. Fetch the full block details from Bitcoin Core RPC
 	// 3. Extract height, timestamp, etc.
 	
-	// For now, create a mock event with real ZMQ trigger
+	// Get tier configuration for timing
+	tierConfig := tiers.GetTierConfig()
+	
+	// Start relay timing
+	relayStart := time.Now()
+	
+	// Create block event with timing information
 	blockEvent := blocks.BlockEvent{
-		Hash:      data[:64], // Use first 64 chars as hash
-		Height:    0,         // Would be fetched from RPC
-		Timestamp: time.Now(),
-		Source:    "zmq-real",
+		Hash:        data[:min(64, len(data))], // Use first 64 chars as hash or full data if shorter
+		Height:      0,                         // Would be fetched from RPC
+		Timestamp:   detectionTime,
+		DetectedAt:  detectionTime,
+		RelayTimeMs: 0, // Will be updated after relay
+		Source:      "zmq-real",
+		Tier:        tierConfig.Name,
 	}
+	
+	// Simulate relay processing based on tier
+	relayDelay := time.Duration(float64(tierConfig.BlockDeadline) * 0.1) // 10% of deadline for processing
+	time.Sleep(relayDelay)
+	
+	// Calculate actual relay time
+	relayTime := time.Since(relayStart)
+	blockEvent.RelayTimeMs = relayTime.Seconds() * 1000
 	
 	select {
 	case c.blockChan <- blockEvent:
 		c.logger.Info("Real ZMQ block received", 
 			zap.String("hash", blockEvent.Hash),
-			zap.String("source", blockEvent.Source))
+			zap.String("source", blockEvent.Source),
+			zap.Float64("relayTimeMs", blockEvent.RelayTimeMs),
+			zap.String("tier", blockEvent.Tier))
 	default:
 		// Channel full, skip
 	}
+}
+
+// Helper function for min
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (c *Client) mockZMQSubscription() {
@@ -147,20 +177,35 @@ func (c *Client) mockZMQSubscription() {
 		select {
 		case <-ticker.C:
 			blockHeight++
+			detectionTime := time.Now()
 			
-			// Generate mock block event
+			// Get tier configuration for timing
+			tierConfig := tiers.GetTierConfig()
+			
+			// Simulate relay processing
+			relayStart := time.Now()
+			relayDelay := time.Duration(float64(tierConfig.BlockDeadline) * 0.05) // 5% of deadline for mock
+			time.Sleep(relayDelay)
+			relayTime := time.Since(relayStart)
+			
+			// Generate mock block event with timing
 			blockEvent := blocks.BlockEvent{
-				Hash:      c.generateMockHash(blockHeight),
-				Height:    blockHeight,
-				Timestamp: time.Now(),
-				Source:    "zmq-mock",
+				Hash:        c.generateMockHash(blockHeight),
+				Height:      blockHeight,
+				Timestamp:   detectionTime,
+				DetectedAt:  detectionTime,
+				RelayTimeMs: relayTime.Seconds() * 1000,
+				Source:      "zmq-mock",
+				Tier:        tierConfig.Name,
 			}
 			
 			select {
 			case c.blockChan <- blockEvent:
 				c.logger.Info("Mock ZMQ block received", 
 					zap.String("hash", blockEvent.Hash),
-					zap.Uint32("height", blockEvent.Height))
+					zap.Uint32("height", blockEvent.Height),
+					zap.Float64("relayTimeMs", blockEvent.RelayTimeMs),
+					zap.String("tier", blockEvent.Tier))
 			default:
 				// Channel full, skip
 			}
