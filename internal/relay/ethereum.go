@@ -17,31 +17,31 @@ import (
 
 // EthereumRelay implements RelayClient for Ethereum network using JSON-RPC WebSocket
 type EthereumRelay struct {
-	cfg         config.Config
-	logger      *zap.Logger
-	
+	cfg    config.Config
+	logger *zap.Logger
+
 	// WebSocket connections
 	connections []*websocket.Conn
 	connMu      sync.RWMutex
 	connected   atomic.Bool
-	
+
 	// Block streaming
 	blockChan chan blocks.BlockEvent
-	
+
 	// Configuration
 	relayConfig RelayConfig
-	
+
 	// Health and metrics
 	health    *HealthStatus
 	healthMu  sync.RWMutex
 	metrics   *RelayMetrics
 	metricsMu sync.RWMutex
-	
+
 	// Request tracking
 	requestID   int64
 	pendingReqs map[int64]chan *EthereumResponse
 	reqMu       sync.RWMutex
-	
+
 	// Subscription management
 	subscriptions map[string]chan *EthereumNotification
 	subMu         sync.RWMutex
@@ -81,12 +81,12 @@ type EthereumBlock struct {
 
 // EthereumNetworkInfo represents Ethereum network information
 type EthereumNetworkInfo struct {
-	ChainID      string `json:"chainId"`
-	NetworkID    string `json:"networkId"`
-	BlockNumber  string `json:"blockNumber"`
-	GasPrice     string `json:"gasPrice"`
-	PeerCount    string `json:"peerCount"`
-	Syncing      bool   `json:"syncing"`
+	ChainID     string `json:"chainId"`
+	NetworkID   string `json:"networkId"`
+	BlockNumber string `json:"blockNumber"`
+	GasPrice    string `json:"gasPrice"`
+	PeerCount   string `json:"peerCount"`
+	Syncing     bool   `json:"syncing"`
 }
 
 // NewEthereumRelay creates a new Ethereum relay client
@@ -132,7 +132,7 @@ func (er *EthereumRelay) Connect(ctx context.Context) error {
 
 	er.connected.Store(true)
 	er.updateHealth(true, "connected", nil)
-	
+
 	return nil
 }
 
@@ -365,7 +365,7 @@ func (er *EthereumRelay) GetSyncStatus() (*SyncStatus, error) {
 func (er *EthereumRelay) GetHealth() (*HealthStatus, error) {
 	er.healthMu.RLock()
 	defer er.healthMu.RUnlock()
-	
+
 	healthCopy := *er.health
 	return &healthCopy, nil
 }
@@ -374,7 +374,7 @@ func (er *EthereumRelay) GetHealth() (*HealthStatus, error) {
 func (er *EthereumRelay) GetMetrics() (*RelayMetrics, error) {
 	er.metricsMu.RLock()
 	defer er.metricsMu.RUnlock()
-	
+
 	metricsCopy := *er.metrics
 	return &metricsCopy, nil
 }
@@ -393,7 +393,7 @@ func (er *EthereumRelay) SupportsFeature(feature Feature) bool {
 		FeatureREST:            true,
 		FeatureCompactBlocks:   false,
 	}
-	
+
 	return supportedFeatures[feature]
 }
 
@@ -428,16 +428,16 @@ func (er *EthereumRelay) GetConfig() RelayConfig {
 func (er *EthereumRelay) connectToEndpoint(ctx context.Context, endpoint string) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
-		er.logger.Warn("Invalid endpoint URL", 
-			zap.String("endpoint", endpoint), 
+		er.logger.Warn("Invalid endpoint URL",
+			zap.String("endpoint", endpoint),
 			zap.Error(err))
 		return
 	}
 
 	conn, _, err := websocket.DefaultDialer.DialContext(ctx, u.String(), nil)
 	if err != nil {
-		er.logger.Warn("Failed to connect to Ethereum endpoint", 
-			zap.String("endpoint", endpoint), 
+		er.logger.Warn("Failed to connect to Ethereum endpoint",
+			zap.String("endpoint", endpoint),
 			zap.Error(err))
 		return
 	}
@@ -481,7 +481,7 @@ func (er *EthereumRelay) handleMessages(conn *websocket.Conn) {
 // makeRequest makes a JSON-RPC request
 func (er *EthereumRelay) makeRequest(method string, params []interface{}) (*EthereumResponse, error) {
 	requestID := atomic.AddInt64(&er.requestID, 1)
-	
+
 	request := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"method":  method,
@@ -568,7 +568,7 @@ func (er *EthereumRelay) handleBlockNotification(notification *EthereumNotificat
 	// Convert to BlockEvent and send to channel
 	blockEvent := blocks.BlockEvent{
 		Hash:       "0x" + "0000000000000000000000000000000000000000000000000000000000000000", // placeholder
-		Height:     850000, // placeholder
+		Height:     850000,                                                                    // placeholder
 		Timestamp:  time.Now(),
 		DetectedAt: time.Now(),
 		Source:     "ethereum-relay",
@@ -606,7 +606,7 @@ func (er *EthereumRelay) convertToBlockEvent(ethBlock *EthereumBlock) *blocks.Bl
 func (er *EthereumRelay) updateHealth(healthy bool, state string, err error) {
 	er.healthMu.Lock()
 	defer er.healthMu.Unlock()
-	
+
 	er.health.IsHealthy = healthy
 	er.health.LastSeen = time.Now()
 	er.health.ConnectionState = state
@@ -623,11 +623,11 @@ func parseHexNumber(hex string) (uint64, error) {
 	if len(hex) < 3 || hex[:2] != "0x" {
 		return 0, fmt.Errorf("invalid hex format")
 	}
-	
+
 	var result uint64
 	if _, err := fmt.Sscanf(hex, "0x%x", &result); err != nil {
 		return 0, err
 	}
-	
+
 	return result, nil
 }

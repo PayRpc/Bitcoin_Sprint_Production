@@ -10,6 +10,7 @@ import (
 
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
 	"go.uber.org/zap"
 )
 
@@ -28,31 +29,31 @@ type BitcoinRelay struct {
 
 	// Block processing
 	blockProcessor *BitcoinBlockProcessor
-	
+
 	// Network health monitoring
-	health      *HealthStatus
-	healthMu    sync.RWMutex
-	metrics     *RelayMetrics
-	metricsMu   sync.RWMutex
-	
+	health    *HealthStatus
+	healthMu  sync.RWMutex
+	metrics   *RelayMetrics
+	metricsMu sync.RWMutex
+
 	// Configuration
 	relayConfig RelayConfig
-	
+
 	// Authentication and security
 	auth *BitcoinAuthenticator
-	
+
 	// Circuit breaker for resilient connections
 	circuitBreaker *BitcoinCircuitBreaker
 }
 
 // BitcoinBlockProcessor handles Bitcoin-specific block processing
 type BitcoinBlockProcessor struct {
-	workers       int
-	workChan      chan *wire.MsgBlock
-	resultChan    chan blocks.BlockEvent
-	wg            sync.WaitGroup
+	workers         int
+	workChan        chan *wire.MsgBlock
+	resultChan      chan blocks.BlockEvent
+	wg              sync.WaitGroup
 	processedBlocks int64
-	lastBlockTime time.Time
+	lastBlockTime   time.Time
 }
 
 // BitcoinAuthenticator provides secure handshake authentication for Bitcoin peers
@@ -116,7 +117,7 @@ func (br *BitcoinRelay) Connect(ctx context.Context) error {
 		return nil
 	}
 
-	br.logger.Info("Connecting to Bitcoin network", 
+	br.logger.Info("Connecting to Bitcoin network",
 		zap.Strings("endpoints", br.relayConfig.Endpoints))
 
 	// Start block processor
@@ -129,7 +130,7 @@ func (br *BitcoinRelay) Connect(ctx context.Context) error {
 
 	br.connected.Store(true)
 	br.updateHealth(true, "connected", nil)
-	
+
 	return nil
 }
 
@@ -259,7 +260,7 @@ func (br *BitcoinRelay) GetSyncStatus() (*SyncStatus, error) {
 func (br *BitcoinRelay) GetHealth() (*HealthStatus, error) {
 	br.healthMu.RLock()
 	defer br.healthMu.RUnlock()
-	
+
 	healthCopy := *br.health
 	return &healthCopy, nil
 }
@@ -268,7 +269,7 @@ func (br *BitcoinRelay) GetHealth() (*HealthStatus, error) {
 func (br *BitcoinRelay) GetMetrics() (*RelayMetrics, error) {
 	br.metricsMu.RLock()
 	defer br.metricsMu.RUnlock()
-	
+
 	metricsCopy := *br.metrics
 	metricsCopy.BlocksReceived = atomic.LoadInt64(&br.blockProcessor.processedBlocks)
 	return &metricsCopy, nil
@@ -288,7 +289,7 @@ func (br *BitcoinRelay) SupportsFeature(feature Feature) bool {
 		FeatureStateQueries:    false,
 		FeatureEventLogs:       false,
 	}
-	
+
 	return supportedFeatures[feature]
 }
 
@@ -317,8 +318,8 @@ func (br *BitcoinRelay) GetConfig() RelayConfig {
 func (br *BitcoinRelay) connectToPeer(ctx context.Context, endpoint string) {
 	conn, err := net.DialTimeout("tcp", endpoint, br.relayConfig.Timeout)
 	if err != nil {
-		br.logger.Warn("Failed to connect to peer", 
-			zap.String("endpoint", endpoint), 
+		br.logger.Warn("Failed to connect to peer",
+			zap.String("endpoint", endpoint),
 			zap.Error(err))
 		return
 	}
@@ -355,7 +356,7 @@ func (br *BitcoinRelay) connectToPeer(ctx context.Context, endpoint string) {
 func (br *BitcoinRelay) updateHealth(healthy bool, state string, err error) {
 	br.healthMu.Lock()
 	defer br.healthMu.Unlock()
-	
+
 	br.health.IsHealthy = healthy
 	br.health.LastSeen = time.Now()
 	br.health.ConnectionState = state
@@ -393,7 +394,7 @@ func (bp *BitcoinBlockProcessor) Stop() {
 // worker processes blocks
 func (bp *BitcoinBlockProcessor) worker(blockChan chan blocks.BlockEvent) {
 	defer bp.wg.Done()
-	
+
 	for msgBlock := range bp.workChan {
 		// Convert wire.MsgBlock to blocks.BlockEvent
 		blockEvent := blocks.BlockEvent{
@@ -403,10 +404,10 @@ func (bp *BitcoinBlockProcessor) worker(blockChan chan blocks.BlockEvent) {
 			Timestamp: msgBlock.Header.Timestamp,
 			Size:      int64(msgBlock.SerializeSize()),
 		}
-		
+
 		atomic.AddInt64(&bp.processedBlocks, 1)
 		bp.lastBlockTime = time.Now()
-		
+
 		select {
 		case blockChan <- blockEvent:
 		default:

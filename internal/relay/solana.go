@@ -17,31 +17,31 @@ import (
 
 // SolanaRelay implements RelayClient for Solana network using WebSocket + QUIC
 type SolanaRelay struct {
-	cfg         config.Config
-	logger      *zap.Logger
-	
+	cfg    config.Config
+	logger *zap.Logger
+
 	// WebSocket connections
 	connections []*websocket.Conn
 	connMu      sync.RWMutex
 	connected   atomic.Bool
-	
+
 	// Block streaming
 	blockChan chan blocks.BlockEvent
-	
+
 	// Configuration
 	relayConfig RelayConfig
-	
+
 	// Health and metrics
 	health    *HealthStatus
 	healthMu  sync.RWMutex
 	metrics   *RelayMetrics
 	metricsMu sync.RWMutex
-	
+
 	// Request tracking
 	requestID   int64
 	pendingReqs map[int64]chan *SolanaResponse
 	reqMu       sync.RWMutex
-	
+
 	// Subscription management
 	subscriptions map[string]chan *SolanaNotification
 	subMu         sync.RWMutex
@@ -69,11 +69,11 @@ type SolanaNotification struct {
 
 // SolanaBlock represents a Solana block
 type SolanaBlock struct {
-	Slot              uint64 `json:"slot"`
-	BlockHash         string `json:"blockhash"`
-	PreviousBlockhash string `json:"previousBlockhash"`
-	BlockTime         *int64 `json:"blockTime"`
-	BlockHeight       uint64 `json:"blockHeight"`
+	Slot              uint64        `json:"slot"`
+	BlockHash         string        `json:"blockhash"`
+	PreviousBlockhash string        `json:"previousBlockhash"`
+	BlockTime         *int64        `json:"blockTime"`
+	BlockHeight       uint64        `json:"blockHeight"`
 	Transactions      []interface{} `json:"transactions"`
 }
 
@@ -86,28 +86,28 @@ type SolanaSlotInfo struct {
 
 // SolanaNetworkInfo represents Solana network information
 type SolanaNetworkInfo struct {
-	Slot              uint64  `json:"slot"`
-	BlockHeight       uint64  `json:"blockHeight"`
+	Slot              uint64           `json:"slot"`
+	BlockHeight       uint64           `json:"blockHeight"`
 	EpochInfo         *SolanaEpochInfo `json:"epochInfo"`
 	Version           *SolanaVersion   `json:"version"`
-	TotalSupply       uint64  `json:"totalSupply"`
-	CirculatingSupply uint64  `json:"circulatingSupply"`
+	TotalSupply       uint64           `json:"totalSupply"`
+	CirculatingSupply uint64           `json:"circulatingSupply"`
 }
 
 // SolanaEpochInfo represents epoch information
 type SolanaEpochInfo struct {
-	Epoch             uint64  `json:"epoch"`
-	SlotIndex         uint64  `json:"slotIndex"`
-	SlotsInEpoch      uint64  `json:"slotsInEpoch"`
-	AbsoluteSlot      uint64  `json:"absoluteSlot"`
-	BlockHeight       uint64  `json:"blockHeight"`
-	TransactionCount  *uint64 `json:"transactionCount"`
+	Epoch            uint64  `json:"epoch"`
+	SlotIndex        uint64  `json:"slotIndex"`
+	SlotsInEpoch     uint64  `json:"slotsInEpoch"`
+	AbsoluteSlot     uint64  `json:"absoluteSlot"`
+	BlockHeight      uint64  `json:"blockHeight"`
+	TransactionCount *uint64 `json:"transactionCount"`
 }
 
 // SolanaVersion represents version information
 type SolanaVersion struct {
-	SolanaCore      string `json:"solana-core"`
-	FeatureSet      uint32 `json:"feature-set"`
+	SolanaCore string `json:"solana-core"`
+	FeatureSet uint32 `json:"feature-set"`
 }
 
 // NewSolanaRelay creates a new Solana relay client
@@ -153,7 +153,7 @@ func (sr *SolanaRelay) Connect(ctx context.Context) error {
 
 	sr.connected.Store(true)
 	sr.updateHealth(true, "connected", nil)
-	
+
 	return nil
 }
 
@@ -234,7 +234,7 @@ func (sr *SolanaRelay) GetLatestBlock() (*blocks.BlockEvent, error) {
 
 	// Get block for this slot
 	blockResponse, err := sr.makeRequest("getBlock", []interface{}{slot, map[string]interface{}{
-		"encoding": "json",
+		"encoding":                       "json",
 		"maxSupportedTransactionVersion": 0,
 	}})
 	if err != nil {
@@ -261,7 +261,7 @@ func (sr *SolanaRelay) GetBlockByHeight(height uint64) (*blocks.BlockEvent, erro
 	}
 
 	blockResponse, err := sr.makeRequest("getBlock", []interface{}{height, map[string]interface{}{
-		"encoding": "json",
+		"encoding":                       "json",
 		"maxSupportedTransactionVersion": 0,
 	}})
 	if err != nil {
@@ -285,7 +285,7 @@ func (sr *SolanaRelay) GetNetworkInfo() (*NetworkInfo, error) {
 	// Get multiple pieces of network info
 	slotResp, _ := sr.makeRequest("getSlot", []interface{}{})
 	heightResp, _ := sr.makeRequest("getBlockHeight", []interface{}{})
-	_ , _ = sr.makeRequest("getEpochInfo", []interface{}{})
+	_, _ = sr.makeRequest("getEpochInfo", []interface{}{})
 
 	networkInfo := &NetworkInfo{
 		Network:   "solana",
@@ -350,7 +350,7 @@ func (sr *SolanaRelay) GetSyncStatus() (*SyncStatus, error) {
 func (sr *SolanaRelay) GetHealth() (*HealthStatus, error) {
 	sr.healthMu.RLock()
 	defer sr.healthMu.RUnlock()
-	
+
 	healthCopy := *sr.health
 	return &healthCopy, nil
 }
@@ -359,7 +359,7 @@ func (sr *SolanaRelay) GetHealth() (*HealthStatus, error) {
 func (sr *SolanaRelay) GetMetrics() (*RelayMetrics, error) {
 	sr.metricsMu.RLock()
 	defer sr.metricsMu.RUnlock()
-	
+
 	metricsCopy := *sr.metrics
 	return &metricsCopy, nil
 }
@@ -378,7 +378,7 @@ func (sr *SolanaRelay) SupportsFeature(feature Feature) bool {
 		FeatureREST:            true,
 		FeatureCompactBlocks:   false,
 	}
-	
+
 	return supportedFeatures[feature]
 }
 
@@ -413,16 +413,16 @@ func (sr *SolanaRelay) GetConfig() RelayConfig {
 func (sr *SolanaRelay) connectToEndpoint(ctx context.Context, endpoint string) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
-		sr.logger.Warn("Invalid endpoint URL", 
-			zap.String("endpoint", endpoint), 
+		sr.logger.Warn("Invalid endpoint URL",
+			zap.String("endpoint", endpoint),
 			zap.Error(err))
 		return
 	}
 
 	conn, _, err := websocket.DefaultDialer.DialContext(ctx, u.String(), nil)
 	if err != nil {
-		sr.logger.Warn("Failed to connect to Solana endpoint", 
-			zap.String("endpoint", endpoint), 
+		sr.logger.Warn("Failed to connect to Solana endpoint",
+			zap.String("endpoint", endpoint),
 			zap.Error(err))
 		return
 	}
@@ -466,7 +466,7 @@ func (sr *SolanaRelay) handleMessages(conn *websocket.Conn) {
 // makeRequest makes a JSON-RPC request
 func (sr *SolanaRelay) makeRequest(method string, params []interface{}) (*SolanaResponse, error) {
 	requestID := atomic.AddInt64(&sr.requestID, 1)
-	
+
 	request := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"method":  method,
@@ -551,7 +551,7 @@ func (sr *SolanaRelay) handleSlotNotification(notification *SolanaNotification) 
 	// Parse notification and extract slot data
 	blockEvent := blocks.BlockEvent{
 		Hash:       "solana-slot-" + fmt.Sprintf("%d", time.Now().Unix()), // Solana uses slots, not traditional hashes
-		Height:     uint32(time.Now().Unix() % 1000000), // placeholder
+		Height:     uint32(time.Now().Unix() % 1000000),                   // placeholder
 		Timestamp:  time.Now(),
 		DetectedAt: time.Now(),
 		Source:     "solana-relay",
@@ -588,7 +588,7 @@ func (sr *SolanaRelay) convertToBlockEvent(solanaBlock *SolanaBlock) *blocks.Blo
 func (sr *SolanaRelay) updateHealth(healthy bool, state string, err error) {
 	sr.healthMu.Lock()
 	defer sr.healthMu.Unlock()
-	
+
 	sr.health.IsHealthy = healthy
 	sr.health.LastSeen = time.Now()
 	sr.health.ConnectionState = state

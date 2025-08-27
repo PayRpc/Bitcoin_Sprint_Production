@@ -35,9 +35,9 @@ type Cache struct {
 
 // EntropyEvictionConfig configures entropy-based cache eviction
 type EntropyEvictionConfig struct {
-	SeedLength       int           `json:"seed_length"`
-	UpdateInterval   time.Duration `json:"update_interval"`
-	EvictionThreshold float64      `json:"eviction_threshold"` // 0.0-1.0
+	SeedLength        int           `json:"seed_length"`
+	UpdateInterval    time.Duration `json:"update_interval"`
+	EvictionThreshold float64       `json:"eviction_threshold"` // 0.0-1.0
 }
 
 // New creates a new cache instance with turbo-optimized settings
@@ -131,18 +131,18 @@ func (c *Cache) IsStale() bool {
 
 // CacheStatus represents the current status of the cache
 type CacheStatus struct {
-	Enabled         bool      `json:"enabled"`
-	CachedBlocks    int       `json:"cached_blocks"`
-	MaxBlocks       int       `json:"max_blocks"`
-	LatestHeight    int64     `json:"latest_height"`
-	LatestHash      string    `json:"latest_hash"`
-	LatestCachedAt  time.Time `json:"latest_cached_at"`
-	IsStale         bool      `json:"is_stale"`
-	StaleSeconds    float64   `json:"stale_seconds"`
-	CacheHitRate    float64   `json:"cache_hit_rate"`
-	TotalRequests   int64     `json:"total_requests"`
-	CacheHits       int64     `json:"cache_hits"`
-	CacheMisses     int64     `json:"cache_misses"`
+	Enabled        bool      `json:"enabled"`
+	CachedBlocks   int       `json:"cached_blocks"`
+	MaxBlocks      int       `json:"max_blocks"`
+	LatestHeight   int64     `json:"latest_height"`
+	LatestHash     string    `json:"latest_hash"`
+	LatestCachedAt time.Time `json:"latest_cached_at"`
+	IsStale        bool      `json:"is_stale"`
+	StaleSeconds   float64   `json:"stale_seconds"`
+	CacheHitRate   float64   `json:"cache_hit_rate"`
+	TotalRequests  int64     `json:"total_requests"`
+	CacheHits      int64     `json:"cache_hits"`
+	CacheMisses    int64     `json:"cache_misses"`
 }
 
 // GetStatus returns the current cache status
@@ -174,12 +174,12 @@ func (c *Cache) GetCacheStats() map[string]interface{} {
 	defer c.mu.RUnlock()
 
 	return map[string]interface{}{
-		"cached_blocks":     len(c.blockCache),
-		"max_blocks":        c.maxBlocks,
-		"latest_height":     int64(c.latestBlock.Block.Height),
-		"latest_cached_at":  c.latestBlock.CachedAt,
-		"is_stale":          c.IsStale(),
-		"stale_seconds":     time.Since(c.latestBlock.ExpiresAt).Seconds(),
+		"cached_blocks":    len(c.blockCache),
+		"max_blocks":       c.maxBlocks,
+		"latest_height":    int64(c.latestBlock.Block.Height),
+		"latest_cached_at": c.latestBlock.CachedAt,
+		"is_stale":         c.IsStale(),
+		"stale_seconds":    time.Since(c.latestBlock.ExpiresAt).Seconds(),
 	}
 }
 

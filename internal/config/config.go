@@ -8,14 +8,14 @@ import (
 
 // TierRateLimit defines rate limits for each tier
 type TierRateLimit struct {
-	RequestsPerSecond     int           `json:"requests_per_second"`
-	RequestsPerHour       int           `json:"requests_per_hour"`
-	ConcurrentStreams     int           `json:"concurrent_streams"`
-	DataSizeLimitMB       int           `json:"data_size_limit_mb"`
-	KeyGenerationPerHour  int           `json:"key_generation_per_hour"`
-	WebSocketMessageRate  int           `json:"websocket_message_rate"`
-	RefillRate            float64       `json:"refill_rate"` // tokens per second
-	BurstCapacity         int           `json:"burst_capacity"`
+	RequestsPerSecond    int     `json:"requests_per_second"`
+	RequestsPerHour      int     `json:"requests_per_hour"`
+	ConcurrentStreams    int     `json:"concurrent_streams"`
+	DataSizeLimitMB      int     `json:"data_size_limit_mb"`
+	KeyGenerationPerHour int     `json:"key_generation_per_hour"`
+	WebSocketMessageRate int     `json:"websocket_message_rate"`
+	RefillRate           float64 `json:"refill_rate"` // tokens per second
+	BurstCapacity        int     `json:"burst_capacity"`
 }
 
 // Tier represents the performance tier for the application
@@ -36,7 +36,7 @@ type Config struct {
 	PeerListenPort   int
 	APIHost          string
 	APIPort          int
-	AdminPort        int    // Separate port for admin endpoints
+	AdminPort        int // Separate port for admin endpoints
 	LicenseKey       string
 	APIKey           string
 	SecureChannelURL string
@@ -71,21 +71,21 @@ type Config struct {
 	DefaultChain    string   // Default blockchain (btc, eth, sol, etc.)
 
 	// Security settings
-	EnablePrometheus bool   // Enable Prometheus metrics endpoint
-	PrometheusPort   int    // Separate port for Prometheus metrics
-	EnableTLS        bool   // Enable TLS for admin endpoints
-	EnableMTLS       bool   // Enable mTLS for internal metrics
-	IdleTimeout      time.Duration // WebSocket idle timeout
-	MessageRateLimit int    // WebSocket messages per second per client
-	GeneralRateLimit int    // General IP-based rate limit (requests per second)
-	WebSocketMaxGlobal int  // Maximum global WebSocket connections
-	WebSocketMaxPerIP  int  // Maximum WebSocket connections per IP
-	WebSocketMaxPerChain int // Maximum WebSocket connections per chain
+	EnablePrometheus     bool          // Enable Prometheus metrics endpoint
+	PrometheusPort       int           // Separate port for Prometheus metrics
+	EnableTLS            bool          // Enable TLS for admin endpoints
+	EnableMTLS           bool          // Enable mTLS for internal metrics
+	IdleTimeout          time.Duration // WebSocket idle timeout
+	MessageRateLimit     int           // WebSocket messages per second per client
+	GeneralRateLimit     int           // General IP-based rate limit (requests per second)
+	WebSocketMaxGlobal   int           // Maximum global WebSocket connections
+	WebSocketMaxPerIP    int           // Maximum WebSocket connections per IP
+	WebSocketMaxPerChain int           // Maximum WebSocket connections per chain
 
 	// Persistence settings
-	DatabaseType     string // sqlite, postgres, redis
-	DatabaseURL      string // Connection string
-	EnablePersistence bool  // Enable key persistence
+	DatabaseType      string // sqlite, postgres, redis
+	DatabaseURL       string // Connection string
+	EnablePersistence bool   // Enable key persistence
 }
 
 // Load reads config from env
@@ -114,15 +114,15 @@ func Load() Config {
 		PreallocBuffers: getEnvBool("PREALLOC_BUFFERS", true), // Pre-allocate by default
 
 		// Enterprise-ready settings
-		EnablePrometheus: getEnvBool("ENABLE_PROMETHEUS", true),
-		PrometheusPort:   getEnvInt("PROMETHEUS_PORT", 9090),
-		EnableTLS:        getEnvBool("ENABLE_TLS", false),
-		EnableMTLS:       getEnvBool("ENABLE_MTLS", false),
-		IdleTimeout:      time.Duration(getEnvInt("IDLE_TIMEOUT_SEC", 300)) * time.Second,
-		MessageRateLimit: getEnvInt("MESSAGE_RATE_LIMIT", 100),
-		GeneralRateLimit: getEnvInt("GENERAL_RATE_LIMIT", 100),
-		WebSocketMaxGlobal: getEnvInt("WEBSOCKET_MAX_GLOBAL", 1000),
-		WebSocketMaxPerIP:  getEnvInt("WEBSOCKET_MAX_PER_IP", 10),
+		EnablePrometheus:     getEnvBool("ENABLE_PROMETHEUS", true),
+		PrometheusPort:       getEnvInt("PROMETHEUS_PORT", 9090),
+		EnableTLS:            getEnvBool("ENABLE_TLS", false),
+		EnableMTLS:           getEnvBool("ENABLE_MTLS", false),
+		IdleTimeout:          time.Duration(getEnvInt("IDLE_TIMEOUT_SEC", 300)) * time.Second,
+		MessageRateLimit:     getEnvInt("MESSAGE_RATE_LIMIT", 100),
+		GeneralRateLimit:     getEnvInt("GENERAL_RATE_LIMIT", 100),
+		WebSocketMaxGlobal:   getEnvInt("WEBSOCKET_MAX_GLOBAL", 1000),
+		WebSocketMaxPerIP:    getEnvInt("WEBSOCKET_MAX_PER_IP", 10),
 		WebSocketMaxPerChain: getEnvInt("WEBSOCKET_MAX_PER_CHAIN", 100),
 
 		// Persistence settings
@@ -155,7 +155,7 @@ func Load() Config {
 		cfg.UseMemoryChannel = true
 		cfg.UseDirectP2P = true
 		cfg.MaxOutstandingHeadersPerPeer = 10000 // Increased for higher throughput
-		cfg.PipelineWorkers = 4 // Increased workers for turbo mode
+		cfg.PipelineWorkers = 4                  // Increased workers for turbo mode
 	case TierEnterprise:
 		cfg.WriteDeadline = 150 * time.Microsecond // Reduced for sub-1ms target
 		cfg.UseSharedMemory = true

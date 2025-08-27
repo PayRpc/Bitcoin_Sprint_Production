@@ -2,8 +2,8 @@ package mempool
 
 import (
 	"sync"
-	"time"
 	"sync/atomic"
+	"time"
 )
 
 // Mempool with TTL eviction and sharded locks for turbo performance

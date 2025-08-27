@@ -80,12 +80,12 @@ func (bfm *BloomFilterManager) initializeFilter() error {
 		defer C.free(unsafe.Pointer(networkName))
 
 		filterHandle = C.universal_bloom_filter_new(
-			C.size_t(100000), // Large filter size
-			C.uint8_t(7),     // More hash functions
-			C.uint32_t(0),    // Random tweak
-			C.uint8_t(0),     // Flags
+			C.size_t(100000),  // Large filter size
+			C.uint8_t(7),      // More hash functions
+			C.uint32_t(0),     // Random tweak
+			C.uint8_t(0),      // Flags
 			C.uint64_t(86400), // 24 hour max age
-			C.size_t(8192),   // Large batch size
+			C.size_t(8192),    // Large batch size
 			networkName,
 		)
 
@@ -95,12 +95,12 @@ func (bfm *BloomFilterManager) initializeFilter() error {
 		defer C.free(unsafe.Pointer(networkName))
 
 		filterHandle = C.universal_bloom_filter_new(
-			C.size_t(50000), // Medium filter size
-			C.uint8_t(5),    // Standard hash functions
-			C.uint32_t(0),   // Random tweak
-			C.uint8_t(0),    // Flags
+			C.size_t(50000),   // Medium filter size
+			C.uint8_t(5),      // Standard hash functions
+			C.uint32_t(0),     // Random tweak
+			C.uint8_t(0),      // Flags
 			C.uint64_t(86400), // 24 hour max age
-			C.size_t(4096),  // Medium batch size
+			C.size_t(4096),    // Medium batch size
 			networkName,
 		)
 
@@ -110,12 +110,12 @@ func (bfm *BloomFilterManager) initializeFilter() error {
 		defer C.free(unsafe.Pointer(networkName))
 
 		filterHandle = C.universal_bloom_filter_new(
-			C.size_t(36000), // Standard Bitcoin Core size
-			C.uint8_t(5),    // Standard hash functions
-			C.uint32_t(0),   // Random tweak
-			C.uint8_t(0),    // Flags
+			C.size_t(36000),   // Standard Bitcoin Core size
+			C.uint8_t(5),      // Standard hash functions
+			C.uint32_t(0),     // Random tweak
+			C.uint8_t(0),      // Flags
 			C.uint64_t(86400), // 24 hour max age
-			C.size_t(2048),  // Standard batch size
+			C.size_t(2048),    // Standard batch size
 			networkName,
 		)
 
@@ -125,12 +125,12 @@ func (bfm *BloomFilterManager) initializeFilter() error {
 		defer C.free(unsafe.Pointer(networkName))
 
 		filterHandle = C.universal_bloom_filter_new(
-			C.size_t(18000), // Smaller filter size
-			C.uint8_t(3),    // Fewer hash functions
-			C.uint32_t(0),   // Random tweak
-			C.uint8_t(0),    // Flags
+			C.size_t(18000),   // Smaller filter size
+			C.uint8_t(3),      // Fewer hash functions
+			C.uint32_t(0),     // Random tweak
+			C.uint8_t(0),      // Flags
 			C.uint64_t(86400), // 24 hour max age
-			C.size_t(1024),  // Smaller batch size
+			C.size_t(1024),    // Smaller batch size
 			networkName,
 		)
 	}
@@ -244,9 +244,9 @@ type Clock interface {
 // RealClock implements Clock using real time
 type RealClock struct{}
 
-func (RealClock) Now() time.Time             { return time.Now() }
+func (RealClock) Now() time.Time                         { return time.Now() }
 func (RealClock) After(d time.Duration) <-chan time.Time { return time.After(d) }
-func (RealClock) Sleep(d time.Duration)      { time.Sleep(d) }
+func (RealClock) Sleep(d time.Duration)                  { time.Sleep(d) }
 
 // RandomReader defines an interface for random byte generation
 type RandomReader interface {
@@ -289,15 +289,15 @@ type CustomerKeyManager struct {
 
 // CustomerKey represents a customer's API key information
 type CustomerKey struct {
-	Hash               string    `json:"hash"`
+	Hash               string      `json:"hash"`
 	Tier               config.Tier `json:"tier"`
-	CreatedAt          time.Time `json:"created_at"`
-	ExpiresAt          time.Time `json:"expires_at"`
-	LastUsed           time.Time `json:"last_used"`
-	RequestCount       int64     `json:"request_count"`
-	RateLimitRemaining int       `json:"rate_limit_remaining"`
-	ClientIP           string    `json:"client_ip"`
-	UserAgent          string    `json:"user_agent"`
+	CreatedAt          time.Time   `json:"created_at"`
+	ExpiresAt          time.Time   `json:"expires_at"`
+	LastUsed           time.Time   `json:"last_used"`
+	RequestCount       int64       `json:"request_count"`
+	RateLimitRemaining int         `json:"rate_limit_remaining"`
+	ClientIP           string      `json:"client_ip"`
+	UserAgent          string      `json:"user_agent"`
 }
 
 // AdminAuth handles admin-only authentication
@@ -308,12 +308,12 @@ type AdminAuth struct {
 
 // WebSocketLimiter limits concurrent WebSocket connections
 type WebSocketLimiter struct {
-	globalSem  chan struct{}                    // Global connection limit
-	perIPSem   map[string]chan struct{}         // Per-IP connection limit
-	perChainSem map[string]chan struct{}        // Per-chain connection limit
-	maxPerIP   int
+	globalSem   chan struct{}            // Global connection limit
+	perIPSem    map[string]chan struct{} // Per-IP connection limit
+	perChainSem map[string]chan struct{} // Per-chain connection limit
+	maxPerIP    int
 	maxPerChain int
-	mu         sync.RWMutex
+	mu          sync.RWMutex
 }
 
 // CircuitBreaker implements tier-aware circuit breaking
@@ -397,14 +397,14 @@ func (b *BitcoinBackend) GetPredictiveETA() float64 {
 
 func (b *BitcoinBackend) GetStatus() map[string]interface{} {
 	return map[string]interface{}{
-		"chain":              "bitcoin",
-		"network":            "mainnet",
-		"block_height":       850123,
-		"mempool_size":       b.mem.Size(),
-		"connections":        8,
-		"version":            "Sprint v1.0",
-		"protocol_version":   70015,
-		"relay_fee":          0.00001,
+		"chain":                 "bitcoin",
+		"network":               "mainnet",
+		"block_height":          850123,
+		"mempool_size":          b.mem.Size(),
+		"connections":           8,
+		"version":               "Sprint v1.0",
+		"protocol_version":      70015,
+		"relay_fee":             0.00001,
 		"verification_progress": 1.0,
 	}
 }
@@ -468,8 +468,8 @@ type Server struct {
 	mem       *mempool.Mempool
 	cache     *cache.Cache
 	logger    *zap.Logger
-	srv       *http.Server      // Public API server
-	adminSrv  *http.Server      // Admin-only server
+	srv       *http.Server // Public API server
+	adminSrv  *http.Server // Admin-only server
 
 	// Rate limiting
 	rateLimiter *RateLimiter
@@ -505,19 +505,19 @@ func New(cfg config.Config, blockChan chan blocks.BlockEvent, mem *mempool.Mempo
 	randReader := RealRandomReader{}
 
 	server := &Server{
-		cfg:          cfg,
-		blockChan:    blockChan,
-		mem:          mem,
-		logger:       logger,
-		rateLimiter:  NewRateLimiter(clock),
-		keyManager:   NewCustomerKeyManagerWithConfig(cfg, clock, randReader),
-		adminAuth:    NewAdminAuth(),
-		wsLimiter:    NewWebSocketLimiter(cfg.WebSocketMaxGlobal, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
-		predictor:    NewPredictiveAnalytics(clock),
+		cfg:            cfg,
+		blockChan:      blockChan,
+		mem:            mem,
+		logger:         logger,
+		rateLimiter:    NewRateLimiter(clock),
+		keyManager:     NewCustomerKeyManagerWithConfig(cfg, clock, randReader),
+		adminAuth:      NewAdminAuth(),
+		wsLimiter:      NewWebSocketLimiter(cfg.WebSocketMaxGlobal, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
+		predictor:      NewPredictiveAnalytics(clock),
 		circuitBreaker: NewCircuitBreaker(cfg.Tier, clock),
-		backends:     NewBackendRegistry(),
-		clock:        clock,
-		randReader:   randReader,
+		backends:       NewBackendRegistry(),
+		clock:          clock,
+		randReader:     randReader,
 	}
 
 	// Initialize default Bitcoin backend
@@ -535,20 +535,20 @@ func NewWithCache(cfg config.Config, blockChan chan blocks.BlockEvent, mem *memp
 	randReader := RealRandomReader{}
 
 	server := &Server{
-		cfg:          cfg,
-		blockChan:    blockChan,
-		mem:          mem,
-		cache:        cache,
-		logger:       logger,
-		rateLimiter:  NewRateLimiter(clock),
-		keyManager:   NewCustomerKeyManagerWithConfig(cfg, clock, randReader),
-		adminAuth:    NewAdminAuth(),
-		wsLimiter:    NewWebSocketLimiter(cfg.WebSocketMaxGlobal, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
-		predictor:    NewPredictiveAnalytics(clock),
+		cfg:            cfg,
+		blockChan:      blockChan,
+		mem:            mem,
+		cache:          cache,
+		logger:         logger,
+		rateLimiter:    NewRateLimiter(clock),
+		keyManager:     NewCustomerKeyManagerWithConfig(cfg, clock, randReader),
+		adminAuth:      NewAdminAuth(),
+		wsLimiter:      NewWebSocketLimiter(cfg.WebSocketMaxGlobal, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
+		predictor:      NewPredictiveAnalytics(clock),
 		circuitBreaker: NewCircuitBreaker(cfg.Tier, clock),
-		backends:     NewBackendRegistry(),
-		clock:        clock,
-		randReader:   randReader,
+		backends:       NewBackendRegistry(),
+		clock:          clock,
+		randReader:     randReader,
 	}
 
 	// Initialize default Bitcoin backend
@@ -981,7 +981,7 @@ func NewCircuitBreaker(tier config.Tier, clock Clock) *CircuitBreaker {
 	// Tier-specific configuration
 	switch tier {
 	case config.TierFree:
-		failureThreshold = 3  // Fail fast for free tier
+		failureThreshold = 3 // Fail fast for free tier
 		resetTimeout = 120 * time.Second
 		halfOpenMaxCalls = 1
 	case config.TierPro, config.TierBusiness:
@@ -2195,8 +2195,8 @@ func (s *Server) adminMetricsHandler(w http.ResponseWriter, r *http.Request) {
 				}
 				return 0
 			}(),
-			"peer_count":           8,
-			"sync_progress":        1.0,
+			"peer_count":    8,
+			"sync_progress": 1.0,
 		},
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -2493,10 +2493,10 @@ func (s *Server) chainsHandler(w http.ResponseWriter, r *http.Request) {
 	status := s.backends.GetStatus()
 
 	response := map[string]interface{}{
-		"chains":      chains,
-		"status":      status,
+		"chains":       chains,
+		"status":       status,
 		"total_chains": len(chains),
-		"timestamp":   s.clock.Now().UTC().Format(time.RFC3339),
+		"timestamp":    s.clock.Now().UTC().Format(time.RFC3339),
 	}
 
 	s.jsonResponse(w, http.StatusOK, response)
@@ -2574,9 +2574,9 @@ func (s *Server) chainMetricsHandler(backend ChainBackend, w http.ResponseWriter
 	}
 
 	metrics := map[string]interface{}{
-		"mempool_size":     backend.GetMempoolSize(),
-		"predictive_eta":   backend.GetPredictiveETA(),
-		"timestamp":        s.clock.Now().UTC().Format(time.RFC3339),
+		"mempool_size":   backend.GetMempoolSize(),
+		"predictive_eta": backend.GetPredictiveETA(),
+		"timestamp":      s.clock.Now().UTC().Format(time.RFC3339),
 	}
 
 	s.jsonResponse(w, http.StatusOK, metrics)

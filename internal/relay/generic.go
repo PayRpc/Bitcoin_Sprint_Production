@@ -19,34 +19,34 @@ import (
 
 // GenericRelay implements RelayClient for generic blockchain networks using JSON-RPC
 type GenericRelay struct {
-	cfg         config.Config
-	logger      *zap.Logger
-	
+	cfg    config.Config
+	logger *zap.Logger
+
 	// HTTP client for JSON-RPC calls
-	httpClient  *http.Client
-	
+	httpClient *http.Client
+
 	// WebSocket connections for real-time data
 	wsConnections []*websocket.Conn
 	wsConnMu      sync.RWMutex
 	wsConnected   atomic.Bool
-	
+
 	// Block streaming
 	blockChan chan blocks.BlockEvent
-	
+
 	// Configuration
 	relayConfig RelayConfig
-	
+
 	// Health and metrics
 	health    *HealthStatus
 	healthMu  sync.RWMutex
 	metrics   *RelayMetrics
 	metricsMu sync.RWMutex
-	
+
 	// Request tracking for async operations
 	requestID   int64
 	pendingReqs map[int64]chan *GenericResponse
 	reqMu       sync.RWMutex
-	
+
 	// Network-specific configuration
 	networkType string
 	rpcMethods  GenericRPCMethods
@@ -68,23 +68,23 @@ type GenericError struct {
 
 // GenericRPCMethods defines the RPC methods for different blockchain networks
 type GenericRPCMethods struct {
-	GetLatestBlock       string // e.g., "eth_getBlockByNumber", "getblock", "get_block"
-	GetBlockByHash       string // e.g., "eth_getBlockByHash", "getblock", "get_block"
-	GetBlockByHeight     string // e.g., "eth_getBlockByNumber", "getblockcount", "get_block_count"
-	GetNetworkInfo       string // e.g., "net_version", "getnetworkinfo", "get_info"
-	GetPeerCount         string // e.g., "net_peerCount", "getconnectioncount", "get_connections"
-	GetSyncStatus        string // e.g., "eth_syncing", "getblockchaininfo", "get_sync_info"
-	SubscribeBlocks      string // e.g., "eth_subscribe", "zmq", "subscribe"
-	GetTransactionPool   string // e.g., "txpool_status", "getrawmempool", "get_pending_txs"
+	GetLatestBlock     string // e.g., "eth_getBlockByNumber", "getblock", "get_block"
+	GetBlockByHash     string // e.g., "eth_getBlockByHash", "getblock", "get_block"
+	GetBlockByHeight   string // e.g., "eth_getBlockByNumber", "getblockcount", "get_block_count"
+	GetNetworkInfo     string // e.g., "net_version", "getnetworkinfo", "get_info"
+	GetPeerCount       string // e.g., "net_peerCount", "getconnectioncount", "get_connections"
+	GetSyncStatus      string // e.g., "eth_syncing", "getblockchaininfo", "get_sync_info"
+	SubscribeBlocks    string // e.g., "eth_subscribe", "zmq", "subscribe"
+	GetTransactionPool string // e.g., "txpool_status", "getrawmempool", "get_pending_txs"
 }
 
 // GenericBlock represents a generic blockchain block structure
 type GenericBlock struct {
 	Hash         string      `json:"hash"`
 	Height       uint64      `json:"height,omitempty"`
-	Number       interface{} `json:"number,omitempty"`       // Can be string or number
-	Timestamp    interface{} `json:"timestamp,omitempty"`    // Can be string or number
-	Time         interface{} `json:"time,omitempty"`         // Alternative timestamp field
+	Number       interface{} `json:"number,omitempty"`    // Can be string or number
+	Timestamp    interface{} `json:"timestamp,omitempty"` // Can be string or number
+	Time         interface{} `json:"time,omitempty"`      // Alternative timestamp field
 	ParentHash   string      `json:"parentHash,omitempty"`
 	PreviousHash string      `json:"previousblockhash,omitempty"`
 	Size         interface{} `json:"size,omitempty"`
@@ -219,7 +219,7 @@ func (gr *GenericRelay) IsConnected() bool {
 	if err := gr.testHTTPConnection(); err == nil {
 		return true
 	}
-	
+
 	// Check WebSocket connections
 	gr.wsConnMu.RLock()
 	defer gr.wsConnMu.RUnlock()
@@ -269,12 +269,12 @@ func (gr *GenericRelay) GetLatestBlock() (*blocks.BlockEvent, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to get latest block hash: %w", err)
 		}
-		
+
 		var blockHash string
 		if err := json.Unmarshal(hashResp.Result, &blockHash); err != nil {
 			return nil, fmt.Errorf("failed to parse block hash: %w", err)
 		}
-		
+
 		// Then get the block by hash
 		return gr.GetBlockByHash(blockHash)
 	}
@@ -323,12 +323,12 @@ func (gr *GenericRelay) GetBlockByHeight(height uint64) (*blocks.BlockEvent, err
 		if err != nil {
 			return nil, fmt.Errorf("failed to get block hash for height %d: %w", height, err)
 		}
-		
+
 		var blockHash string
 		if err := json.Unmarshal(hashResp.Result, &blockHash); err != nil {
 			return nil, fmt.Errorf("failed to parse block hash: %w", err)
 		}
-		
+
 		return gr.GetBlockByHash(blockHash)
 	} else {
 		params = []interface{}{height}
@@ -447,7 +447,7 @@ func (gr *GenericRelay) GetSyncStatus() (*SyncStatus, error) {
 func (gr *GenericRelay) GetHealth() (*HealthStatus, error) {
 	gr.healthMu.RLock()
 	defer gr.healthMu.RUnlock()
-	
+
 	healthCopy := *gr.health
 	return &healthCopy, nil
 }
@@ -456,7 +456,7 @@ func (gr *GenericRelay) GetHealth() (*HealthStatus, error) {
 func (gr *GenericRelay) GetMetrics() (*RelayMetrics, error) {
 	gr.metricsMu.RLock()
 	defer gr.metricsMu.RUnlock()
-	
+
 	metricsCopy := *gr.metrics
 	return &metricsCopy, nil
 }
@@ -465,9 +465,9 @@ func (gr *GenericRelay) GetMetrics() (*RelayMetrics, error) {
 func (gr *GenericRelay) SupportsFeature(feature Feature) bool {
 	// Base features supported by most generic networks
 	supportedFeatures := map[Feature]bool{
-		FeatureBlockStreaming:  true,  // Via polling
-		FeatureTransactionPool: true,  // Most networks support mempool
-		FeatureHistoricalData:  true,  // Most support historical queries
+		FeatureBlockStreaming:  true, // Via polling
+		FeatureTransactionPool: true, // Most networks support mempool
+		FeatureHistoricalData:  true, // Most support historical queries
 		FeatureSmartContracts:  gr.networkType == "ethereum-like" || gr.networkType == "substrate-like",
 		FeatureStateQueries:    gr.networkType == "ethereum-like" || gr.networkType == "substrate-like",
 		FeatureEventLogs:       gr.networkType == "ethereum-like",
@@ -476,7 +476,7 @@ func (gr *GenericRelay) SupportsFeature(feature Feature) bool {
 		FeatureREST:            true,  // HTTP/JSON-RPC
 		FeatureCompactBlocks:   gr.networkType == "bitcoin-like",
 	}
-	
+
 	return supportedFeatures[feature]
 }
 
@@ -554,7 +554,7 @@ func (gr *GenericRelay) makeHTTPRequest(method string, params []interface{}) (*G
 	}
 
 	requestID := atomic.AddInt64(&gr.requestID, 1)
-	
+
 	request := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"method":  method,
@@ -589,16 +589,16 @@ func (gr *GenericRelay) makeHTTPRequest(method string, params []interface{}) (*G
 func (gr *GenericRelay) connectWebSocket(ctx context.Context, endpoint string) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
-		gr.logger.Warn("Invalid WebSocket endpoint URL", 
-			zap.String("endpoint", endpoint), 
+		gr.logger.Warn("Invalid WebSocket endpoint URL",
+			zap.String("endpoint", endpoint),
 			zap.Error(err))
 		return
 	}
 
 	conn, _, err := websocket.DefaultDialer.DialContext(ctx, u.String(), nil)
 	if err != nil {
-		gr.logger.Warn("Failed to connect to WebSocket endpoint", 
-			zap.String("endpoint", endpoint), 
+		gr.logger.Warn("Failed to connect to WebSocket endpoint",
+			zap.String("endpoint", endpoint),
 			zap.Error(err))
 		return
 	}
@@ -727,7 +727,7 @@ func (gr *GenericRelay) parseBlockResponse(result json.RawMessage) (*blocks.Bloc
 func (gr *GenericRelay) updateHealth(healthy bool, state string, err error) {
 	gr.healthMu.Lock()
 	defer gr.healthMu.Unlock()
-	
+
 	gr.health.IsHealthy = healthy
 	gr.health.LastSeen = time.Now()
 	gr.health.ConnectionState = state
