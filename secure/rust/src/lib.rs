@@ -814,3 +814,157 @@ pub extern "C" fn universal_bloom_filter_auto_cleanup(filter: UniversalBloomFilt
         Err(_) => UniversalBloomFilterError::MemoryError as c_int,
     }
 }
+
+// ============================================================================
+// === ENTROPY FFI EXPORTS ===================================================
+// ============================================================================
+
+/// Generate fast entropy (32 bytes) - Direct FFI export
+#[no_mangle]
+pub unsafe extern "C" fn fast_entropy_c(output: *mut u8) -> c_int {
+    if output.is_null() {
+        return -1; // Null pointer error
+    }
+
+    let entropy_data = entropy::fast_entropy();
+    std::ptr::copy_nonoverlapping(entropy_data.as_ptr(), output, 32);
+    0 // Success
+}
+
+/// Generate hybrid entropy with Bitcoin headers (32 bytes) - Direct FFI export
+#[no_mangle]
+pub unsafe extern "C" fn hybrid_entropy_c(
+    headers: *const *const u8,
+    header_lengths: *const usize,
+    header_count: usize,
+    output: *mut u8,
+) -> c_int {
+    if output.is_null() {
+        return -1; // Null pointer error
+    }
+
+    let mut header_vec = Vec::new();
+    
+    if !headers.is_null() && !header_lengths.is_null() && header_count > 0 {
+        for i in 0..header_count {
+            let header_ptr = *headers.add(i);
+            let header_len = *header_lengths.add(i);
+            
+            if !header_ptr.is_null() && header_len > 0 {
+                let header_slice = std::slice::from_raw_parts(header_ptr, header_len);
+                header_vec.push(header_slice.to_vec());
+            }
+        }
+    }
+
+    let entropy_data = entropy::hybrid_entropy(&header_vec);
+    std::ptr::copy_nonoverlapping(entropy_data.as_ptr(), output, 32);
+    0 // Success
+}
+
+/// Generate enterprise entropy with additional data (32 bytes) - Direct FFI export
+#[no_mangle]
+pub unsafe extern "C" fn enterprise_entropy_c(
+    headers: *const *const u8,
+    header_lengths: *const usize,
+    header_count: usize,
+    additional_data: *const u8,
+    additional_data_len: usize,
+    output: *mut u8,
+) -> c_int {
+    if output.is_null() {
+        return -1; // Null pointer error
+    }
+
+    let mut header_vec = Vec::new();
+    
+    if !headers.is_null() && !header_lengths.is_null() && header_count > 0 {
+        for i in 0..header_count {
+            let header_ptr = *headers.add(i);
+            let header_len = *header_lengths.add(i);
+            
+            if !header_ptr.is_null() && header_len > 0 {
+                let header_slice = std::slice::from_raw_parts(header_ptr, header_len);
+                header_vec.push(header_slice.to_vec());
+            }
+        }
+    }
+
+    let additional_slice = if !additional_data.is_null() && additional_data_len > 0 {
+        std::slice::from_raw_parts(additional_data, additional_data_len)
+    } else {
+        &[]
+    };
+
+    let entropy_data = entropy::enterprise_entropy(&header_vec, additional_slice);
+    std::ptr::copy_nonoverlapping(entropy_data.as_ptr(), output, 32);
+    0 // Success
+}
+
+/// Get system fingerprint for entropy mixing (32 bytes) - Direct FFI export
+#[no_mangle]
+pub unsafe extern "C" fn system_fingerprint_c(output: *mut u8) -> c_int {
+    if output.is_null() {
+        return -1; // Null pointer error
+    }
+
+    match entropy::system_fingerprint() {
+        Ok(fingerprint) => {
+            std::ptr::copy_nonoverlapping(fingerprint.as_ptr(), output, 32);
+            0 // Success
+        }
+        Err(_) => -2, // System error
+    }
+}
+
+/// Get CPU temperature for entropy mixing - Direct FFI export
+#[no_mangle]
+pub extern "C" fn get_cpu_temperature_c() -> f32 {
+    match entropy::get_cpu_temperature() {
+        Ok(temp) => temp,
+        Err(_) => -1.0, // Error indicator
+    }
+}
+
+/// Generate fast entropy with hardware fingerprint (32 bytes) - Direct FFI export
+#[no_mangle]
+pub unsafe extern "C" fn fast_entropy_with_fingerprint_c(output: *mut u8) -> c_int {
+    if output.is_null() {
+        return -1; // Null pointer error
+    }
+
+    let entropy_data = entropy::fast_entropy_with_fingerprint();
+    std::ptr::copy_nonoverlapping(entropy_data.as_ptr(), output, 32);
+    0 // Success
+}
+
+/// Generate hybrid entropy with hardware fingerprint (32 bytes) - Direct FFI export
+#[no_mangle]
+pub unsafe extern "C" fn hybrid_entropy_with_fingerprint_c(
+    headers: *const *const u8,
+    header_lengths: *const usize,
+    header_count: usize,
+    output: *mut u8,
+) -> c_int {
+    if output.is_null() {
+        return -1; // Null pointer error
+    }
+
+    let mut header_vec = Vec::new();
+    
+    if !headers.is_null() && !header_lengths.is_null() && header_count > 0 {
+        for i in 0..header_count {
+            let header_ptr = *headers.add(i);
+            let header_len = *header_lengths.add(i);
+            
+            if !header_ptr.is_null() && header_len > 0 {
+                let header_slice = std::slice::from_raw_parts(header_ptr, header_len);
+                header_vec.push(header_slice.to_vec());
+            }
+        }
+    }
+
+    let entropy_data = entropy::hybrid_entropy_with_fingerprint(&header_vec);
+    std::ptr::copy_nonoverlapping(entropy_data.as_ptr(), output, 32);
+    0 // Success
+}

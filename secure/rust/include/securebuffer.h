@@ -307,6 +307,32 @@ extern "C"
 	// Auto-cleanup if needed (call periodically)
 	SECUREBUFFER_API int bitcoin_bloom_filter_auto_cleanup(void *filter);
 
+	// === Direct Entropy Functions ===
+	SECUREBUFFER_API int fast_entropy_c(unsigned char *output);
+	SECUREBUFFER_API int hybrid_entropy_c(
+		const unsigned char **headers,
+		const size_t *header_lengths,
+		size_t header_count,
+		unsigned char *output
+	);
+	SECUREBUFFER_API int enterprise_entropy_c(
+		const unsigned char **headers,
+		const size_t *header_lengths,
+		size_t header_count,
+		const unsigned char *additional_data,
+		size_t additional_data_len,
+		unsigned char *output
+	);
+	SECUREBUFFER_API int system_fingerprint_c(unsigned char *output);
+	SECUREBUFFER_API float get_cpu_temperature_c(void);
+	SECUREBUFFER_API int fast_entropy_with_fingerprint_c(unsigned char *output);
+	SECUREBUFFER_API int hybrid_entropy_with_fingerprint_c(
+		const unsigned char **headers,
+		const size_t *header_lengths,
+		size_t header_count,
+		unsigned char *output
+	);
+
 	// === Error Handling ===
 	SECUREBUFFER_API const char *securebuffer_error_string(SecureBufferError error);
 	SECUREBUFFER_API SecureBufferError securebuffer_get_last_error(void);

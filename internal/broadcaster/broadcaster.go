@@ -28,18 +28,18 @@ func New(logger *zap.Logger) *Broadcaster {
 func (b *Broadcaster) Subscribe(tier config.Tier) <-chan blocks.BlockEvent {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	
+
 	// Buffer size based on tier
 	bufferSize := b.getBufferSize(tier)
 	ch := make(chan blocks.BlockEvent, bufferSize)
 	b.subs[ch] = tier
-	
+
 	b.logger.Debug("New subscriber added",
 		zap.String("tier", string(tier)),
 		zap.Int("bufferSize", bufferSize),
 		zap.Int("totalSubscribers", len(b.subs)),
 	)
-	
+
 	return ch
 }
 
@@ -47,13 +47,13 @@ func (b *Broadcaster) Subscribe(tier config.Tier) <-chan blocks.BlockEvent {
 func (b *Broadcaster) Unsubscribe(ch <-chan blocks.BlockEvent) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	
+
 	// Find and remove the channel from our map
 	for subCh, tier := range b.subs {
 		if subCh == ch {
 			delete(b.subs, subCh)
 			close(subCh)
-			
+
 			b.logger.Debug("Subscriber removed",
 				zap.String("tier", string(tier)),
 				zap.Int("remainingSubscribers", len(b.subs)),
@@ -67,12 +67,12 @@ func (b *Broadcaster) Unsubscribe(ch <-chan blocks.BlockEvent) {
 func (b *Broadcaster) Publish(evt blocks.BlockEvent) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	
+
 	start := time.Now()
 	delivered := 0
 	turboOverwrites := 0
 	skipped := 0
-	
+
 	for ch, tier := range b.subs {
 		select {
 		case ch <- evt:
@@ -87,7 +87,7 @@ func (b *Broadcaster) Publish(evt blocks.BlockEvent) {
 				default:
 					// Channel somehow became available
 				}
-				
+
 				select {
 				case ch <- evt: // Send new event
 					delivered++
@@ -105,9 +105,9 @@ func (b *Broadcaster) Publish(evt blocks.BlockEvent) {
 			}
 		}
 	}
-	
+
 	elapsed := time.Since(start)
-	
+
 	// Log performance metrics
 	if elapsed > 1*time.Millisecond {
 		b.logger.Warn("Slow broadcast detected",
@@ -146,43 +146,43 @@ func (b *Broadcaster) getBufferSize(tier config.Tier) int {
 
 // Stats returns current broadcaster statistics
 type Stats struct {
-	TotalSubscribers    int                       `json:"totalSubscribers"`
-	SubscribersByTier   map[config.Tier]int       `json:"subscribersByTier"`
-	BufferUtilization   map[config.Tier]float64   `json:"bufferUtilization"`
+	TotalSubscribers  int                     `json:"totalSubscribers"`
+	SubscribersByTier map[config.Tier]int     `json:"subscribersByTier"`
+	BufferUtilization map[config.Tier]float64 `json:"bufferUtilization"`
 }
 
 // GetStats returns current broadcaster statistics
 func (b *Broadcaster) GetStats() Stats {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	
+
 	stats := Stats{
 		TotalSubscribers:  len(b.subs),
 		SubscribersByTier: make(map[config.Tier]int),
 		BufferUtilization: make(map[config.Tier]float64),
 	}
-	
+
 	// Count subscribers by tier and calculate buffer utilization
 	bufferCounts := make(map[config.Tier]int)
 	bufferTotals := make(map[config.Tier]int)
-	
+
 	for ch, tier := range b.subs {
 		stats.SubscribersByTier[tier]++
-		
+
 		// Calculate buffer utilization
 		bufferLen := len(ch)
 		bufferCap := cap(ch)
-		
+
 		bufferCounts[tier] += bufferLen
 		bufferTotals[tier] += bufferCap
 	}
-	
+
 	// Calculate average utilization per tier
 	for tier, total := range bufferTotals {
 		if total > 0 {
 			stats.BufferUtilization[tier] = float64(bufferCounts[tier]) / float64(total) * 100
 		}
 	}
-	
+
 	return stats
 }
