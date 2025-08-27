@@ -1,3 +1,0 @@
-C:/Projects/BItcoin_Sprint/BItcoin_Sprint/_cmake_build/CMakeFiles/rust_build.dir
-C:/Projects/BItcoin_Sprint/BItcoin_Sprint/_cmake_build/CMakeFiles/ALL_BUILD.dir
-C:/Projects/BItcoin_Sprint/BItcoin_Sprint/_cmake_build/CMakeFiles/ZERO_CHECK.dir

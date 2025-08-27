@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	goruntime "runtime"
 	"syscall"
 	"time"
 
@@ -15,101 +16,120 @@ import (
 	"github.com/PayRpc/Bitcoin-Sprint/internal/license"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/p2p"
-	"github.com/PayRpc/Bitcoin-Sprint/internal/runtime"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/performance"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/zmq"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 )
 
 func main() {
-	// Load environment variables from .env file
+	// Load .env file if it exists
 	if err := godotenv.Load(); err != nil {
-		log.Printf("Warning: could not load .env file: %v", err)
+		log.Println("No .env file found, continuing with environment variables")
 	}
 
-	logger, _ := zap.NewProduction()
-	defer logger.Sync()
-
-	// 1. Load config
+	// Load configuration
 	cfg := config.Load()
 
-	logger.Info("Starting Bitcoin Sprint daemon",
-		zap.String("version", "2.1.0"),
-		zap.String("mode", os.Getenv("APP_MODE")),
+	// Initialize logger
+	logger := initLogger(cfg)
+	defer logger.Sync()
+
+	// Apply performance optimizations FIRST (permanent for all tiers)
+	perfManager := performance.New(cfg, logger)
+	if err := perfManager.ApplyOptimizations(); err != nil {
+		logger.Fatal("Failed to apply performance optimizations", zap.Error(err))
+	}
+
+	// Log startup information with performance metrics
+	logger.Info("Bitcoin Sprint starting...",
+		zap.String("version", getVersion()),
+		zap.String("go_version", goruntime.Version()),
+		zap.Int("num_cpu", goruntime.NumCPU()),
+		zap.Int("gomaxprocs", goruntime.GOMAXPROCS(0)),
 		zap.String("tier", string(cfg.Tier)),
+		zap.Bool("turbo_mode", cfg.Tier == config.TierTurbo || cfg.Tier == config.TierEnterprise),
+		zap.Bool("performance_optimizations", true),
+		zap.Any("performance_stats", perfManager.GetCurrentStats()),
 	)
 
-	// Log turbo mode activation
-	if cfg.Tier == config.TierTurbo || cfg.Tier == config.TierEnterprise {
-		logger.Info("⚡ Turbo mode enabled",
-			zap.Duration("writeDeadline", cfg.WriteDeadline),
-			zap.Bool("sharedMemory", cfg.UseSharedMemory),
-			zap.Int("blockBufferSize", cfg.BlockBufferSize),
-		)
+	// Validate license
+	if !license.Validate(cfg.LicenseKey) {
+		logger.Fatal("Invalid license key")
 	}
 
-	// 2. Validate license (temporarily disabled for testing)
-	skipLicense := os.Getenv("SKIP_LICENSE_VALIDATION") == "true"
-	if !skipLicense && !license.Validate(cfg.LicenseKey) {
-		logger.Fatal("invalid license key")
-	} else if skipLicense {
-		logger.Info("License validation skipped (development mode)")
-	}
+	// Initialize modules
+	mempoolModule := mempool.New()
+	blockChan := make(chan blocks.BlockEvent, 100)
 
-	// 3. Init subsystems
-	mem := mempool.New()
-	blockChan := make(chan blocks.BlockEvent, cfg.BlockBufferSize)
+	// Initialize ZMQ client
+	zmqClient := zmq.New(cfg, blockChan, mempoolModule, logger)
+	go zmqClient.Run()
 
-	p2pClient, err := p2p.New(cfg, blockChan, mem, logger)
+	// Initialize P2P module
+	p2pModule, err := p2p.New(cfg, blockChan, mempoolModule, logger)
 	if err != nil {
-		logger.Fatal("failed to create P2P client", zap.Error(err))
+		logger.Fatal("Failed to create P2P module", zap.Error(err))
 	}
-	zmqClient := zmq.New(cfg, blockChan, mem, logger)
-	apiSrv := api.New(cfg, blockChan, mem, logger)
+	// P2P module doesn't have a Start method - it runs automatically
 
-	// Use shared memory fast-path if Turbo or Enterprise
-	if cfg.UseSharedMemory {
-		logger.Info("⚡ Starting memory-optimized sprint with tight deadlines")
+	// Initialize API server
+	apiServer := api.New(cfg, blockChan, mempoolModule, logger)
+	go func() {
+		logger.Info("Starting API server", zap.String("address", fmt.Sprintf("%s:%d", cfg.APIHost, cfg.APIPort)))
+		apiServer.Run()
+	}()
+
+	// Start block processing based on tier
+	if cfg.Tier == config.TierTurbo || cfg.Tier == config.TierEnterprise {
 		go runMemoryOptimizedSprint(blockChan, cfg, logger)
 	} else {
-		logger.Info("Starting standard sprint processing")
 		go runStandardSprint(blockChan, cfg, logger)
 	}
 
-	// Optional: Direct P2P bypass + shared memory
-	if cfg.UseDirectP2P {
-		ctx := context.Background()
-		// Connect to first node (in production, you'd iterate through cfg.BitcoinNodes)
-		if len(cfg.BitcoinNodes) > 0 {
-			err := p2p.NewDirect(ctx, cfg.BitcoinNodes[0], blockChan, logger)
-			if err != nil {
-				logger.Warn("Failed to start direct P2P", zap.Error(err))
-			}
-		}
-		if cfg.UseMemoryChannel {
-			p2p.NewMemoryWatcher(ctx, blockChan, logger)
-		}
-	}
+	// Setup graceful shutdown
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
+	// Wait for shutdown signal
+	<-c
+	logger.Info("Shutting down Bitcoin Sprint...")
+
+	// Stop all modules
+	zmqClient.Stop()
+	p2pModule.Stop()
+	apiServer.Stop()
+
+	logger.Info("Bitcoin Sprint stopped")
+}
+
+// initLogger initializes structured logging
+func initLogger(cfg config.Config) *zap.Logger {
+	var logger *zap.Logger
+	var err error
 
 	if cfg.OptimizeSystem {
-		runtime.ApplySystemOptimizations(logger)
+		// Production config for optimized systems
+		config := zap.NewProductionConfig()
+		config.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
+		logger, err = config.Build()
+	} else {
+		// Development config
+		config := zap.NewDevelopmentConfig()
+		config.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+		logger, err = config.Build()
 	}
 
-	// 4. Start services
-	go p2pClient.Run()
-	go zmqClient.Run()
-	go apiSrv.Run()
+	if err != nil {
+		log.Fatalf("Failed to initialize logger: %v", err)
+	}
 
-	// 5. Wait for shutdown
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	<-stop
+	return logger
+}
 
-	// 6. Graceful shutdown
-	apiSrv.Stop()
-	p2pClient.Stop()
-	zmqClient.Stop()
-	logger.Info("shutdown complete")
+// getVersion returns the application version
+func getVersion() string {
+	return "2.2.0-performance" // Production-ready performance optimizations
 }
 
 // runMemoryOptimizedSprint handles Turbo/Enterprise tier block processing

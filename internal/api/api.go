@@ -39,6 +39,7 @@ func (s *Server) Run() {
 
 	// Core endpoints
 	mux.HandleFunc("/status", s.auth(s.statusHandler))
+	mux.HandleFunc("/version", s.versionHandler)  // No auth for version endpoint
 	mux.HandleFunc("/latest", s.auth(s.latestHandler))
 	mux.HandleFunc("/metrics", s.auth(s.metricsHandler))
 	mux.HandleFunc("/stream", s.auth(s.streamHandler))
@@ -155,6 +156,18 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 		"timestamp": time.Now().Unix(),
 		"version":   "2.1.0",
 		"service":   "bitcoin-sprint-api",
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) versionHandler(w http.ResponseWriter, r *http.Request) {
+	resp := map[string]interface{}{
+		"version":    "2.1.0",
+		"build":      "enterprise-turbo",
+		"tier":       string(s.cfg.Tier),
+		"turbo_mode": s.cfg.Tier == "turbo" || s.cfg.Tier == "enterprise",
+		"timestamp":  time.Now().Unix(),
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)

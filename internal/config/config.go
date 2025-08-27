@@ -31,6 +31,13 @@ type Config struct {
 	UseMemoryChannel bool
 	OptimizeSystem   bool
 	
+	// Performance optimizations (permanent for 99.9% SLA compliance)
+	GCPercent        int           // Aggressive GC tuning (default: 25)
+	MaxCPUCores      int           // GOMAXPROCS setting (0 = auto-detect)
+	HighPriority     bool          // Use high process priority
+	LockOSThread     bool          // Pin main thread to OS thread
+	PreallocBuffers  bool          // Pre-allocate memory buffers
+	
 	// Turbo mode enhancements
 	Tier             Tier
 	WriteDeadline    time.Duration
@@ -54,7 +61,14 @@ func Load() Config {
 		SecureChannelURL: getEnv("SECURE_CHANNEL_URL", "tcp://127.0.0.1:9000"),
 		UseDirectP2P:     getEnvBool("USE_DIRECT_P2P", false),
 		UseMemoryChannel: getEnvBool("USE_MEMORY_CHANNEL", false),
-		OptimizeSystem:   getEnvBool("OPTIMIZE_SYSTEM", false),
+		OptimizeSystem:   getEnvBool("OPTIMIZE_SYSTEM", true), // Default to optimized
+		
+		// Performance optimizations (permanent defaults for 99.9% SLA)
+		GCPercent:        getEnvInt("GC_PERCENT", 25),      // Aggressive GC by default
+		MaxCPUCores:      getEnvInt("MAX_CPU_CORES", 0),    // Auto-detect all cores
+		HighPriority:     getEnvBool("HIGH_PRIORITY", true), // High priority by default
+		LockOSThread:     getEnvBool("LOCK_OS_THREAD", true), // Pin threads by default
+		PreallocBuffers:  getEnvBool("PREALLOC_BUFFERS", true), // Pre-allocate by default
 		
 		// Turbo mode defaults
 		Tier:             tier,
