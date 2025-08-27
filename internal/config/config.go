@@ -80,6 +80,7 @@ type Config struct {
 	GeneralRateLimit int    // General IP-based rate limit (requests per second)
 	WebSocketMaxGlobal int  // Maximum global WebSocket connections
 	WebSocketMaxPerIP  int  // Maximum WebSocket connections per IP
+	WebSocketMaxPerChain int // Maximum WebSocket connections per chain
 
 	// Persistence settings
 	DatabaseType     string // sqlite, postgres, redis
@@ -122,6 +123,7 @@ func Load() Config {
 		GeneralRateLimit: getEnvInt("GENERAL_RATE_LIMIT", 100),
 		WebSocketMaxGlobal: getEnvInt("WEBSOCKET_MAX_GLOBAL", 1000),
 		WebSocketMaxPerIP:  getEnvInt("WEBSOCKET_MAX_PER_IP", 10),
+		WebSocketMaxPerChain: getEnvInt("WEBSOCKET_MAX_PER_CHAIN", 100),
 
 		// Persistence settings
 		DatabaseType:      getEnv("DATABASE_TYPE", "sqlite"),
