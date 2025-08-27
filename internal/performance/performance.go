@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"runtime"
 	"runtime/debug"
-	"syscall"
 
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 	"go.uber.org/zap"
@@ -147,30 +146,11 @@ func (pm *PerformanceManager) applySystemOptimizations() error {
 // setHighPriority sets the process to high priority (Windows-specific)
 func (pm *PerformanceManager) setHighPriority() error {
 	if runtime.GOOS == "windows" {
-		return pm.setWindowsHighPriority()
+	return pm.setWindowsHighPriority()
 	}
 	
 	// For Unix-like systems, we could implement nice() calls here
 	pm.logger.Debug("High priority optimization not implemented for this OS")
-	return nil
-}
-
-// setWindowsHighPriority sets high priority on Windows
-func (pm *PerformanceManager) setWindowsHighPriority() error {
-	kernel32 := syscall.NewLazyDLL("kernel32.dll")
-	setProcessPriorityClass := kernel32.NewProc("SetPriorityClass")
-	getCurrentProcess := kernel32.NewProc("GetCurrentProcess")
-
-	const HIGH_PRIORITY_CLASS = 0x00000080
-
-	handle, _, _ := getCurrentProcess.Call()
-	ret, _, err := setProcessPriorityClass.Call(handle, HIGH_PRIORITY_CLASS)
-	
-	if ret == 0 {
-		return fmt.Errorf("SetPriorityClass failed: %v", err)
-	}
-
-	pm.logger.Debug("Set process to high priority")
 	return nil
 }
 
