@@ -39,16 +39,16 @@ type Config struct {
 	PreallocBuffers bool // Pre-allocate memory buffers
 
 	// Tier-aware P2P settings
-	Tier                    Tier
-	WriteDeadline           time.Duration
-	UseSharedMemory         bool
-	BlockBufferSize         int
-	EnableKernelBypass      bool
-	MockFastBlocks          bool // Enable fast block simulation for testing/demo
-	
+	Tier               Tier
+	WriteDeadline      time.Duration
+	UseSharedMemory    bool
+	BlockBufferSize    int
+	EnableKernelBypass bool
+	MockFastBlocks     bool // Enable fast block simulation for testing/demo
+
 	// Tier-aware limits
 	MaxOutstandingHeadersPerPeer int // Maximum headers per peer
-	PipelineWorkers             int // Number of pipeline workers
+	PipelineWorkers              int // Number of pipeline workers
 }
 
 // Load reads config from env
