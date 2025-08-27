@@ -1,12 +1,47 @@
 #!/usr/bin/env pwsh
-# check-setup.ps1 - Verify development environment for Bitcoin Sprint
+# Bitcoin Sprint Build Setup Checker
+# Checks for ZeroMQ (libzmq) and other build dependencies
+# Date: August 26, 2025
 
-$ErrorActionPreference = "Continue"
+param(
+    [switch]$InstallDeps,
+    [switch]$BuildAfterSetup,
+    [string]$VcpkgPath = ""
+)
 
-Write-Host "Bitcoin Sprint Development Environment Check" -ForegroundColor Cyan
-Write-Host "=============================================" -ForegroundColor Cyan
+Write-Host "🔧 Bitcoin Sprint Build Setup Checker" -ForegroundColor Cyan
+Write-Host "=====================================" -ForegroundColor Cyan
 
-$allGood = $true
+$ErrorCount = 0
+$WarningCount = 0
+
+# Function to check if a command exists
+function Test-Command {
+    param($Command)
+    try {
+        Get-Command $Command -ErrorAction Stop | Out-Null
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+# Function to find file in common locations
+function Find-LibraryFile {
+    param($FileName, $SearchPaths)
+    
+    foreach ($path in $SearchPaths) {
+        if (Test-Path $path) {
+            $found = Get-ChildItem -Path $path -Recurse -Name $FileName -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) {
+                return Join-Path $path $found
+            }
+        }
+    }
+    return $null
+}
+
+Write-Host "`n📋 Checking Build Dependencies..." -ForegroundColor Yellow
 
 # Check Go
 Write-Host "`nChecking Go..." -ForegroundColor Yellow
