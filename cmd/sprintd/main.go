@@ -24,29 +24,25 @@ import (
 )
 
 func main() {
-	// Load .env file if it exists
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, continuing with environment variables")
-	}
+	// Load environment
+	_ = godotenv.Load()
 
-	// Load configuration
+	// Config + logger
 	cfg := config.Load()
-
-	// Initialize logger
 	logger := initLogger(cfg)
 	defer logger.Sync()
 
-	// Create context for background workers
+	// Root context
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Apply performance optimizations FIRST (permanent for all tiers)
-	perfManager := performance.New(cfg, logger)
-	if err := perfManager.ApplyOptimizations(); err != nil {
+	// Performance tuning first
+	perf := performance.New(cfg, logger)
+	if err := perf.ApplyOptimizations(); err != nil {
 		logger.Fatal("Failed to apply performance optimizations", zap.Error(err))
 	}
 
-	// Log startup information with performance metrics
+	// Startup log
 	logger.Info("Bitcoin Sprint starting...",
 		zap.String("version", getVersion()),
 		zap.String("go_version", goruntime.Version()),
@@ -54,216 +50,184 @@ func main() {
 		zap.Int("gomaxprocs", goruntime.GOMAXPROCS(0)),
 		zap.String("tier", string(cfg.Tier)),
 		zap.Bool("turbo_mode", cfg.Tier == config.TierTurbo || cfg.Tier == config.TierEnterprise),
-		zap.Bool("performance_optimizations", true),
-		zap.Any("performance_stats", perfManager.GetCurrentStats()),
+		zap.Any("perf_stats", perf.GetCurrentStats()),
 	)
 
-	// Validate license
+	// License validation
 	if !license.Validate(cfg.LicenseKey) {
 		logger.Fatal("Invalid license key")
 	}
 
-	// Initialize modules
+	// Core modules
 	mempoolModule := mempool.New()
-	blockChan := make(chan blocks.BlockEvent, 100)
+	blockChan := make(chan blocks.BlockEvent, 1000)
 
-	// Initialize ZMQ client
+	// ZMQ client
 	zmqClient := zmq.New(cfg, blockChan, mempoolModule, logger)
-	go zmqClient.Run()
+	go zmqClient.Run(ctx)
 
-	// Initialize P2P module
+	// P2P client
 	p2pModule, err := p2p.New(cfg, blockChan, mempoolModule, logger)
 	if err != nil {
 		logger.Fatal("Failed to create P2P module", zap.Error(err))
 	}
-	go p2pModule.Run()
+	go p2pModule.Run(ctx)
 
-	// Initialize cache layer for ultra-low latency
-	blockCache := cache.New(1000, logger) // Cache up to 1000 recent blocks
-
-	// Initialize prefetch worker to continuously update cache
+	// Cache layer
+	blockCache := cache.New(2000, logger)
 	prefetchWorker := cache.NewPrefetchWorker(blockCache, blockChan, logger)
 	prefetchWorker.Start(ctx)
 
-	// Initialize API server with cache layer
+	// API server
 	apiServer := api.NewWithCache(cfg, blockChan, mempoolModule, blockCache, logger)
 	go func() {
-		logger.Info("Starting API server", zap.String("address", fmt.Sprintf("%s:%d", cfg.APIHost, cfg.APIPort)))
-		apiServer.Run()
+		logger.Info("Starting API server",
+			zap.String("addr", fmt.Sprintf("%s:%d", cfg.APIHost, cfg.APIPort)))
+		apiServer.Run(ctx)
 	}()
 
-	// Start block processing based on tier
-	if cfg.Tier == config.TierTurbo || cfg.Tier == config.TierEnterprise {
-		go runMemoryOptimizedSprint(blockChan, cfg, logger)
-	} else {
-		go runStandardSprint(blockChan, cfg, logger)
-	}
+	// Tier-aware relay loop
+	go func() {
+		if cfg.Tier == config.TierTurbo || cfg.Tier == config.TierEnterprise {
+			runMemoryOptimizedRelay(ctx, blockChan, cfg, logger, p2pModule)
+		} else {
+			runStandardRelay(ctx, blockChan, cfg, logger, p2pModule)
+		}
+	}()
 
-	// Setup graceful shutdown
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	logger.Info("Waiting for shutdown signal...")
+	// Shutdown signals
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 
-	// Wait for shutdown signal
-	sig := <-c
-	logger.Info("Received shutdown signal", zap.String("signal", sig.String()))
+	sig := <-sigs
+	logger.Info("Shutdown signal received", zap.String("signal", sig.String()))
 
-	logger.Info("Shutting down Bitcoin Sprint...")
+	// Cancel context for all workers
+	cancel()
 
-	// Stop all modules
+	// Stop services gracefully
 	zmqClient.Stop()
 	p2pModule.Stop()
 	apiServer.Stop()
+	prefetchWorker.Stop()
 
-	logger.Info("Bitcoin Sprint stopped")
+	close(blockChan)
+
+	logger.Info("Bitcoin Sprint stopped cleanly")
 }
 
 // initLogger initializes structured logging
 func initLogger(cfg config.Config) *zap.Logger {
-	var logger *zap.Logger
-	var err error
-
+	var (
+		logger *zap.Logger
+		err    error
+	)
 	if cfg.OptimizeSystem {
-		// Production config for optimized systems
 		config := zap.NewProductionConfig()
 		config.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
 		logger, err = config.Build()
 	} else {
-		// Development config
 		config := zap.NewDevelopmentConfig()
 		config.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
 		logger, err = config.Build()
 	}
-
 	if err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
-
 	return logger
 }
 
-// getVersion returns the application version
 func getVersion() string {
-	return "2.2.0-performance" // Production-ready performance optimizations
+	return "2.3.0-production"
 }
 
-// runMemoryOptimizedSprint handles Turbo/Enterprise tier block processing
-// Uses shared memory and zero-copy operations with strict deadlines
-func runMemoryOptimizedSprint(blockChan <-chan blocks.BlockEvent, cfg config.Config, logger *zap.Logger) {
-	logger.Info("Memory-optimized sprint started",
-		zap.Duration("writeDeadline", cfg.WriteDeadline),
+// runMemoryOptimizedRelay: Enterprise/Turbo relay loop
+func runMemoryOptimizedRelay(ctx context.Context, ch <-chan blocks.BlockEvent,
+	cfg config.Config, logger *zap.Logger, p2pModule *p2p.Module) {
+
+	logger.Info("Turbo/Enterprise relay loop started",
+		zap.Duration("deadline", cfg.WriteDeadline),
 		zap.String("tier", string(cfg.Tier)),
 	)
 
-	for evt := range blockChan {
-		start := time.Now()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case evt, ok := <-ch:
+			if !ok {
+				return
+			}
+			start := time.Now()
+			err := notifyPeersZeroAlloc(evt.Hash, cfg, logger, p2pModule)
+			elapsed := time.Since(start)
 
-		// Turbo relay with strict deadline and zero-copy
-		err := notifyPeersZeroAlloc(evt.Hash, cfg.WriteDeadline, cfg.Tier, logger)
-
-		elapsed := time.Since(start)
-		if err != nil {
-			logger.Error("Turbo relay failed",
-				zap.Error(err),
-				zap.Duration("elapsed", elapsed),
-				zap.String("blockHash", evt.Hash),
-			)
-		} else if cfg.Tier != config.TierEnterprise && elapsed > cfg.WriteDeadline {
-			// Only log deadline warnings for non-enterprise tiers
-			logger.Warn("Turbo relay exceeded deadline",
-				zap.Duration("elapsed", elapsed),
-				zap.Duration("deadline", cfg.WriteDeadline),
-				zap.String("blockHash", evt.Hash),
-			)
-		} else {
-			logger.Debug("Turbo relay successful",
-				zap.Duration("elapsed", elapsed),
-				zap.String("blockHash", evt.Hash),
-			)
+			if err != nil {
+				logger.Error("Turbo relay failed",
+					zap.Error(err),
+					zap.Duration("elapsed", elapsed),
+					zap.String("blockHash", evt.Hash))
+			} else if cfg.Tier != config.TierEnterprise && elapsed > cfg.WriteDeadline {
+				logger.Warn("Relay exceeded deadline",
+					zap.Duration("elapsed", elapsed),
+					zap.Duration("deadline", cfg.WriteDeadline))
+			} else {
+				logger.Debug("Relay ok", zap.Duration("elapsed", elapsed))
+			}
 		}
 	}
 }
 
-// runStandardSprint handles Free/Pro/Business tier block processing
-// Uses standard relay mechanisms with relaxed deadlines
-func runStandardSprint(blockChan <-chan blocks.BlockEvent, cfg config.Config, logger *zap.Logger) {
-	logger.Info("Standard sprint started",
-		zap.Duration("writeDeadline", cfg.WriteDeadline),
-		zap.String("tier", string(cfg.Tier)),
-	)
+// runStandardRelay: Free/Pro/Business tiers
+func runStandardRelay(ctx context.Context, ch <-chan blocks.BlockEvent,
+	cfg config.Config, logger *zap.Logger, p2pModule *p2p.Module) {
 
-	for evt := range blockChan {
-		start := time.Now()
+	logger.Info("Standard relay loop started", zap.String("tier", string(cfg.Tier)))
 
-		// Normal relay with standard mechanisms
-		err := notifyPeers(evt.Hash, cfg.Tier, logger)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case evt, ok := <-ch:
+			if !ok {
+				return
+			}
+			start := time.Now()
+			err := p2pModule.BroadcastBlockHash(evt.Hash)
+			elapsed := time.Since(start)
 
-		elapsed := time.Since(start)
-		if err != nil {
-			logger.Error("Standard relay failed",
-				zap.Error(err),
-				zap.Duration("elapsed", elapsed),
-				zap.String("blockHash", evt.Hash),
-			)
-		} else {
-			logger.Debug("Standard relay successful",
-				zap.Duration("elapsed", elapsed),
-				zap.String("blockHash", evt.Hash),
-			)
+			if err != nil {
+				logger.Error("Standard relay failed",
+					zap.Error(err), zap.String("blockHash", evt.Hash))
+			} else {
+				logger.Debug("Standard relay ok",
+					zap.Duration("elapsed", elapsed),
+					zap.String("blockHash", evt.Hash))
+			}
 		}
 	}
 }
 
-// notifyPeersZeroAlloc implements zero-copy peer notification for Turbo/Enterprise tiers
-func notifyPeersZeroAlloc(blockHash string, deadline time.Duration, tier config.Tier, logger *zap.Logger) error {
-	// For Enterprise tier, skip the strict timeout to prevent false timeouts
-	// The notification is already optimized to be very fast (< 10µs)
-	if tier == config.TierEnterprise {
-		return notifyPeers(blockHash, tier, logger)
+// notifyPeersZeroAlloc: Turbo/Enterprise relay with deadlines + zero-copy
+func notifyPeersZeroAlloc(blockHash string, cfg config.Config,
+	logger *zap.Logger, p2pModule *p2p.Module) error {
+
+	if cfg.Tier == config.TierEnterprise {
+		// Enterprise ignores strict deadlines
+		return p2pModule.BroadcastBlockHash(blockHash)
 	}
 
-	// For Turbo tier, use strict timeout optimized for 1-3ms target
-	ctx, cancel := context.WithTimeout(context.Background(), deadline)
+	// Turbo = strict deadline enforced
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.WriteDeadline)
 	defer cancel()
 
 	done := make(chan error, 1)
-	go func() {
-		done <- notifyPeers(blockHash, tier, logger)
-	}()
+	go func() { done <- p2pModule.BroadcastBlockHash(blockHash) }()
 
 	select {
 	case err := <-done:
 		return err
 	case <-ctx.Done():
-		return fmt.Errorf("turbo notification timed out after %v", deadline)
+		return fmt.Errorf("turbo relay timeout %v", cfg.WriteDeadline)
 	}
-}
-
-// notifyPeers implements standard peer notification
-func notifyPeers(blockHash string, tier config.Tier, logger *zap.Logger) error {
-	// TODO: Implement actual peer notification logic
-	// This would broadcast the block hash to connected peers
-
-	logger.Debug("Notifying peers of new block",
-		zap.String("blockHash", blockHash),
-		zap.String("tier", string(tier)),
-	)
-
-	// Simulate notification work with tier-specific optimizations
-	switch tier {
-	case config.TierTurbo:
-		// Ultra-fast notification for turbo mode (target: <1ms)
-		time.Sleep(50 * time.Microsecond) // Reduced from 10µs to prevent timeout
-	case config.TierEnterprise:
-		// Enterprise-grade notification (target: <200µs)
-		time.Sleep(10 * time.Microsecond) // Minimal delay for enterprise
-	case config.TierBusiness:
-		time.Sleep(50 * time.Microsecond) // Reduced from 100µs
-	case config.TierPro:
-		time.Sleep(100 * time.Microsecond) // Reduced from 200µs
-	default: // Free tier
-		time.Sleep(200 * time.Microsecond) // Reduced from 500µs
-	}
-
-	return nil
 }
