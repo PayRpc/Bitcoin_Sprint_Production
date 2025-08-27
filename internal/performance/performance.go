@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 	"runtime/debug"
+	"sync"
 
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 	"go.uber.org/zap"
@@ -23,6 +24,16 @@ type PerformanceManager struct {
 	cfg    config.Config
 	logger *zap.Logger
 	level  OptimizationLevel
+
+	// Enhanced buffer pool for memory management
+	bufferPool *BufferPool
+}
+
+// BufferPool manages reusable memory buffers
+type BufferPool struct {
+	pools    map[int]*sync.Pool
+	mu       sync.RWMutex
+	maxSize  int
 }
 
 // New creates a new performance manager with automatic optimization level detection
@@ -40,9 +51,64 @@ func New(cfg config.Config, logger *zap.Logger) *PerformanceManager {
 	}
 
 	return &PerformanceManager{
-		cfg:    cfg,
-		logger: logger,
-		level:  level,
+		cfg:        cfg,
+		logger:     logger,
+		level:      level,
+		bufferPool: NewBufferPool(),
+	}
+}
+
+// NewBufferPool creates a new buffer pool for memory management
+func NewBufferPool() *BufferPool {
+	return &BufferPool{
+		pools:   make(map[int]*sync.Pool),
+		maxSize: 1024 * 1024, // 1MB max buffer size
+	}
+}
+
+// Get retrieves a buffer from the pool
+func (bp *BufferPool) Get(size int) []byte {
+	if size > bp.maxSize {
+		return make([]byte, size)
+	}
+	
+	bp.mu.RLock()
+	pool, exists := bp.pools[size]
+	bp.mu.RUnlock()
+	
+	if !exists {
+		bp.mu.Lock()
+		if bp.pools[size] == nil {
+			bp.pools[size] = &sync.Pool{
+				New: func() interface{} {
+					return make([]byte, size)
+				},
+			}
+		}
+		pool = bp.pools[size]
+		bp.mu.Unlock()
+	}
+	
+	return pool.Get().([]byte)
+}
+
+// Put returns a buffer to the pool
+func (bp *BufferPool) Put(buf []byte) {
+	size := cap(buf)
+	if size > bp.maxSize {
+		return
+	}
+	
+	bp.mu.RLock()
+	pool, exists := bp.pools[size]
+	bp.mu.RUnlock()
+	
+	if exists {
+		// Clear buffer before returning to pool
+		for i := range buf {
+			buf[i] = 0
+		}
+		pool.Put(buf[:0]) // Reset length but keep capacity
 	}
 }
 
@@ -76,6 +142,11 @@ func (pm *PerformanceManager) ApplyOptimizations() error {
 	)
 
 	return nil
+}
+
+// GetBufferPool returns the buffer pool for external use
+func (pm *PerformanceManager) GetBufferPool() *BufferPool {
+	return pm.bufferPool
 }
 
 // applyRuntimeOptimizations applies Go runtime optimizations
@@ -162,20 +233,24 @@ func (pm *PerformanceManager) preallocateBuffers() {
 		bufferSize = 1024 // Default buffer size
 	}
 
-	// Pre-allocate multiple buffers for different use cases
-	buffers := make([][]byte, 10)
-	for i := range buffers {
-		buffers[i] = make([]byte, bufferSize)
+	// Pre-populate the buffer pool with commonly used buffer sizes
+	bufferSizes := []int{bufferSize, bufferSize*2, bufferSize*4, 4096, 8192}
+	
+	totalBuffers := 0
+	for _, size := range bufferSizes {
+		// Pre-allocate 5 buffers of each size
+		for i := 0; i < 5; i++ {
+			buf := pm.bufferPool.Get(size)
+			pm.bufferPool.Put(buf) // Return to pool immediately
+			totalBuffers++
+		}
 	}
 
-	pm.logger.Debug("Pre-allocated memory buffers",
-		zap.Int("buffer_count", len(buffers)),
-		zap.Int("buffer_size", bufferSize),
+	pm.logger.Debug("Pre-populated buffer pool",
+		zap.Int("total_buffers", totalBuffers),
+		zap.Int("buffer_sizes", len(bufferSizes)),
+		zap.Int("pool_max_size", pm.bufferPool.maxSize),
 	)
-
-	// Keep reference to prevent GC (in a real implementation, 
-	// these would be managed by a buffer pool)
-	_ = buffers
 }
 
 // getOptimizationLevelName returns the string representation of optimization level

@@ -135,20 +135,20 @@ func getVersion() string {
 // runMemoryOptimizedSprint handles Turbo/Enterprise tier block processing
 // Uses shared memory and zero-copy operations with strict deadlines
 func runMemoryOptimizedSprint(blockChan <-chan blocks.BlockEvent, cfg config.Config, logger *zap.Logger) {
-	logger.Info("Memory-optimized sprint started", 
+	logger.Info("Memory-optimized sprint started",
 		zap.Duration("writeDeadline", cfg.WriteDeadline),
 		zap.String("tier", string(cfg.Tier)),
 	)
-	
+
 	for evt := range blockChan {
 		start := time.Now()
-		
+
 		// Turbo relay with strict deadline and zero-copy
 		err := notifyPeersZeroAlloc(evt.Hash, cfg.WriteDeadline, cfg.Tier, logger)
-		
+
 		elapsed := time.Since(start)
 		if err != nil {
-			logger.Error("Turbo relay failed", 
+			logger.Error("Turbo relay failed",
 				zap.Error(err),
 				zap.Duration("elapsed", elapsed),
 				zap.String("blockHash", evt.Hash),
@@ -171,20 +171,20 @@ func runMemoryOptimizedSprint(blockChan <-chan blocks.BlockEvent, cfg config.Con
 // runStandardSprint handles Free/Pro/Business tier block processing
 // Uses standard relay mechanisms with relaxed deadlines
 func runStandardSprint(blockChan <-chan blocks.BlockEvent, cfg config.Config, logger *zap.Logger) {
-	logger.Info("Standard sprint started", 
+	logger.Info("Standard sprint started",
 		zap.Duration("writeDeadline", cfg.WriteDeadline),
 		zap.String("tier", string(cfg.Tier)),
 	)
-	
+
 	for evt := range blockChan {
 		start := time.Now()
-		
+
 		// Normal relay with standard mechanisms
 		err := notifyPeers(evt.Hash, cfg.Tier, logger)
-		
+
 		elapsed := time.Since(start)
 		if err != nil {
-			logger.Error("Standard relay failed", 
+			logger.Error("Standard relay failed",
 				zap.Error(err),
 				zap.Duration("elapsed", elapsed),
 				zap.String("blockHash", evt.Hash),
@@ -202,16 +202,16 @@ func runStandardSprint(blockChan <-chan blocks.BlockEvent, cfg config.Config, lo
 func notifyPeersZeroAlloc(blockHash string, deadline time.Duration, tier config.Tier, logger *zap.Logger) error {
 	// TODO: Implement zero-copy notification with pre-allocated buffers
 	// This would use shared memory and avoid heap allocations
-	
+
 	// For now, delegate to standard notification but with strict timeout
 	ctx, cancel := context.WithTimeout(context.Background(), deadline)
 	defer cancel()
-	
+
 	done := make(chan error, 1)
 	go func() {
 		done <- notifyPeers(blockHash, tier, logger)
 	}()
-	
+
 	select {
 	case err := <-done:
 		return err
@@ -224,12 +224,12 @@ func notifyPeersZeroAlloc(blockHash string, deadline time.Duration, tier config.
 func notifyPeers(blockHash string, tier config.Tier, logger *zap.Logger) error {
 	// TODO: Implement actual peer notification logic
 	// This would broadcast the block hash to connected peers
-	
+
 	logger.Debug("Notifying peers of new block",
 		zap.String("blockHash", blockHash),
 		zap.String("tier", string(tier)),
 	)
-	
+
 	// Simulate notification work
 	switch tier {
 	case config.TierTurbo, config.TierEnterprise:
@@ -242,6 +242,6 @@ func notifyPeers(blockHash string, tier config.Tier, logger *zap.Logger) error {
 	default: // Free tier
 		time.Sleep(1 * time.Millisecond)
 	}
-	
+
 	return nil
 }

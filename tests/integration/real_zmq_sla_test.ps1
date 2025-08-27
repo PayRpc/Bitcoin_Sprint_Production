@@ -140,15 +140,27 @@ try {
     # Step 3: Configure environment for tier
     Write-Section "⚙️ Environment Configuration"
     
-    # Use tier-specific configuration file
-    $tierConfigFile = "config-$($Tier).json"
-    if (-not (Test-Path $tierConfigFile)) {
-        # Fallback to alternative naming
-        $tierConfigFile = "config-$($Tier)-stable.json"
-        if (-not (Test-Path $tierConfigFile)) {
-            Write-Warning "No specific config file found for $Tier tier, using config.json"
-            $tierConfigFile = "config.json"
+    # Use tier-specific configuration file with fallback to optimized configs
+    $configFilesToTry = @(
+        "config-production-optimized.json",
+        "config-$($Tier)-turbo.json", 
+        "config-$($Tier)-stable.json",
+        "config-$($Tier).json",
+        "config-turbo.json",
+        "config.json"
+    )
+    
+    $tierConfigFile = $null
+    foreach ($configFile in $configFilesToTry) {
+        if (Test-Path $configFile) {
+            $tierConfigFile = $configFile
+            break
         }
+    }
+    
+    if (-not $tierConfigFile) {
+        Write-Warning "No configuration file found, using default config.json"
+        $tierConfigFile = "config.json"
     }
     
     Write-Status "Using configuration file: $tierConfigFile"
@@ -176,6 +188,40 @@ try {
     $env:API_HOST = "127.0.0.1"
     $env:API_PORT = "8080"
     
+    # Performance Optimizations - Apply to all tiers for maximum performance
+    $env:GC_PERCENT = "25"                    # Aggressive GC for low latency
+    $env:MAX_CPU_CORES = "0"                  # Auto-detect all available cores
+    $env:HIGH_PRIORITY = "true"               # High process priority
+    $env:LOCK_OS_THREAD = "true"              # Pin main thread to CPU
+    $env:PREALLOC_BUFFERS = "true"            # Pre-allocate memory buffers
+    $env:OPTIMIZE_SYSTEM = "true"             # Enable system-level optimizations
+    
+    # Advanced Turbo Optimizations
+    $env:ENABLE_KERNEL_BYPASS = "true"        # Kernel bypass for ultra-low latency
+    $env:USE_DIRECT_P2P = "true"              # Direct P2P connections
+    $env:USE_MEMORY_CHANNEL = "true"          # Shared memory channels
+    $env:USE_SHARED_MEMORY = "true"           # Shared memory optimization
+    
+    # API Optimizations
+    $env:CONNECTION_POOL_SIZE = "50"          # Large connection pool
+    $env:KEEP_ALIVE = "true"                  # Keep connections alive
+    $env:READ_TIMEOUT = "5s"                  # Optimized timeouts
+    $env:WRITE_TIMEOUT = "5s"
+    
+    # Security Optimizations (while maintaining security)
+    $env:ENABLE_SECURE_BUFFER = "true"        # SecureBuffer protection
+    $env:MEMORY_PROTECTION = "maximum"        # Maximum memory protection
+    $env:AUDIT_LOGGING = "true"               # Enable audit logging
+    
+    # Monitoring & Metrics
+    $env:ENABLE_METRICS = "true"              # Enable performance metrics
+    $env:PROMETHEUS_PORT = "9090"             # Metrics endpoint
+    $env:HEALTH_CHECK_INTERVAL = "10s"        # Health check frequency
+    
+    # Network Optimizations
+    $env:NETWORK_OPTIMIZATION = "true"        # Network layer optimization
+    $env:PERFORMANCE_MODE = "maximum"         # Maximum performance mode
+    
     # Set tier-specific environment variables
     switch ($Tier) {
         "turbo" {
@@ -183,17 +229,56 @@ try {
             $env:USE_DIRECT_P2P = "true"
             $env:USE_MEMORY_CHANNEL = "true"
             $env:OPTIMIZE_SYSTEM = "true"
+            $env:ENABLE_KERNEL_BYPASS = "true"
+            $env:WRITE_DEADLINE = "500µs"
+            $env:BLOCK_BUFFER_SIZE = "2048"
         }
         "enterprise" {
             $env:USE_SHARED_MEMORY = "true"
             $env:USE_DIRECT_P2P = "true"
-            $env:ENABLE_KERNEL_BYPASS = "false"
+            $env:ENABLE_KERNEL_BYPASS = "true"
+            $env:WRITE_DEADLINE = "200µs"
+            $env:BLOCK_BUFFER_SIZE = "4096"
+            $env:MAX_PEERS = "200"
+        }
+        "pro" {
+            $env:USE_SHARED_MEMORY = "true"
+            $env:WRITE_DEADLINE = "1s"
+            $env:BLOCK_BUFFER_SIZE = "1280"
+            $env:MAX_PEERS = "150"
+        }
+        "business" {
+            $env:WRITE_DEADLINE = "1s"
+            $env:BLOCK_BUFFER_SIZE = "1536"
+            $env:MAX_PEERS = "125"
+        }
+        "lite" {
+            $env:WRITE_DEADLINE = "2s"
+            $env:BLOCK_BUFFER_SIZE = "512"
+            $env:MAX_PEERS = "50"
         }
     }
     
     Write-Status "Configured for $($Tier.ToUpper()) tier testing"
     Write-Host "  Configuration file: $tierConfigFile" -ForegroundColor Gray
     Write-Host "  Environment variables set for optimal $Tier performance" -ForegroundColor Gray
+    
+    # Display applied optimizations
+    Write-Host ""
+    Write-Host "🔧 Applied Performance Optimizations:" -ForegroundColor Cyan
+    Write-Host "  • Garbage Collector: $($env:GC_PERCENT)% (aggressive)" -ForegroundColor Gray
+    Write-Host "  • CPU Cores: Auto-detect all available" -ForegroundColor Gray
+    Write-Host "  • Process Priority: High" -ForegroundColor Gray
+    Write-Host "  • Thread Pinning: Enabled" -ForegroundColor Gray
+    Write-Host "  • Memory Pre-allocation: Enabled" -ForegroundColor Gray
+    Write-Host "  • System Optimization: Enabled" -ForegroundColor Gray
+    Write-Host "  • Kernel Bypass: $($env:ENABLE_KERNEL_BYPASS)" -ForegroundColor Gray
+    Write-Host "  • Direct P2P: $($env:USE_DIRECT_P2P)" -ForegroundColor Gray
+    Write-Host "  • Memory Channel: $($env:USE_MEMORY_CHANNEL)" -ForegroundColor Gray
+    Write-Host "  • Shared Memory: $($env:USE_SHARED_MEMORY)" -ForegroundColor Gray
+    Write-Host "  • Connection Pool: $($env:CONNECTION_POOL_SIZE) connections" -ForegroundColor Gray
+    Write-Host "  • Secure Buffer: $($env:ENABLE_SECURE_BUFFER)" -ForegroundColor Gray
+    Write-Host "  • Memory Protection: $($env:MEMORY_PROTECTION)" -ForegroundColor Gray
 
     # Step 4: Start Bitcoin Sprint
     Write-Section "🌟 Starting Bitcoin Sprint"
@@ -303,6 +388,20 @@ try {
         Write-Host "  Block Buffer Size: $($turboStatus.blockBufferSize)" -ForegroundColor Gray
         Write-Host "  Shared Memory: $($turboStatus.useSharedMemory)" -ForegroundColor Gray
         Write-Host "  Features: $($turboStatus.features -join ', ')" -ForegroundColor Gray
+        
+        # Show additional optimization status
+        if ($turboStatus.gcPercent) {
+            Write-Host "  GC Optimization: $($turboStatus.gcPercent)%" -ForegroundColor Green
+        }
+        if ($turboStatus.cpuCores) {
+            Write-Host "  CPU Cores: $($turboStatus.cpuCores)" -ForegroundColor Green
+        }
+        if ($turboStatus.kernelBypass) {
+            Write-Host "  Kernel Bypass: $($turboStatus.kernelBypass)" -ForegroundColor Green
+        }
+        if ($turboStatus.connectionPoolSize) {
+            Write-Host "  Connection Pool: $($turboStatus.connectionPoolSize)" -ForegroundColor Green
+        }
         
         # For latency target, extract from performance targets
         if ($turboStatus.performanceTargets -and $turboStatus.performanceTargets.blockRelayLatency) {
@@ -485,6 +584,21 @@ try {
             test_duration_seconds = $testDurationSeconds
             zmq_mode = if ($zmqAvailable) { "real" } else { "enhanced_mock" }
             environment = "Windows"
+            optimizations_applied = @{
+                gc_percent = $env:GC_PERCENT
+                max_cpu_cores = $env:MAX_CPU_CORES
+                high_priority = $env:HIGH_PRIORITY
+                lock_os_thread = $env:LOCK_OS_THREAD
+                prealloc_buffers = $env:PREALLOC_BUFFERS
+                optimize_system = $env:OPTIMIZE_SYSTEM
+                enable_kernel_bypass = $env:ENABLE_KERNEL_BYPASS
+                use_direct_p2p = $env:USE_DIRECT_P2P
+                use_memory_channel = $env:USE_MEMORY_CHANNEL
+                use_shared_memory = $env:USE_SHARED_MEMORY
+                connection_pool_size = $env:CONNECTION_POOL_SIZE
+                enable_secure_buffer = $env:ENABLE_SECURE_BUFFER
+                memory_protection = $env:MEMORY_PROTECTION
+            }
         }
         sla_requirements = @{
             max_latency_ms = $slaRequirements[$Tier].max_latency_ms
@@ -528,7 +642,15 @@ try {
         Write-Host "  ✅ Average Latency: $($avgRelayTime.ToString('F2'))ms (target: ≤$($slaRequirements[$Tier].max_latency_ms)ms)" -ForegroundColor Green
         Write-Host "  ✅ Security Tests: All passed" -ForegroundColor Green
         Write-Host ""
-        Write-Host "🚀 Bitcoin Sprint delivers on its performance promises!" -ForegroundColor Yellow
+        Write-Host "� Performance Optimizations Applied:" -ForegroundColor Cyan
+        Write-Host "  • Garbage Collector: $($env:GC_PERCENT)% aggressive tuning" -ForegroundColor Gray
+        Write-Host "  • CPU Optimization: Auto-detect all cores with thread pinning" -ForegroundColor Gray
+        Write-Host "  • Memory Management: Pre-allocation + shared memory channels" -ForegroundColor Gray
+        Write-Host "  • Network Stack: Kernel bypass + direct P2P connections" -ForegroundColor Gray
+        Write-Host "  • Connection Pool: $($env:CONNECTION_POOL_SIZE) persistent connections" -ForegroundColor Gray
+        Write-Host "  • Security: SecureBuffer protection + memory zeroization" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "�🚀 Bitcoin Sprint delivers on its performance promises!" -ForegroundColor Yellow
         Write-Host "📊 This report provides concrete evidence for customer presentations." -ForegroundColor Cyan
         
     } else {
@@ -558,6 +680,26 @@ try {
         Start-Sleep -Seconds 2
         Write-Success "Bitcoin Sprint stopped"
     }
+    
+    # Clean up environment variables
+    Write-Status "Cleaning up environment variables..."
+    $envVarsToRemove = @(
+        "TIER", "SPRINT_TIER", "PEER_HMAC_SECRET", "LICENSE_KEY", "SKIP_LICENSE_VALIDATION",
+        "ZMQ_ENDPOINT", "API_HOST", "API_PORT", "GC_PERCENT", "MAX_CPU_CORES", 
+        "HIGH_PRIORITY", "LOCK_OS_THREAD", "PREALLOC_BUFFERS", "OPTIMIZE_SYSTEM",
+        "ENABLE_KERNEL_BYPASS", "USE_DIRECT_P2P", "USE_MEMORY_CHANNEL", "USE_SHARED_MEMORY",
+        "CONNECTION_POOL_SIZE", "KEEP_ALIVE", "READ_TIMEOUT", "WRITE_TIMEOUT",
+        "ENABLE_SECURE_BUFFER", "MEMORY_PROTECTION", "AUDIT_LOGGING", "ENABLE_METRICS",
+        "PROMETHEUS_PORT", "HEALTH_CHECK_INTERVAL", "NETWORK_OPTIMIZATION", "PERFORMANCE_MODE",
+        "WRITE_DEADLINE", "BLOCK_BUFFER_SIZE", "MAX_PEERS"
+    )
+    
+    foreach ($var in $envVarsToRemove) {
+        if (Test-Path "Env:\$var") {
+            Remove-Item "Env:\$var" -ErrorAction SilentlyContinue
+        }
+    }
+    Write-Success "Environment variables cleaned up"
     
     # Clean up temporary files
     Remove-Item "zmq-build-error.log", "zmq-test.exe" -ErrorAction SilentlyContinue

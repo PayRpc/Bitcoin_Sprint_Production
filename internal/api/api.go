@@ -40,7 +40,7 @@ func (s *Server) Run() {
 
 	// Core endpoints
 	mux.HandleFunc("/status", s.auth(s.statusHandler))
-	mux.HandleFunc("/version", s.versionHandler)  // No auth for version endpoint
+	mux.HandleFunc("/version", s.versionHandler) // No auth for version endpoint
 	mux.HandleFunc("/latest", s.auth(s.latestHandler))
 	mux.HandleFunc("/metrics", s.auth(s.metricsHandler))
 	mux.HandleFunc("/stream", s.auth(s.streamHandler))
@@ -68,7 +68,7 @@ func (s *Server) Run() {
 	for retry := 0; retry < maxRetries; retry++ {
 		port := basePort + retry
 		addr := s.cfg.APIHost + ":" + strconv.Itoa(port)
-		
+
 		s.srv = &http.Server{Addr: addr, Handler: mux}
 		s.logger.Info("API starting", zap.String("addr", addr), zap.Int("attempt", retry+1))
 
@@ -78,11 +78,11 @@ func (s *Server) Run() {
 			s.logger.Warn("Port busy, trying next", zap.String("addr", addr), zap.Error(bindErr))
 			continue
 		}
-		
+
 		// Port is available, start server
 		finalAddr = addr
 		s.logger.Info("API started successfully", zap.String("addr", finalAddr))
-		
+
 		// Start serving in this goroutine (blocking)
 		err = s.srv.Serve(listener)
 		break
@@ -90,8 +90,8 @@ func (s *Server) Run() {
 
 	// If we exhausted all port retries
 	if finalAddr == "" {
-		s.logger.Fatal("Failed to bind to any port", 
-			zap.Int("basePort", basePort), 
+		s.logger.Fatal("Failed to bind to any port",
+			zap.Int("basePort", basePort),
 			zap.Int("maxRetries", maxRetries))
 	}
 
@@ -195,13 +195,13 @@ func (s *Server) generateKeyHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "key generation failed", http.StatusInternalServerError)
 		return
 	}
-	
+
 	if err := keyBuf.Write(keyBytes); err != nil {
 		http.Error(w, "key buffer write failed", http.StatusInternalServerError)
 		return
 	}
 
-	// Read from secure buffer 
+	// Read from secure buffer
 	finalKeyBytes, err := keyBuf.ReadToSlice()
 	if err != nil {
 		http.Error(w, "key buffer read failed", http.StatusInternalServerError)
@@ -402,19 +402,19 @@ func (s *Server) analyticsSummaryHandler(w http.ResponseWriter, r *http.Request)
 
 // TurboStatusResponse represents the current turbo mode configuration
 type TurboStatusResponse struct {
-	Tier                string                 `json:"tier"`
-	TurboModeEnabled    bool                   `json:"turboModeEnabled"`
-	WriteDeadline       string                 `json:"writeDeadline"`
-	UseSharedMemory     bool                   `json:"useSharedMemory"`
-	BlockBufferSize     int                    `json:"blockBufferSize"`
-	EnableKernelBypass  bool                   `json:"enableKernelBypass"`
-	UseDirectP2P        bool                   `json:"useDirectP2P"`
-	UseMemoryChannel    bool                   `json:"useMemoryChannel"`
-	OptimizeSystem      bool                   `json:"optimizeSystem"`
-	Features            []string               `json:"features"`
-	PerformanceTargets  PerformanceTargets     `json:"performanceTargets"`
-	SystemMetrics       SystemMetrics          `json:"systemMetrics"`
-	Timestamp           time.Time              `json:"timestamp"`
+	Tier               string             `json:"tier"`
+	TurboModeEnabled   bool               `json:"turboModeEnabled"`
+	WriteDeadline      string             `json:"writeDeadline"`
+	UseSharedMemory    bool               `json:"useSharedMemory"`
+	BlockBufferSize    int                `json:"blockBufferSize"`
+	EnableKernelBypass bool               `json:"enableKernelBypass"`
+	UseDirectP2P       bool               `json:"useDirectP2P"`
+	UseMemoryChannel   bool               `json:"useMemoryChannel"`
+	OptimizeSystem     bool               `json:"optimizeSystem"`
+	Features           []string           `json:"features"`
+	PerformanceTargets PerformanceTargets `json:"performanceTargets"`
+	SystemMetrics      SystemMetrics      `json:"systemMetrics"`
+	Timestamp          time.Time          `json:"timestamp"`
 }
 
 // PerformanceTargets shows expected performance for the current tier
@@ -427,11 +427,11 @@ type PerformanceTargets struct {
 
 // SystemMetrics shows current system performance
 type SystemMetrics struct {
-	ConnectedPeers    int     `json:"connectedPeers"`
-	BlocksProcessed   int64   `json:"blocksProcessed"`
-	AvgProcessingTime string  `json:"avgProcessingTime"`
-	MemoryUsage       string  `json:"memoryUsage"`
-	CPUUsage          string  `json:"cpuUsage"`
+	ConnectedPeers    int    `json:"connectedPeers"`
+	BlocksProcessed   int64  `json:"blocksProcessed"`
+	AvgProcessingTime string `json:"avgProcessingTime"`
+	MemoryUsage       string `json:"memoryUsage"`
+	CPUUsage          string `json:"cpuUsage"`
 }
 
 // turboStatusHandler returns current turbo mode configuration and performance metrics
@@ -469,19 +469,19 @@ func (s *Server) turboStatusHandler(w http.ResponseWriter, r *http.Request) {
 	metrics := s.getSystemMetrics()
 
 	response := TurboStatusResponse{
-		Tier:                string(s.cfg.Tier),
-		TurboModeEnabled:    turboEnabled,
-		WriteDeadline:       s.cfg.WriteDeadline.String(),
-		UseSharedMemory:     s.cfg.UseSharedMemory,
-		BlockBufferSize:     s.cfg.BlockBufferSize,
-		EnableKernelBypass:  s.cfg.EnableKernelBypass,
-		UseDirectP2P:        s.cfg.UseDirectP2P,
-		UseMemoryChannel:    s.cfg.UseMemoryChannel,
-		OptimizeSystem:      s.cfg.OptimizeSystem,
-		Features:            features,
-		PerformanceTargets:  targets,
-		SystemMetrics:       metrics,
-		Timestamp:           time.Now(),
+		Tier:               string(s.cfg.Tier),
+		TurboModeEnabled:   turboEnabled,
+		WriteDeadline:      s.cfg.WriteDeadline.String(),
+		UseSharedMemory:    s.cfg.UseSharedMemory,
+		BlockBufferSize:    s.cfg.BlockBufferSize,
+		EnableKernelBypass: s.cfg.EnableKernelBypass,
+		UseDirectP2P:       s.cfg.UseDirectP2P,
+		UseMemoryChannel:   s.cfg.UseMemoryChannel,
+		OptimizeSystem:     s.cfg.OptimizeSystem,
+		Features:           features,
+		PerformanceTargets: targets,
+		SystemMetrics:      metrics,
+		Timestamp:          time.Now(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -533,7 +533,7 @@ func (s *Server) getPerformanceTargets() PerformanceTargets {
 func (s *Server) getSystemMetrics() SystemMetrics {
 	// In production, these would be real metrics from the system
 	// For now, return realistic values based on the current tier
-	
+
 	connectedPeers := 8 // Default peer count
 	if s.cfg.Tier == config.TierTurbo || s.cfg.Tier == config.TierEnterprise {
 		connectedPeers = 16 // More peers for higher tiers

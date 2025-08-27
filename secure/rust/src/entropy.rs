@@ -278,13 +278,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_fast_entropy_length_and_variance() {
+        let e1 = fast_entropy();
+        let e2 = fast_entropy();
+        assert_eq!(e1.len(), 32);
+        assert_ne!(e1, e2, "Fast entropy should not repeat immediately");
+    }
+
+    #[test]
+    fn test_hybrid_entropy_differs_with_headers() {
+        let headers1 = vec![vec![0u8; 80]];
+        let headers2 = vec![vec![1u8; 80]];
+        let e1 = hybrid_entropy(&headers1);
+        let e2 = hybrid_entropy(&headers2);
+        assert_eq!(e1.len(), 32);
+        assert_eq!(e2.len(), 32);
+        assert_ne!(e1, e2, "Hybrid entropy must vary with block headers");
+    }
+
+    #[test]
     fn test_fast_entropy() {
         let entropy1 = fast_entropy();
         let entropy2 = fast_entropy();
-        
+
         // Should produce different outputs
         assert_ne!(entropy1, entropy2);
-        
+
         // Should not be all zeros
         assert_ne!(entropy1, [0u8; 32]);
     }
@@ -295,10 +314,10 @@ mod tests {
             vec![0u8; 80], // Mock Bitcoin header
             vec![1u8; 80],
         ];
-        
+
         let entropy1 = hybrid_entropy(&mock_headers);
         let entropy2 = hybrid_entropy(&mock_headers);
-        
+
         // Should produce different outputs due to jitter
         assert_ne!(entropy1, entropy2);
     }
@@ -307,7 +326,7 @@ mod tests {
     fn test_enterprise_entropy() {
         let mock_headers = vec![vec![0u8; 80]];
         let additional_data = b"test_data";
-        
+
         let entropy = enterprise_entropy(&mock_headers, additional_data);
         assert_ne!(entropy, [0u8; 32]);
     }
@@ -315,19 +334,76 @@ mod tests {
     #[test]
     fn test_entropy_collector() {
         let mut collector = EntropyCollector::new();
-        
+
         // Test jitter collection
         let jitter1 = collector.collect_jitter();
         let jitter2 = collector.collect_jitter();
-        
+
         // Jitter values should be different
         assert_ne!(jitter1, jitter2);
-        
+
         // Test OS entropy
         let mut buffer = [0u8; 16];
         assert!(collector.get_os_entropy(&mut buffer).is_ok());
-        
+
         // Should not be all zeros (very unlikely)
         assert_ne!(buffer, [0u8; 16]);
+    }
+
+    #[test]
+    fn test_entropy_statistical_properties() {
+        let mut ones = 0;
+        let mut bits = 0;
+        let samples = 100;
+
+        // Collect entropy from multiple calls
+        for _ in 0..samples {
+            let entropy = fast_entropy();
+            for byte in entropy.iter() {
+                for bit in 0..8 {
+                    if (byte >> bit) & 1 == 1 {
+                        ones += 1;
+                    }
+                    bits += 1;
+                }
+            }
+        }
+
+        let ratio = ones as f64 / bits as f64;
+
+        // Statistical test: should be close to 0.5 (50% ones, 50% zeros)
+        // Allow some tolerance for randomness
+        assert!(ratio > 0.4 && ratio < 0.6,
+            "Entropy bias detected: ratio={:.3}, expected ~0.5", ratio);
+    }
+
+    #[test]
+    fn test_block_entropy_extraction() {
+        let mut collector = EntropyCollector::new();
+
+        // Test with empty headers (should use last known entropy)
+        let empty_entropy = collector.extract_block_entropy(&[]);
+        assert_ne!(empty_entropy, [0u8; 32]);
+
+        // Test with mock headers
+        let headers = vec![
+            vec![0u8; 80],
+            vec![255u8; 80],
+        ];
+        let block_entropy = collector.extract_block_entropy(&headers);
+        assert_ne!(block_entropy, [0u8; 32]);
+
+        // Different headers should produce different entropy
+        let headers2 = vec![vec![128u8; 80]];
+        let block_entropy2 = collector.extract_block_entropy(&headers2);
+        assert_ne!(block_entropy, block_entropy2);
+    }
+
+    #[test]
+    fn test_entropy_functions_consistency() {
+        // All entropy functions should return exactly 32 bytes
+        assert_eq!(fast_entropy().len(), 32);
+        assert_eq!(hybrid_entropy(&[]).len(), 32);
+        assert_eq!(enterprise_entropy(&[], &[]).len(), 32);
     }
 }

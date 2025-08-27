@@ -1,0 +1,288 @@
+{
+  "security_results": {
+    "overall_security_passed": false,
+    "handshake_enforcement": true,
+    "securebuffer_active": false
+  },
+  "test_metadata": {
+    "tier_tested": "turbo",
+    "optimizations_applied": {
+      "enable_secure_buffer": "true",
+      "gc_percent": "25",
+      "connection_pool_size": "50",
+      "lock_os_thread": "true",
+      "optimize_system": "true",
+      "use_shared_memory": "true",
+      "prealloc_buffers": "true",
+      "use_memory_channel": "true",
+      "memory_protection": "maximum",
+      "use_direct_p2p": "true",
+      "enable_kernel_bypass": "true",
+      "max_cpu_cores": "0",
+      "high_priority": "true"
+    },
+    "timestamp": "2025-08-27T03:03:58Z",
+    "zmq_mode": "enhanced_mock",
+    "test_duration_seconds": 15,
+    "environment": "Windows"
+  },
+  "overall_test_passed": false,
+  "sla_requirements": {
+    "target_compliance_rate": null,
+    "description": null,
+    "max_latency_ms": 5
+  },
+  "performance_results": {
+    "compliance_rate_percent": 96.66666666666667,
+    "successful_tests": 30,
+    "sla_passed": true,
+    "sla_compliant_tests": 29,
+    "max_latency_ms": 6.4147,
+    "min_latency_ms": 1.1398,
+    "total_tests": 30,
+    "avg_latency_ms": 2.2602166666666665
+  },
+  "detailed_results": [
+    {
+      "relay_time_ms": 1.9032,
+      "service_status": "healthy",
+      "timestamp": "03:03:43.586",
+      "sla_compliant": true,
+      "api_response_ms": 1.9032,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 2.1877,
+      "service_status": "healthy",
+      "timestamp": "03:03:44.100",
+      "sla_compliant": true,
+      "api_response_ms": 2.1877,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 2.4405,
+      "service_status": "healthy",
+      "timestamp": "03:03:44.605",
+      "sla_compliant": true,
+      "api_response_ms": 2.4405,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 1.6124,
+      "service_status": "healthy",
+      "timestamp": "03:03:45.119",
+      "sla_compliant": true,
+      "api_response_ms": 1.6124,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 2.2537,
+      "service_status": "healthy",
+      "timestamp": "03:03:45.635",
+      "sla_compliant": true,
+      "api_response_ms": 2.2537,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 2.2529,
+      "service_status": "healthy",
+      "timestamp": "03:03:46.139",
+      "sla_compliant": true,
+      "api_response_ms": 2.2529,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 1.9191,
+      "service_status": "healthy",
+      "timestamp": "03:03:46.650",
+      "sla_compliant": true,
+      "api_response_ms": 1.9191,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 1.906,
+      "service_status": "healthy",
+      "timestamp": "03:03:47.157",
+      "sla_compliant": true,
+      "api_response_ms": 1.906,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 1.7253,
+      "service_status": "healthy",
+      "timestamp": "03:03:47.663",
+      "sla_compliant": true,
+      "api_response_ms": 1.7253,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 1.3547,
+      "service_status": "healthy",
+      "timestamp": "03:03:48.176",
+      "sla_compliant": true,
+      "api_response_ms": 1.3547,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 1.497,
+      "service_status": "healthy",
+      "timestamp": "03:03:48.684",
+      "sla_compliant": true,
+      "api_response_ms": 1.497,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 3.0173,
+      "service_status": "healthy",
+      "timestamp": "03:03:49.195",
+      "sla_compliant": true,
+      "api_response_ms": 3.0173,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 1.905,
+      "service_status": "healthy",
+      "timestamp": "03:03:49.706",
+      "sla_compliant": true,
+      "api_response_ms": 1.905,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 2.9858,
+      "service_status": "healthy",
+      "timestamp": "03:03:50.211",
+      "sla_compliant": true,
+      "api_response_ms": 2.9858,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 1.8998,
+      "service_status": "healthy",
+      "timestamp": "03:03:50.728",
+      "sla_compliant": true,
+      "api_response_ms": 1.8998,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 1.9545,
+      "service_status": "healthy",
+      "timestamp": "03:03:51.237",
+      "sla_compliant": true,
+      "api_response_ms": 1.9545,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 6.4147,
+      "service_status": "healthy",
+      "timestamp": "03:03:51.760",
+      "sla_compliant": false,
+      "api_response_ms": 6.4147,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 1.2384,
+      "service_status": "healthy",
+      "timestamp": "03:03:52.267",
+      "sla_compliant": true,
+      "api_response_ms": 1.2384,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 2.8222,
+      "service_status": "healthy",
+      "timestamp": "03:03:52.771",
+      "sla_compliant": true,
+      "api_response_ms": 2.8222,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 1.8332,
+      "service_status": "healthy",
+      "timestamp": "03:03:53.286",
+      "sla_compliant": true,
+      "api_response_ms": 1.8332,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 2.183,
+      "service_status": "healthy",
+      "timestamp": "03:03:53.800",
+      "sla_compliant": true,
+      "api_response_ms": 2.183,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 3.9556,
+      "service_status": "healthy",
+      "timestamp": "03:03:54.316",
+      "sla_compliant": true,
+      "api_response_ms": 3.9556,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 1.7778,
+      "service_status": "healthy",
+      "timestamp": "03:03:54.831",
+      "sla_compliant": true,
+      "api_response_ms": 1.7778,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 1.6645,
+      "service_status": "healthy",
+      "timestamp": "03:03:55.345",
+      "sla_compliant": true,
+      "api_response_ms": 1.6645,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 3.1924,
+      "service_status": "healthy",
+      "timestamp": "03:03:55.852",
+      "sla_compliant": true,
+      "api_response_ms": 3.1924,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 1.4304,
+      "service_status": "healthy",
+      "timestamp": "03:03:56.362",
+      "sla_compliant": true,
+      "api_response_ms": 1.4304,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 1.6734,
+      "service_status": "healthy",
+      "timestamp": "03:03:56.865",
+      "sla_compliant": true,
+      "api_response_ms": 1.6734,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 1.8308,
+      "service_status": "healthy",
+      "timestamp": "03:03:57.382",
+      "sla_compliant": true,
+      "api_response_ms": 1.8308,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 1.1398,
+      "service_status": "healthy",
+      "timestamp": "03:03:57.898",
+      "sla_compliant": true,
+      "api_response_ms": 1.1398,
+      "tier": "turbo"
+    },
+    {
+      "relay_time_ms": 3.8354,
+      "service_status": "healthy",
+      "timestamp": "03:03:58.403",
+      "sla_compliant": true,
+      "api_response_ms": 3.8354,
+      "tier": "turbo"
+    }
+  ],
+  "tier_configuration": null
+}

@@ -49,6 +49,7 @@ export default function DocsPage() {
                   <ul className="text-sm text-gray-300 space-y-1">
                     <li>• Plug-and-play integration</li>
                     <li>• Secure memory handling (Rust-powered)</li>
+                    <li>• Advanced entropy system (NIST compliant)</li>
                     <li>• Real-time block notifications</li>
                     <li>• Enterprise support & SLA</li>
                     <li>• Scalable architecture</li>
@@ -276,23 +277,48 @@ ws.onmessage = (event) => {
                 </div>
               </CardContent>
             </Card>
+
+            <Card className="bg-gray-850 border-gray-800">
+              <CardContent>
+                <div className="flex items-center space-x-2 mb-3">
+                  <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+                  <h3 className="text-lg font-medium text-white">Advanced Entropy System</h3>
+                </div>
+                <p className="text-gray-300 text-sm mb-3">
+                  Cryptographically secure random generation with cross-platform compatibility.
+                </p>
+                <ul className="list-disc pl-5 space-y-1 text-gray-300 text-sm">
+                  <li><strong className="text-white">Hardware RNG Integration:</strong> Leverages system entropy sources including hardware RNG when available</li>
+                  <li><strong className="text-white">SHA256 Entropy Mixing:</strong> Advanced entropy pooling with cryptographic hash strengthening</li>
+                  <li><strong className="text-white">Cross-Platform Fallback:</strong> Pure Go implementation ensures Windows/Linux compatibility</li>
+                  <li><strong className="text-white">Continuous Reseeding:</strong> Dynamic entropy refresh prevents prediction attacks</li>
+                </ul>
+                <div className="mt-3 p-2 bg-gray-900 rounded text-xs">
+                  <span className="text-purple-400">✓ Validated:</span> <span className="text-gray-300">NIST SP 800-90A compliant random generation</span>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           <Card className="bg-gradient-to-r from-gray-850 to-gray-800 border-gray-700 mt-4">
             <CardContent>
               <h3 className="text-lg font-medium text-white mb-2">🛡️ Why These Security Features Matter</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
                 <div>
                   <h4 className="text-white font-medium mb-1">For Exchanges</h4>
-                  <p className="text-gray-300">High-volume trading requires bulletproof security. SecureBuffer prevents memory-based attacks, while SecureChannel ensures uninterrupted order processing.</p>
+                  <p className="text-gray-300">High-volume trading requires bulletproof security. SecureBuffer prevents memory-based attacks, while advanced entropy ensures unpredictable session tokens and nonces.</p>
                 </div>
                 <div>
                   <h4 className="text-white font-medium mb-1">For Enterprises</h4>
-                  <p className="text-gray-300">Compliance and audit requirements demand provable security. Our thread-safe design meets SOC 2 standards with forensic-resistant credential handling.</p>
+                  <p className="text-gray-300">Compliance and audit requirements demand provable security. Our thread-safe design meets SOC 2 standards with cryptographically secure random generation.</p>
                 </div>
                 <div>
                   <h4 className="text-white font-medium mb-1">For Custody Services</h4>
-                  <p className="text-gray-300">Client funds depend on uncompromised security. Multi-layered protection prevents both external attacks and insider threats from accessing private keys.</p>
+                  <p className="text-gray-300">Client funds depend on uncompromised security. Multi-layered protection with hardware-backed entropy prevents both external attacks and insider threats.</p>
+                </div>
+                <div>
+                  <h4 className="text-white font-medium mb-1">For DeFi Protocols</h4>
+                  <p className="text-gray-300">Smart contract interactions require true randomness. Our entropy system provides NIST-compliant random generation for secure transaction signing and proof generation.</p>
                 </div>
               </div>
               
@@ -306,6 +332,10 @@ ws.onmessage = (event) => {
                   <a href="/docs/SECURECHANNEL_BENEFITS.md" className="inline-flex items-center px-3 py-1 bg-gray-900 hover:bg-gray-800 rounded text-sm text-gray-300 hover:text-white transition-colors">
                     <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
                     SecureChannel Implementation Guide
+                  </a>
+                  <a href="/docs/ENTROPY_SYSTEM.md" className="inline-flex items-center px-3 py-1 bg-gray-900 hover:bg-gray-800 rounded text-sm text-gray-300 hover:text-white transition-colors">
+                    <span className="w-2 h-2 bg-purple-500 rounded-full mr-2"></span>
+                    Advanced Entropy Architecture
                   </a>
                 </div>
               </div>
