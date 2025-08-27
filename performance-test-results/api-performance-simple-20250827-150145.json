@@ -1,0 +1,16 @@
+{
+  "StartTime": "2025-08-27T15:03:16.4427813-04:00",
+  "EndTime": "2025-08-27T15:06:35.9251599-04:00",
+  "Tier": "turbo",
+  "Summary": {
+    "AverageResponseTime": 2042.8802816666657,
+    "MinResponseTime": 2013.9667,
+    "TestDuration": 199.4823786,
+    "TotalSuccessful": 120.0,
+    "OverallSuccessRate": 44.44444444444444,
+    "TotalRequests": 270.0,
+    "MaxResponseTime": 2158.513,
+    "RequestsPerSecond": 0,
+    "TotalEndpoints": 9
+  }
+}

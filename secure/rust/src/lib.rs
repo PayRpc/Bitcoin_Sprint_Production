@@ -15,6 +15,7 @@ use bloom_filter::{BlockchainHash, TransactionId, UniversalBloomFilter, NetworkC
 pub mod storage_verifier;
 
 // Web server module for REST API
+#[cfg(feature = "web-server")]
 pub mod web_server;
 
 #[cfg(unix)]

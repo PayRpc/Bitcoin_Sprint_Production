@@ -1,0 +1,31 @@
+{
+  "license": {
+    "tier": "free",
+    "key": "FREE-DEMO-7084",
+    "issued_to": "Bitcoin Sprint Free User",
+    "expires": "2025-09-25T23:59:59Z",
+    "version": "2.1.0",
+    "features": {
+      "max_blocks": 1000,
+      "max_peers": 10,
+      "api_rate_limit": 20,
+      "turbo_mode": false,
+      "basic_metrics": true,
+      "standard_security": true
+    },
+    "restrictions": {
+      "hardware_security": false,
+      "enterprise_features": false,
+      "audit_logging": false,
+      "compliance_reporting": false,
+      "premium_support": false,
+      "batch_operations": false,
+      "zero_copy": false
+    },
+    "upgrade_info": {
+      "available_tiers": ["pro", "enterprise"],
+      "contact": "sales@bitcoinsprint.com",
+      "trial_available": true
+    }
+  }
+}

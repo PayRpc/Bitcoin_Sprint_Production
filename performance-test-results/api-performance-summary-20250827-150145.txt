@@ -1,0 +1,73 @@
+BITCOIN SPRINT API PERFORMANCE TEST REPORT
+==========================================
+
+Test Configuration:
+- Tier: turbo
+- Duration: 199.4823786 seconds
+- Concurrent Users: 3
+- Endpoints Tested: 9
+
+Overall Results:
+- Total Requests: 270
+- Successful Requests: 120
+- Success Rate: 44.44%
+- Requests/Second: 0
+- Average Response Time: 2042.88ms
+- Min Response Time: 2013.97ms
+- Max Response Time: 2158.51ms
+
+Endpoint Details:
+Health Check (/health):
+  - Requests: 30
+  - Success Rate: 100%
+  - Avg Response Time: 2046.38ms
+  - 95th Percentile: 2101.54ms
+  - Requests/Second: 1.5
+System Status (/status):
+  - Requests: 30
+  - Success Rate: 100%
+  - Avg Response Time: 2037.27ms
+  - 95th Percentile: 2078.45ms
+  - Requests/Second: 1.5
+Version Info (/version):
+  - Requests: 30
+  - Success Rate: 100%
+  - Avg Response Time: 2044.97ms
+  - 95th Percentile: 2090.83ms
+  - Requests/Second: 1.5
+Metrics (/metrics):
+  - Requests: 30
+  - Success Rate: 0%
+  - Avg Response Time: 0ms
+  - 95th Percentile: 0ms
+  - Requests/Second: 0
+Turbo Status (/turbo-status):
+  - Requests: 30
+  - Success Rate: 100%
+  - Avg Response Time: 2042.9ms
+  - 95th Percentile: 2087.91ms
+  - Requests/Second: 1.5
+License Info (/v1/license/info):
+  - Requests: 30
+  - Success Rate: 0%
+  - Avg Response Time: 0ms
+  - 95th Percentile: 0ms
+  - Requests/Second: 0
+Analytics Summary (/v1/analytics/summary):
+  - Requests: 30
+  - Success Rate: 0%
+  - Avg Response Time: 0ms
+  - 95th Percentile: 0ms
+  - Requests/Second: 0
+Cache Status (/cache-status):
+  - Requests: 30
+  - Success Rate: 0%
+  - Avg Response Time: 0ms
+  - 95th Percentile: 0ms
+  - Requests/Second: 0
+Predictive Analytics (/predictive):
+  - Requests: 30
+  - Success Rate: 0%
+  - Avg Response Time: 0ms
+  - 95th Percentile: 0ms
+  - Requests/Second: 0

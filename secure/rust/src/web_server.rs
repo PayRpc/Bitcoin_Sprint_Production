@@ -4,7 +4,8 @@
 
 #[cfg(feature = "web-server")]
 
-use actix_web::{web, App, HttpServer, Responder, HttpResponse, middleware, Result};
+use actix_web::{web, App, HttpServer, Responder, HttpResponse, Result};
+use actix_web::middleware;
 use serde::{Serialize, Deserialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -142,7 +143,7 @@ fn validate_request(req: &VerifyRequest) -> Result<(), String> {
 async fn verify(
     req: web::Json<VerifyRequest>,
     state: web::Data<AppState>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, actix_web::Error> {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
     // --- Input Validation ---

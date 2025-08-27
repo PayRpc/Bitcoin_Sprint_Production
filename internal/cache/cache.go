@@ -40,7 +40,7 @@ type EntropyEvictionConfig struct {
 	EvictionThreshold float64      `json:"eviction_threshold"` // 0.0-1.0
 }
 
-// New creates a new cache instance
+// New creates a new cache instance with turbo-optimized settings
 func New(maxBlocks int, logger *zap.Logger) *Cache {
 	// Initialize entropy seed for cache eviction
 	seed, err := entropy.FastEntropy()
@@ -50,6 +50,11 @@ func New(maxBlocks int, logger *zap.Logger) *Cache {
 		if _, err := rand.Read(seed); err != nil {
 			logger.Error("Failed to generate random seed", zap.Error(err))
 		}
+	}
+
+	// Increase default cache size for turbo mode
+	if maxBlocks < 1000 {
+		maxBlocks = 1000
 	}
 
 	return &Cache{
