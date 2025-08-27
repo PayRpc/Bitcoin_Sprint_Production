@@ -1,3 +1,6 @@
+//go:build !nozmq
+// +build !nozmq
+
 package zmq
 
 import (
