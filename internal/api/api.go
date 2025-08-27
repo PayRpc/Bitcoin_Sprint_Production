@@ -74,6 +74,11 @@ func (s *Server) Run() {
 	mux.HandleFunc("/v1/license/info", s.auth(s.licenseInfoHandler))
 	mux.HandleFunc("/v1/analytics/summary", s.auth(s.analyticsSummaryHandler))
 
+	// Storage verification endpoints (v1)
+	mux.HandleFunc("/v1/storage/verify", s.auth(s.storageVerifyHandler))
+	mux.HandleFunc("/v1/storage/health", s.storageHealthHandler)
+	mux.HandleFunc("/v1/storage/metrics", s.auth(s.storageMetricsHandler))
+
 	// Try to start server with port auto-retry
 	basePort := s.cfg.APIPort
 	maxRetries := 3

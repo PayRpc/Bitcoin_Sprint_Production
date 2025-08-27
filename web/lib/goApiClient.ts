@@ -107,6 +107,27 @@ export class GoApiClient {
     return this.request('/v1/analytics/summary');
   }
 
+  // Storage verification endpoints (proxied to Rust server)
+  async verifyStorage(data: {
+    file_id: string;
+    provider: string;
+    protocol: string;
+    file_size?: number;
+  }) {
+    return this.request('/storage/verify', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async storageHealth() {
+    return this.request('/storage/health');
+  }
+
+  async storageMetrics() {
+    return this.request('/storage/metrics');
+  }
+
   // Stream endpoint (WebSocket)
   createStream() {
     const wsUrl = this.baseUrl.replace('http', 'ws') + '/stream';

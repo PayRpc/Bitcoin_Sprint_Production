@@ -4,7 +4,18 @@
 use std::alloc::{alloc, dealloc, Layout};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::io;
+use std::ffi::{CStr, c_char};
+use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
+// Import the bloom filter module and its traits
+pub mod bloom_filter;
+use bloom_filter::{BlockchainHash, TransactionId, UniversalBloomFilter, NetworkConfig, BloomConfig, BlockData};
+
+// Storage verification module (optional IPFS support)
+pub mod storage_verifier;
+
+// Web server module for REST API
+pub mod web_server;
 
 #[cfg(unix)]
 extern crate libc;
@@ -17,6 +28,8 @@ pub mod entropy;
 
 // SecureBuffer entropy integration
 pub mod securebuffer_entropy;
+
+// High-performance Universal Bloom Filter
 
 mod memory {
     use std::io;
@@ -470,5 +483,333 @@ mod tests {
         let mut buffer = SecureBuffer::new(10).unwrap();
         let large_data = vec![0u8; 20];
         assert!(buffer.write(&large_data).is_err());
+    }
+}
+
+// === Universal Bloom Filter FFI Bindings ===
+// High-performance C API for Universal Bloom Filter operations
+
+use std::ffi::{c_void, c_int, c_double};
+
+/// Opaque type for Bitcoin Bloom Filter
+pub type UniversalBloomFilterHandle = *mut c_void;
+
+/// Error codes for Bitcoin Bloom Filter operations
+#[repr(C)]
+pub enum UniversalBloomFilterError {
+    Success = 0,
+    InvalidConfiguration = -1,
+    InvalidInput = -2,
+    HashComputationError = -3,
+    SystemTimeError = -4,
+    MemoryError = -5,
+    ConcurrencyError = -6,
+    NullPointer = -7,
+    InvalidSize = -8,
+}
+
+/// Create new Universal Bloom Filter with custom configuration
+#[no_mangle]
+pub extern "C" fn universal_bloom_filter_new(
+    size_bits: usize,
+    num_hashes: u8,
+    tweak: u32,
+    flags: u8,
+    max_age_seconds: u64,
+    batch_size: usize,
+    network_name: *const c_char,
+) -> UniversalBloomFilterHandle {
+    if network_name.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    let network_str = unsafe { CStr::from_ptr(network_name) }.to_str().unwrap_or("bitcoin");
+    let network_config = match network_str {
+        "bitcoin" => NetworkConfig::bitcoin(),
+        "ethereum" => NetworkConfig::ethereum(),
+        "solana" => NetworkConfig::solana(),
+        _ => NetworkConfig::custom(network_str, 32, 600, 4_000_000, "pow"),
+    };
+
+    let config = BloomConfig {
+        network: network_config,
+        size: size_bits,
+        num_hashes,
+        tweak,
+        flags,
+        max_age_seconds,
+        batch_size,
+        enable_compression: false,
+        enable_metrics: true,
+    };
+
+    match UniversalBloomFilter::new(Some(config)) {
+        Ok(filter) => Box::into_raw(Box::new(filter)) as UniversalBloomFilterHandle,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Create Bitcoin Bloom Filter with default configuration
+#[no_mangle]
+pub extern "C" fn universal_bloom_filter_new_default() -> UniversalBloomFilterHandle {
+    match UniversalBloomFilter::new(None) {
+        Ok(filter) => Box::into_raw(Box::new(filter)) as UniversalBloomFilterHandle,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Destroy Universal Bloom Filter and securely zeroize memory
+#[no_mangle]
+pub extern "C" fn universal_bloom_filter_destroy(filter: UniversalBloomFilterHandle) {
+    if !filter.is_null() {
+        unsafe {
+            let _ = Box::from_raw(filter as *mut UniversalBloomFilter);
+        }
+    }
+}
+
+/// Insert single UTXO into bloom filter
+#[no_mangle]
+pub extern "C" fn universal_bloom_filter_insert_utxo(
+    filter: UniversalBloomFilterHandle,
+    txid_bytes: *const u8,
+    vout: u32,
+) -> c_int {
+    if filter.is_null() || txid_bytes.is_null() {
+        return UniversalBloomFilterError::NullPointer as c_int;
+    }
+
+    let filter_ref = unsafe { &*(filter as *const UniversalBloomFilter) };
+    let txid_slice = unsafe { std::slice::from_raw_parts(txid_bytes, 32) };
+
+    let txid = TransactionId::from_bytes(txid_slice).unwrap_or_else(|| TransactionId::new("bitcoin", txid_slice));
+    match filter_ref.insert_utxo(&txid, vout) {
+        Ok(_) => UniversalBloomFilterError::Success as c_int,
+        Err(_) => UniversalBloomFilterError::InvalidInput as c_int,
+    }
+}
+
+/// Insert batch of UTXOs into Universal Bloom Filter (maximum performance)
+#[no_mangle]
+pub extern "C" fn universal_bloom_filter_insert_batch(
+    filter: UniversalBloomFilterHandle,
+    txid_bytes: *const u8,
+    vouts: *const u32,
+    count: usize,
+) -> c_int {
+    if filter.is_null() || txid_bytes.is_null() || vouts.is_null() || count == 0 {
+        return UniversalBloomFilterError::NullPointer as c_int;
+    }
+
+    let filter_ref = unsafe { &*(filter as *const UniversalBloomFilter) };
+    let txids_slice = unsafe { std::slice::from_raw_parts(txid_bytes, count * 32) };
+    let vouts_slice = unsafe { std::slice::from_raw_parts(vouts, count) };
+
+    let mut batch = Vec::with_capacity(count);
+    for i in 0..count {
+        let txid_start = i * 32;
+        let txid_end = txid_start + 32;
+        if txid_end > txids_slice.len() {
+            return UniversalBloomFilterError::InvalidSize as c_int;
+        }
+
+        let txid = TransactionId::from_bytes(&txids_slice[txid_start..txid_end]).unwrap_or_else(|| TransactionId::new("bitcoin", &txids_slice[txid_start..txid_end]));
+        batch.push((txid, vouts_slice[i]));
+    }
+
+    match filter_ref.insert_batch(&batch) {
+        Ok(_) => UniversalBloomFilterError::Success as c_int,
+        Err(_) => UniversalBloomFilterError::InvalidInput as c_int,
+    }
+}
+
+/// Check if single UTXO exists in Universal Bloom Filter
+#[no_mangle]
+pub extern "C" fn universal_bloom_filter_contains_utxo(
+    filter: UniversalBloomFilterHandle,
+    txid_bytes: *const u8,
+    vout: u32,
+) -> c_int {
+    if filter.is_null() || txid_bytes.is_null() {
+        return UniversalBloomFilterError::NullPointer as c_int;
+    }
+
+    let filter_ref = unsafe { &*(filter as *const UniversalBloomFilter) };
+    let txid_slice = unsafe { std::slice::from_raw_parts(txid_bytes, 32) };
+
+    let txid = TransactionId::from_bytes(txid_slice).unwrap_or_else(|| TransactionId::new("bitcoin", txid_slice));
+    match filter_ref.contains_utxo(&txid, vout) {
+        Ok(true) => 1, // Found
+        Ok(false) => 0, // Not found
+        Err(_) => UniversalBloomFilterError::InvalidInput as c_int,
+    }
+}
+
+/// Check batch of UTXOs in Universal Bloom Filter
+#[no_mangle]
+pub extern "C" fn universal_bloom_filter_contains_batch(
+    filter: UniversalBloomFilterHandle,
+    txid_bytes: *const u8,
+    vouts: *const u32,
+    count: usize,
+    results: *mut bool,
+) -> c_int {
+    if filter.is_null() || txid_bytes.is_null() || vouts.is_null() || results.is_null() || count == 0 {
+        return UniversalBloomFilterError::NullPointer as c_int;
+    }
+
+    let filter_ref = unsafe { &*(filter as *const UniversalBloomFilter) };
+    let txids_slice = unsafe { std::slice::from_raw_parts(txid_bytes, count * 32) };
+    let vouts_slice = unsafe { std::slice::from_raw_parts(vouts, count) };
+    let results_slice = unsafe { std::slice::from_raw_parts_mut(results, count) };
+
+    let mut batch = Vec::with_capacity(count);
+    for i in 0..count {
+        let txid_start = i * 32;
+        let txid_end = txid_start + 32;
+        if txid_end > txids_slice.len() {
+            return UniversalBloomFilterError::InvalidSize as c_int;
+        }
+
+        let txid = TransactionId::from_bytes(&txids_slice[txid_start..txid_end]).unwrap_or_else(|| TransactionId::new("bitcoin", &txids_slice[txid_start..txid_end]));
+        batch.push((txid, vouts_slice[i]));
+    }
+
+    match filter_ref.contains_batch(&batch) {
+        Ok(batch_results) => {
+            for (i, &result) in batch_results.iter().enumerate() {
+                results_slice[i] = result;
+            }
+            UniversalBloomFilterError::Success as c_int
+        },
+        Err(_) => UniversalBloomFilterError::InvalidInput as c_int,
+    }
+}
+
+/// Load entire block into Universal Bloom Filter
+#[no_mangle]
+pub extern "C" fn universal_bloom_filter_load_block(
+    filter: UniversalBloomFilterHandle,
+    block_data: *const u8,
+    block_size: usize,
+) -> c_int {
+    if filter.is_null() || block_data.is_null() || block_size == 0 {
+        return UniversalBloomFilterError::NullPointer as c_int;
+    }
+
+    let filter_ref = unsafe { &*(filter as *const UniversalBloomFilter) };
+    let block_slice = unsafe { std::slice::from_raw_parts(block_data, block_size) };
+
+    // For now, create a simple BlockData from raw bytes
+    // In a full implementation, this would parse the block format
+    let mut transactions = Vec::new();
+
+    // Simple parsing: assume each transaction is 32 bytes (txid) + 4 bytes (vout count) + (vout count * 8 bytes for outputs)
+    let mut offset = 0;
+    while offset + 36 <= block_size {
+        let txid_bytes = &block_slice[offset..offset + 32];
+        let txid = TransactionId::from_bytes(txid_bytes).unwrap_or_else(|| TransactionId::new("bitcoin", txid_bytes));
+        offset += 32;
+
+        let vout_count = u32::from_le_bytes(block_slice[offset..offset + 4].try_into().unwrap_or([0; 4]));
+        offset += 4;
+
+        let mut outputs = Vec::new();
+        for _ in 0..vout_count {
+            if offset + 8 <= block_size {
+                outputs.push(block_slice[offset..offset + 8].to_vec());
+                offset += 8;
+            }
+        }
+
+        transactions.push(TransactionId {
+            network: "bitcoin".to_string(),
+            hash: txid.as_bytes().to_vec(),
+        });
+    }
+
+    let block_data_struct = BlockData {
+        network: "bitcoin".to_string(),
+        height: 0, // Unknown height
+        hash: block_slice[0..32].to_vec(), // Use first 32 bytes as block hash
+        transactions,
+        timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs(),
+    };
+
+    match filter_ref.load_block(&block_data_struct) {
+        Ok(_) => UniversalBloomFilterError::Success as c_int,
+        Err(_) => UniversalBloomFilterError::InvalidInput as c_int,
+    }
+}
+
+/// Get Universal Bloom Filter statistics
+#[no_mangle]
+pub extern "C" fn universal_bloom_filter_get_stats(
+    filter: UniversalBloomFilterHandle,
+    item_count: *mut u64,
+    false_positive_count: *mut u64,
+    theoretical_fp_rate: *mut c_double,
+    memory_usage_bytes: *mut usize,
+    timestamp_entries: *mut usize,
+    average_age_seconds: *mut c_double,
+) -> c_int {
+    if filter.is_null() || item_count.is_null() || false_positive_count.is_null() ||
+       theoretical_fp_rate.is_null() || memory_usage_bytes.is_null() ||
+       timestamp_entries.is_null() || average_age_seconds.is_null() {
+        return UniversalBloomFilterError::NullPointer as c_int;
+    }
+
+    let filter_ref = unsafe { &*(filter as *const UniversalBloomFilter) };
+    let stats = filter_ref.stats();
+
+    unsafe {
+        *item_count = stats.item_count;
+        *false_positive_count = stats.false_positive_count;
+        *theoretical_fp_rate = stats.theoretical_fp_rate;
+        *memory_usage_bytes = stats.memory_usage_bytes;
+        *timestamp_entries = stats.timestamp_entries;
+        *average_age_seconds = stats.average_age_seconds;
+    }
+
+    UniversalBloomFilterError::Success as c_int
+}
+
+/// Get theoretical false positive rate
+#[no_mangle]
+pub extern "C" fn universal_bloom_filter_false_positive_rate(filter: UniversalBloomFilterHandle) -> c_double {
+    if filter.is_null() {
+        return -1.0;
+    }
+
+    let filter_ref = unsafe { &*(filter as *const UniversalBloomFilter) };
+    filter_ref.false_positive_rate()
+}
+
+/// Cleanup old entries to maintain performance
+#[no_mangle]
+pub extern "C" fn universal_bloom_filter_cleanup(filter: UniversalBloomFilterHandle) -> c_int {
+    if filter.is_null() {
+        return UniversalBloomFilterError::NullPointer as c_int;
+    }
+
+    let filter_ref = unsafe { &*(filter as *const UniversalBloomFilter) };
+    match filter_ref.cleanup() {
+        Ok(_) => UniversalBloomFilterError::Success as c_int,
+        Err(_) => UniversalBloomFilterError::MemoryError as c_int,
+    }
+}
+
+/// Auto-cleanup if needed (call periodically)
+#[no_mangle]
+pub extern "C" fn universal_bloom_filter_auto_cleanup(filter: UniversalBloomFilterHandle) -> c_int {
+    if filter.is_null() {
+        return UniversalBloomFilterError::NullPointer as c_int;
+    }
+
+    let filter_ref = unsafe { &*(filter as *const UniversalBloomFilter) };
+    match filter_ref.auto_cleanup() {
+        Ok(true) => 1, // Cleanup performed
+        Ok(false) => 0, // No cleanup needed
+        Err(_) => UniversalBloomFilterError::MemoryError as c_int,
     }
 }

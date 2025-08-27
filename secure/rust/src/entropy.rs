@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Bitcoin Sprint - Hybrid Entropy Module with Blockchain Integration
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::collections::VecDeque;
 
@@ -17,9 +17,6 @@ use winapi::um::wincrypt::{CryptGenRandom, CryptAcquireContextW, CryptReleaseCon
 
 // Add dependencies for system fingerprint and CPU temperature
 use sysinfo::{System, CpuRefreshKind, RefreshKind};
-use sha2::{Sha256, Digest};
-use rand::rngs::OsRng;
-use rand::RngCore;
 
 // Static jitter accumulator for CPU timing entropy
 static JITTER_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -528,8 +525,6 @@ mod tests {
 }
 
 // FFI bindings for Go integration
-use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
 
 #[no_mangle]
 pub extern "C" fn fast_entropy_ffi(output: *mut u8, len: usize) -> i32 {

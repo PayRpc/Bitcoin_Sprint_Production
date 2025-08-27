@@ -239,6 +239,74 @@ extern "C"
 		size_t headers_len,
 		size_t header_count);
 
+	// === Bitcoin Bloom Filter API ===
+	// Create new Bitcoin Bloom Filter with optimized configuration
+	SECUREBUFFER_API void *bitcoin_bloom_filter_new(
+		size_t size_bits,
+		uint8_t num_hashes,
+		uint32_t tweak,
+		uint8_t flags,
+		uint64_t max_age_seconds,
+		size_t batch_size);
+
+	// Create Bitcoin Bloom Filter with default configuration
+	SECUREBUFFER_API void *bitcoin_bloom_filter_new_default(void);
+
+	// Destroy Bitcoin Bloom Filter and securely zeroize memory
+	SECUREBUFFER_API void bitcoin_bloom_filter_destroy(void *filter);
+
+	// Insert single UTXO into bloom filter
+	SECUREBUFFER_API int bitcoin_bloom_filter_insert_utxo(
+		void *filter,
+		const uint8_t *txid_bytes,
+		uint32_t vout);
+
+	// Insert batch of UTXOs into bloom filter (maximum performance)
+	SECUREBUFFER_API int bitcoin_bloom_filter_insert_batch(
+		void *filter,
+		const uint8_t *txid_bytes,
+		const uint32_t *vouts,
+		size_t count);
+
+	// Check if single UTXO exists in bloom filter
+	SECUREBUFFER_API int bitcoin_bloom_filter_contains_utxo(
+		void *filter,
+		const uint8_t *txid_bytes,
+		uint32_t vout);
+
+	// Check batch of UTXOs in bloom filter
+	SECUREBUFFER_API int bitcoin_bloom_filter_contains_batch(
+		void *filter,
+		const uint8_t *txid_bytes,
+		const uint32_t *vouts,
+		size_t count,
+		bool *results);
+
+	// Load entire Bitcoin block into bloom filter
+	SECUREBUFFER_API int bitcoin_bloom_filter_load_block(
+		void *filter,
+		const uint8_t *block_data,
+		size_t block_size);
+
+	// Get bloom filter statistics
+	SECUREBUFFER_API int bitcoin_bloom_filter_get_stats(
+		void *filter,
+		uint64_t *item_count,
+		uint64_t *false_positive_count,
+		double *theoretical_fp_rate,
+		size_t *memory_usage_bytes,
+		size_t *timestamp_entries,
+		double *average_age_seconds);
+
+	// Get theoretical false positive rate
+	SECUREBUFFER_API double bitcoin_bloom_filter_false_positive_rate(void *filter);
+
+	// Cleanup old entries to maintain performance
+	SECUREBUFFER_API int bitcoin_bloom_filter_cleanup(void *filter);
+
+	// Auto-cleanup if needed (call periodically)
+	SECUREBUFFER_API int bitcoin_bloom_filter_auto_cleanup(void *filter);
+
 	// === Error Handling ===
 	SECUREBUFFER_API const char *securebuffer_error_string(SecureBufferError error);
 	SECUREBUFFER_API SecureBufferError securebuffer_get_last_error(void);
