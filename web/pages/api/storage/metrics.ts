@@ -1,5 +1,5 @@
-import { storageApiClient } from "../../../lib/storageApiClient";
 import type { NextApiRequest, NextApiResponse } from "next";
+import { storageApiClient } from "../../../lib/storageApiClient";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // CORS headers
