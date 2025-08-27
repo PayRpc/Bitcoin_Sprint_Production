@@ -1,4 +1,4 @@
-import { performSystemHealthCheck } from "@/lib/maintenance";
+import { goApiClient } from "../../lib/goApiClient";
 import type { NextApiRequest, NextApiResponse } from "next";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -12,24 +12,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const health = await performSystemHealthCheck();
+    const response = await goApiClient.health();
     
-    // Set appropriate status code based on health
-    const statusCode = health.status === "healthy" ? 200 : 
-                      health.status === "maintenance" ? 503 : 207; // 207 Multi-Status for degraded
+    if (response.error) {
+      return res.status(response.status).json({
+        ok: false,
+        service: 'bitcoin-sprint',
+        error: response.error,
+        status: 'unhealthy'
+      });
+    }
 
-    return res.status(statusCode).json({
-      ok: health.status === "healthy",
-      service: 'web',
-      ...health
+    return res.status(200).json({
+      ok: true,
+      service: 'bitcoin-sprint',
+      ...(response.data || {})
     });
-  } catch (e: any) {
+  } catch (error: any) {
     return res.status(500).json({
       ok: false,
-      service: 'web',
+      service: 'bitcoin-sprint',
       status: 'error',
-      timestamp: new Date().toISOString(),
-      error: e.message || "Failed to check system health",
+      error: error.message || 'Health check failed'
     });
   }
 }
