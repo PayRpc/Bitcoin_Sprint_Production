@@ -290,9 +290,31 @@ The Rust SecureBuffer produces platform-specific libraries:
 ### Testing
 
 Test the SecureBuffer integration:
+
 ```powershell
 go run test_secure.go
 ```
+
+### Integration Testing
+
+Bitcoin Sprint includes a comprehensive integration test suite that validates proper connectivity with Bitcoin Core. These tests:
+
+- Connect to a running Bitcoin Core node (regtest mode)
+- Generate test blocks using the Bitcoin Core RPC
+- Verify that Bitcoin Sprint detects blocks via ZMQ
+- Validate API endpoint responses
+
+To run the integration tests locally:
+
+```powershell
+# Automatically starts Bitcoin Core in Docker and runs the tests
+.\run-integration-tests.ps1
+
+# If you have Bitcoin Core already running locally
+.\run-integration-tests.ps1 -UseBitcoinCoreDocker:$false
+```
+
+The integration tests are also automatically run in CI to ensure Bitcoin Sprint maintains compatibility with Bitcoin Core.
 
 Run comprehensive tests:
 ```powershell

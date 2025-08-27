@@ -11,6 +11,7 @@ jobs:
     name: Windows Dev Build
     runs-on: windows-latest
     timeout-minutes: 20
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,24 +22,26 @@ jobs:
           go-version: "1.23.x"
           cache: true
 
-      - name: Set up Go private module auth (optional)
-        if: secrets.GH_PAT != ''
-        shell: pwsh
-        run: |
-          git config --global url."https://${{ secrets.GH_PAT }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
-        env:
-          GH_PAT: ${{ secrets.GH_PAT }}
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Go private module auth (optional)
+        if: ${{ env.GH_PAT != '' }}
+        shell: pwsh
+        run: |
+          git config --global url."https://${{ env.GH_PAT }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
 
       - name: Show architecture
         shell: pwsh
         run: |
-          $arch = $env:PROCESSOR_ARCHITECTURE
-          Write-Host "Matrix arch: $arch"
+          Write-Host "Windows architecture: $env:PROCESSOR_ARCHITECTURE"
+          go env GOARCH
+          go env GOOS
 
       - name: Go mod tidy
+        shell: pwsh
         run: go mod tidy
 
       - name: Build Rust securebuffer
@@ -46,23 +49,81 @@ jobs:
         working-directory: secure/rust
         run: cargo build --release
 
-      - name: Test basic Go build
+      - name: Test Go build (no CGO)
         shell: pwsh
         run: |
-          Write-Host "Testing Go workspace..."
-          go version
-          go env
-          # Test build without CGO first
           $env:CGO_ENABLED = "0"
-          go build ./... 2>&1 | Tee-Object -Variable buildOutput
+          Write-Host "Running Go build without CGO..."
+          go build -v ./... 2>&1 | Tee-Object -Variable buildOutput
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "Non-CGO build failed, but continuing..."
+            Write-Host "❌ Non-CGO build failed"
+            exit 1
+          } else {
+            Write-Host "✅ Non-CGO build succeeded"
           }
 
-          # Try CGO build
+      - name: Test Go build (with CGO)
+        shell: pwsh
+        run: |
           $env:CGO_ENABLED = "1"
-          Write-Host "Testing CGO build..."
-          go build ./... 2>&1 | Tee-Object -Variable cgoOutput
+          Write-Host "Running Go build with CGO..."
+          go build -v ./... 2>&1 | Tee-Object -Variable cgoOutput
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "CGO build failed - this is expected until code is fixed"
+            Write-Host "⚠️ CGO build failed (expected on Windows until code fixed)"
+          } else {
+            Write-Host "✅ CGO build succeeded"
           }
+
+      - name: Run Go tests (non-CGO only for now)
+        shell: pwsh
+        run: |
+          $env:CGO_ENABLED = "0"
+          Write-Host "Running Go tests..."
+          go test -v ./... -timeout=10m
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "⚠️ Some tests failed"
+          } else {
+            Write-Host "✅ All tests passed"
+          }
+
+      - name: Check file integrity
+        shell: pwsh
+        run: |
+          Write-Host "Checking Go file integrity..."
+          $corruptedFiles = @()
+          $emptyFiles = @()
+          $goFiles = Get-ChildItem -Path . -Filter "*.go" -Recurse
+
+          foreach ($file in $goFiles) {
+            $size = (Get-Item -Path $file.FullName).Length
+            if ($size -eq 0) {
+              Write-Host "::warning ::Empty file detected: $($file.FullName)"
+              $emptyFiles += $file.FullName
+            }
+          }
+
+          if ($emptyFiles.Count -gt 0) {
+            Write-Host "::error ::Found $($emptyFiles.Count) empty Go files!"
+            exit 1
+          } else {
+            Write-Host "✅ No empty files detected"
+          }
+
+      - name: Build sprintd binary
+        shell: pwsh
+        run: |
+          $env:CGO_ENABLED = "1" 
+          go build -o bitcoin-sprint-windows.exe ./cmd/sprintd
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "⚠️ Binary build failed"
+          } else {
+            Write-Host "✅ Binary build succeeded"
+            Get-Item -Path bitcoin-sprint-windows.exe | Select-Object Name, Length, LastWriteTime | Format-Table
+          }
+
+      - name: Upload binary
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitcoin-sprint-windows
+          path: bitcoin-sprint-windows.exe

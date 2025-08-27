@@ -1,151 +1,305 @@
 package p2p
 
 import (
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
-	"errors"
-	"io"
-	"net"
-	"sync"
-	"time"
+"crypto/hmac"
+"crypto/rand"
+"crypto/sha256"
+"encoding/base64"
+"encoding/binary"
+"encoding/json"
+"errors"
+"fmt"
+"net"
+"sync"
+"sync/atomic"
+"time"
 
-	"github.com/PayRpc/Bitcoin-Sprint/internal/securebuf"
-	"go.uber.org/zap"
+"github.com/PayRpc/Bitcoin-Sprint/internal/securebuf"
+"go.uber.org/zap"
 )
 
-// HandshakeMessage is exchanged during peer connection
 type HandshakeMessage struct {
-	Nonce     string `json:"nonce"`
-	Timestamp int64  `json:"ts"`
-	Signature string `json:"sig"`
+Nonce     string `json:"nonce"`
+Timestamp int64  `json:"ts"`
+Signature string `json:"sig"`
 }
 
-// Authenticator handles secure peer handshakes with HMAC
 type Authenticator struct {
-	secret *securebuf.Buffer
-	logger *zap.Logger
-	seen   sync.Map // stores used nonces for replay protection
+secret      *securebuf.Buffer
+logger      *zap.Logger
+seen        sync.Map
+stopJanitor chan struct{}
+janitorOnce atomic.Bool
 }
 
-// NewAuthenticator with a shared secret inside SecureBuffer
+type seenNonce struct {
+ts int64
+}
+
 func NewAuthenticator(secret []byte, logger *zap.Logger) (*Authenticator, error) {
-	buf, err := securebuf.New(len(secret))
-	if err != nil {
-		return nil, err
-	}
-	if err := buf.Write(secret); err != nil {
-		buf.Free()
-		return nil, err
-	}
-	return &Authenticator{secret: buf, logger: logger}, nil
+buf, err := securebuf.New(len(secret))
+if err != nil {
+return nil, err
+}
+if err := buf.Write(secret); err != nil {
+buf.Free()
+return nil, err
+}
+a := &Authenticator{secret: buf, logger: logger, stopJanitor: make(chan struct{})}
+a.startJanitor()
+return a, nil
 }
 
-// Cleanup
 func (a *Authenticator) Close() {
-	if a.secret != nil {
-		a.secret.Free()
-		a.secret = nil
-	}
+if a.secret != nil {
+a.secret.Free()
+a.secret = nil
+}
+if a.janitorOnce.CompareAndSwap(false, true) {
+close(a.stopJanitor)
+}
 }
 
-// Generate handshake for outbound connection
-func (a *Authenticator) Outbound() (*HandshakeMessage, error) {
-	nonce := make([]byte, 16)
-	if _, err := rand.Read(nonce); err != nil {
-		return nil, err
-	}
-	msg := &HandshakeMessage{
-		Nonce:     base64.RawURLEncoding.EncodeToString(nonce),
-		Timestamp: time.Now().Unix(),
-	}
-	sig, err := a.sign(msg.Nonce, msg.Timestamp)
-	if err != nil {
-		return nil, err
-	}
-	msg.Signature = sig
-	return msg, nil
+func generateNonce() (string, error) {
+nonce := make([]byte, 16)
+if _, err := rand.Read(nonce); err != nil {
+return "", err
+}
+return base64.URLEncoding.EncodeToString(nonce), nil
 }
 
-// Verify inbound handshake
-func (a *Authenticator) Verify(msg *HandshakeMessage) error {
-	// Replay prevention
-	if _, loaded := a.seen.LoadOrStore(msg.Nonce, struct{}{}); loaded {
-		return errors.New("replay detected")
-	}
-
-	// Timestamp skew check (±60s)
-	now := time.Now().Unix()
-	if msg.Timestamp < now-60 || msg.Timestamp > now+60 {
-		return errors.New("timestamp out of range")
-	}
-
-	// Recompute signature
-	expected, err := a.sign(msg.Nonce, msg.Timestamp)
-	if err != nil {
-		return err
-	}
-	if !hmac.Equal([]byte(msg.Signature), []byte(expected)) {
-		return errors.New("invalid signature")
-	}
-	return nil
+func (a *Authenticator) signMessage(nonce string, timestamp int64) (string, error) {
+data := fmt.Sprintf("%s:%d", nonce, timestamp)
+secretData := make([]byte, a.secret.Capacity())
+n, err := a.secret.Read(secretData)
+if err != nil {
+return "", err
+}
+defer func() {
+for i := range secretData[:n] {
+secretData[i] = 0
+}
+}()
+h := hmac.New(sha256.New, secretData[:n])
+h.Write([]byte(data))
+signature := h.Sum(nil)
+return base64.URLEncoding.EncodeToString(signature), nil
 }
 
-// Sign message with SecureBuffer-held secret
-func (a *Authenticator) sign(nonce string, ts int64) (string, error) {
-	key := make([]byte, 64)
-	n, err := a.secret.Read(key)
-	if err != nil {
-		return "", err
-	}
-	defer func() {
-		// Clear key from stack
-		for i := range key {
-			key[i] = 0
-		}
-	}()
-
-	mac := hmac.New(sha256.New, key[:n])
-	io.WriteString(mac, nonce)
-	io.WriteString(mac, string(rune(ts)))
-	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
+func (a *Authenticator) signAck(nonce string, timestamp int64) (string, error) {
+data := fmt.Sprintf("ACK:%s:%d", nonce, timestamp)
+key := make([]byte, a.secret.Capacity())
+n, err := a.secret.Read(key)
+if err != nil {
+return "", err
+}
+defer func() { 
+for i := range key[:n] { 
+key[i] = 0 
+} 
+}()
+h := hmac.New(sha256.New, key[:n])
+h.Write([]byte(data))
+sig := h.Sum(nil)
+return base64.URLEncoding.EncodeToString(sig), nil
 }
 
-// Perform outbound handshake
-func (a *Authenticator) DoOutbound(conn net.Conn) error {
-	msg, err := a.Outbound()
-	if err != nil {
-		return err
-	}
-	enc := json.NewEncoder(conn)
-	if err := enc.Encode(msg); err != nil {
-		return err
-	}
-	dec := json.NewDecoder(conn)
-	var reply HandshakeMessage
-	if err := dec.Decode(&reply); err != nil {
-		return err
-	}
-	return a.Verify(&reply)
+func (a *Authenticator) CreateHandshakeMessage() (*HandshakeMessage, error) {
+nonce, err := generateNonce()
+if err != nil {
+return nil, err
+}
+timestamp := time.Now().Unix()
+signature, err := a.signMessage(nonce, timestamp)
+if err != nil {
+return nil, err
+}
+return &HandshakeMessage{
+Nonce:     nonce,
+Timestamp: timestamp,
+Signature: signature,
+}, nil
 }
 
-// Perform inbound handshake
-func (a *Authenticator) DoInbound(conn net.Conn) error {
-	dec := json.NewDecoder(conn)
-	var msg HandshakeMessage
-	if err := dec.Decode(&msg); err != nil {
-		return err
-	}
-	if err := a.Verify(&msg); err != nil {
-		return err
-	}
-	// Send back signed ack
-	reply, err := a.Outbound()
-	if err != nil {
-		return err
-	}
-	enc := json.NewEncoder(conn)
-	return enc.Encode(reply)
+func (a *Authenticator) VerifyHandshakeMessage(msg *HandshakeMessage) error {
+now := time.Now().Unix()
+if abs64(now-msg.Timestamp) > 300 {
+return errors.New("handshake timestamp too old or too new")
+}
+nonceKey := fmt.Sprintf("%s:%d", msg.Nonce, msg.Timestamp)
+if _, exists := a.seen.LoadOrStore(nonceKey, seenNonce{ts: now}); exists {
+return errors.New("handshake replay detected")
+}
+expectedSig, err := a.signMessage(msg.Nonce, msg.Timestamp)
+if err != nil {
+return err
+}
+expectedRaw, err := base64.URLEncoding.DecodeString(expectedSig)
+if err != nil { 
+return err 
+}
+msgRaw, err := base64.URLEncoding.DecodeString(msg.Signature)
+if err != nil { 
+return err 
+}
+if !hmac.Equal(expectedRaw, msgRaw) {
+return errors.New("handshake signature verification failed")
+}
+a.logger.Debug("Handshake verification successful",
+zap.String("nonce", msg.Nonce),
+zap.Int64("timestamp", msg.Timestamp))
+return nil
+}
+
+type HandshakeAck struct {
+OK        bool   `json:"ok"`
+Nonce     string `json:"nonce"`
+Timestamp int64  `json:"ts"`
+Signature string `json:"sig"`
+}
+
+func (a *Authenticator) PerformHandshakeClient(conn net.Conn, timeout time.Duration) error {
+conn.SetDeadline(time.Now().Add(timeout))
+defer conn.SetDeadline(time.Time{})
+req, err := a.CreateHandshakeMessage()
+if err != nil { 
+return fmt.Errorf("failed to create handshake: %w", err) 
+}
+if err := writeFramedJSON(conn, req); err != nil { 
+return fmt.Errorf("failed to send handshake: %w", err) 
+}
+var ack HandshakeAck
+if err := readFramedJSON(conn, &ack); err != nil { 
+return fmt.Errorf("failed to read handshake ack: %w", err) 
+}
+if !ack.OK { 
+return errors.New("handshake ack not OK") 
+}
+if ack.Nonce != req.Nonce { 
+return errors.New("handshake ack nonce mismatch") 
+}
+expectedAckSig, err := a.signAck(ack.Nonce, ack.Timestamp)
+if err != nil { 
+return err 
+}
+expRaw, err := base64.URLEncoding.DecodeString(expectedAckSig)
+if err != nil { 
+return err 
+}
+msgRaw, err := base64.URLEncoding.DecodeString(ack.Signature)
+if err != nil { 
+return err 
+}
+if !hmac.Equal(expRaw, msgRaw) { 
+return errors.New("handshake ack signature verification failed") 
+}
+a.logger.Info("Sprint peer handshake (client) completed", 
+zap.String("peer", conn.RemoteAddr().String()))
+return nil
+}
+
+func (a *Authenticator) PerformHandshakeServer(conn net.Conn, timeout time.Duration) error {
+conn.SetDeadline(time.Now().Add(timeout))
+defer conn.SetDeadline(time.Time{})
+var req HandshakeMessage
+if err := readFramedJSON(conn, &req); err != nil { 
+return fmt.Errorf("failed to read handshake: %w", err) 
+}
+if err := a.VerifyHandshakeMessage(&req); err != nil { 
+return fmt.Errorf("handshake verification failed: %w", err) 
+}
+ack := HandshakeAck{
+OK: true, 
+Nonce: req.Nonce, 
+Timestamp: time.Now().Unix(),
+}
+sig, err := a.signAck(ack.Nonce, ack.Timestamp)
+if err != nil { 
+return err 
+}
+ack.Signature = sig
+if err := writeFramedJSON(conn, &ack); err != nil { 
+return fmt.Errorf("failed to send handshake ack: %w", err) 
+}
+a.logger.Info("Sprint peer handshake (server) completed", 
+zap.String("peer", conn.RemoteAddr().String()))
+return nil
+}
+
+func abs64(x int64) int64 {
+if x < 0 {
+return -x
+}
+return x
+}
+
+const maxFrameSize = 4096
+
+func writeFramedJSON(conn net.Conn, v any) error {
+b, err := json.Marshal(v)
+if err != nil { 
+return err 
+}
+if len(b) > maxFrameSize { 
+return errors.New("frame too large") 
+}
+var lb [4]byte
+binary.BigEndian.PutUint32(lb[:], uint32(len(b)))
+if _, err := conn.Write(lb[:]); err != nil { 
+return err 
+}
+_, err = conn.Write(b)
+return err
+}
+
+func readFramedJSON(conn net.Conn, v any) error {
+var lb [4]byte
+if _, err := ioReadFull(conn, lb[:]); err != nil { 
+return err 
+}
+n := binary.BigEndian.Uint32(lb[:])
+if n == 0 || n > maxFrameSize { 
+return errors.New("invalid frame size") 
+}
+buf := make([]byte, n)
+if _, err := ioReadFull(conn, buf); err != nil { 
+return err 
+}
+return json.Unmarshal(buf, v)
+}
+
+func ioReadFull(conn net.Conn, buf []byte) (int, error) {
+total := 0
+for total < len(buf) {
+n, err := conn.Read(buf[total:])
+if err != nil { 
+return total, err 
+}
+total += n
+}
+return total, nil
+}
+
+func (a *Authenticator) startJanitor() {
+const ttl = int64(600)
+ticker := time.NewTicker(time.Minute)
+go func() {
+for {
+select {
+case <-a.stopJanitor:
+ticker.Stop()
+return
+case now := <-ticker.C:
+cutoff := now.Unix() - ttl
+a.seen.Range(func(key, val any) bool {
+if sn, ok := val.(seenNonce); ok {
+if sn.ts < cutoff { 
+a.seen.Delete(key) 
+}
+}
+return true
+})
+}
+}
+}()
 }

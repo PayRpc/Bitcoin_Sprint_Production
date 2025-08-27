@@ -37,6 +37,12 @@ func (m *Mempool) All() []string {
 	return txids
 }
 
+func (m *Mempool) Size() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return len(m.items)
+}
+
 func (m *Mempool) gcLoop() {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()

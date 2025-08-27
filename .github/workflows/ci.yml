@@ -8,27 +8,42 @@ on:
 
 jobs:
   build-go:
-    name: Build Go (${{ matrix.os }})
+    name: Go Build & Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Go private module auth (optional)
-        if: secrets.GH_PAT != ''
-        run: |
-          git config --global url."https://${{ secrets.GH_PAT }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
-        env:
-          GH_PAT: ${{ secrets.GH_PAT }}
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.23"
           cache: true
+          
+      - name: Check file integrity
+        shell: pwsh
+        run: |
+          Write-Host "Checking Go file integrity..."
+          $corruptedFiles = @()
+          $emptyFiles = @()
+          $goFiles = Get-ChildItem -Path . -Filter "*.go" -Recurse
+          
+          foreach ($file in $goFiles) {
+            $size = (Get-Item -Path $file.FullName).Length
+            if ($size -eq 0) {
+              Write-Host "::warning ::Empty file detected: $($file.FullName)"
+              $emptyFiles += $file.FullName
+            }
+          }
+          
+          if ($emptyFiles.Count -gt 0) {
+            Write-Host "::error ::Found $($emptyFiles.Count) empty Go files!"
+            exit 1
+          }
 
       - name: Go mod tidy
         run: go mod tidy
@@ -36,30 +51,35 @@ jobs:
       - name: Go vet
         run: go vet ./...
 
-      - name: Test without CGO
+      - name: Go test (no CGO)
         env:
           CGO_ENABLED: "0"
-        run: |
-          echo "Testing packages that don't require CGO..."
-          # Test all packages except the ones that require CGO
-          go test ./cmd/... -tags=no_cgo || echo "Some tests may require CGO"
+        run: go test ./... -tags=no_cgo -timeout=5m
+
+      - name: Go test (race detector)
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race ./... -timeout=5m
+
+      - name: Build Sprint binary
+        run: go build -o bitcoin-sprint ./cmd/sprintd
+
+      - name: Upload Sprint binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitcoin-sprint-${{ matrix.os }}-nocgo
+          path: bitcoin-sprint
 
   build-with-cgo:
-    name: Build with CGO (${{ matrix.os }})
+    name: Full Build (Go + Rust + CGO) (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Go private module auth (optional)
-        if: secrets.GH_PAT != ''
-        run: |
-          git config --global url."https://${{ secrets.GH_PAT }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
-        env:
-          GH_PAT: ${{ secrets.GH_PAT }}
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -70,11 +90,27 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install C build dependencies (Linux)
+      - name: Install C build dependencies (Linux only)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential
+          sudo apt-get install -y build-essential pkg-config libssl-dev
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-index-
 
       - name: Build Rust securebuffer
         working-directory: secure/rust
@@ -83,9 +119,79 @@ jobs:
       - name: Go mod tidy
         run: go mod tidy
 
-      - name: Test with CGO (if possible)
+      - name: Build Sprint with CGO
         env:
           CGO_ENABLED: "1"
+        run: go build -o bitcoin-sprint ./cmd/sprintd
+
+      - name: Go test (with CGO)
+        env:
+          CGO_ENABLED: "1"
+        run: go test ./... -timeout=10m
+
+      - name: Upload Sprint binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitcoin-sprint-${{ matrix.os }}-cgo
+          path: bitcoin-sprint
+
+  integration-test:
+    name: Sprint Integration Test (Bitcoin Core + ZMQ)
+    runs-on: ubuntu-latest
+    needs: [build-with-cgo] # only run if CGO build succeeded
+
+    services:
+      bitcoind:
+        image: ruimarinho/bitcoin-core:24.2
+        ports:
+          - 8332:8332
+          - 28332:28332
+        options: >-
+          --health-cmd="bitcoin-cli -rpcuser=sprint -rpcpassword=integration getblockchaininfo || exit 1"
+          --health-interval=15s
+          --health-timeout=5s
+          --health-retries=5
+        env:
+          BITCOIN_RPCUSER: sprint
+          BITCOIN_RPCPASSWORD: integration
+          BITCOIN_EXTRA_ARGS: |
+            -server=1
+            -txindex=0
+            -prune=550
+            -rpcallowip=0.0.0.0/0
+            -rpcbind=0.0.0.0:8332
+            -zmqpubhashblock=tcp://0.0.0.0:28332
+            -fallbackfee=0.0002
+            -regtest=1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Download Sprint binary
+        uses: actions/download-artifact@v4
+        with:
+          name: bitcoin-sprint-ubuntu-latest-cgo
+          path: ./bin
+
+      - name: Run Sprint integration tests
+        env:
+          BTC_RPC_HOST: 127.0.0.1:8332
+          BTC_RPC_USER: sprint
+          BTC_RPC_PASS: integration
+          BTC_RPC_DISABLE_TLS: true
+          ZMQ_ENDPOINT: tcp://127.0.0.1:28332
+          API_HOST: 0.0.0.0
+          API_PORT: 8080
+          PEER_LISTEN_PORT: 8335
+          LICENSE_KEY: test_license_key
         run: |
-          echo "Attempting CGO build test..."
-          go build ./... || echo "CGO build failed - this is expected until code issues are fixed"
+          chmod +x ./bin/bitcoin-sprint
+          echo "Waiting for bitcoind to be ready..."
+          sleep 30
+          ./bin/bitcoin-sprint --help
+          go test ./tests/integration -timeout=10m -v

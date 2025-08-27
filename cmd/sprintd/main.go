@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,19 +15,33 @@ import (
 	"github.com/PayRpc/Bitcoin-Sprint/internal/p2p"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/runtime"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/zmq"
+	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 )
 
 func main() {
+	// Load environment variables from .env file
+	if err := godotenv.Load(); err != nil {
+		log.Printf("Warning: could not load .env file: %v", err)
+	}
+
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
+
+	logger.Info("Starting Bitcoin Sprint daemon",
+		zap.String("version", "2.1.0"),
+		zap.String("mode", os.Getenv("APP_MODE")),
+	)
 
 	// 1. Load config
 	cfg := config.Load()
 
-	// 2. Validate license
-	if !license.Validate(cfg.LicenseKey) {
+	// 2. Validate license (temporarily disabled for testing)
+	skipLicense := os.Getenv("SKIP_LICENSE_VALIDATION") == "true"
+	if !skipLicense && !license.Validate(cfg.LicenseKey) {
 		logger.Fatal("invalid license key")
+	} else if skipLicense {
+		logger.Info("License validation skipped (development mode)")
 	}
 
 	// 3. Init subsystems

@@ -1,7 +1,7 @@
 {
   "name": "bitcoin-sprint-web",
-  "version": "1.0.0",
-  "description": "Bitcoin Sprint Web Dashboard and API",
+  "version": "2.1.0",
+  "description": "Bitcoin Sprint Enterprise Web Dashboard and API",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3002",
@@ -17,7 +17,11 @@
     "maintenance:enable": "node scripts/maintenance.js enable",
     "maintenance:disable": "node scripts/maintenance.js disable",
     "maintenance:health": "node scripts/maintenance.js health",
-    "reset:daily": "node scripts/reset-daily-counters.js"
+    "reset:daily": "node scripts/reset-daily-counters.js",
+    "security:audit": "npm audit",
+    "security:fix": "npm audit fix",
+    "performance:test": "node scripts/performance-test.js",
+    "compliance:check": "node scripts/compliance-check.js"
   },
   "dependencies": {
     "@prisma/client": "^5.15.0",
