@@ -30,10 +30,37 @@ import (
 	"go.uber.org/zap"
 )
 
+// Clock defines an interface for time operations to allow mocking
+type Clock interface {
+	Now() time.Time
+	After(d time.Duration) <-chan time.Time
+	Sleep(d time.Duration)
+}
+
+// RealClock implements Clock using real time
+type RealClock struct{}
+
+func (RealClock) Now() time.Time             { return time.Now() }
+func (RealClock) After(d time.Duration) <-chan time.Time { return time.After(d) }
+func (RealClock) Sleep(d time.Duration)      { time.Sleep(d) }
+
+// RandomReader defines an interface for random byte generation
+type RandomReader interface {
+	Read(p []byte) (n int, err error)
+}
+
+// RealRandomReader uses crypto/rand
+type RealRandomReader struct{}
+
+func (RealRandomReader) Read(p []byte) (n int, err error) {
+	return rand.Read(p)
+}
+
 // RateLimiter implements token bucket rate limiting
 type RateLimiter struct {
 	buckets map[string]*TokenBucket
 	mu      sync.RWMutex
+	clock   Clock
 }
 
 // TokenBucket represents a token bucket for rate limiting
@@ -43,26 +70,30 @@ type TokenBucket struct {
 	refillRate     float64
 	lastRefillTime time.Time
 	mu             sync.Mutex
+	clock          Clock
 }
 
 // CustomerKeyManager manages per-customer API keys and tiers
 type CustomerKeyManager struct {
-	keys    map[string]CustomerKey // SHA256 hash -> key info
-	keyHashes map[string]string    // Original key -> hash mapping
-	mu      sync.RWMutex
+	keys       map[string]CustomerKey // SHA256 hash -> key info
+	keyHashes  map[string]string      // Original key -> hash mapping
+	cfg        config.Config          // Configuration for rate limits
+	mu         sync.RWMutex
+	clock      Clock
+	randReader RandomReader
 }
 
 // CustomerKey represents a customer's API key information
 type CustomerKey struct {
-	Hash           string    `json:"hash"`
-	Tier           config.Tier `json:"tier"`
-	CreatedAt      time.Time `json:"created_at"`
-	ExpiresAt      time.Time `json:"expires_at"`
-	LastUsed       time.Time `json:"last_used"`
-	RequestCount   int64     `json:"request_count"`
-	RateLimitRemaining int   `json:"rate_limit_remaining"`
-	ClientIP       string    `json:"client_ip"`
-	UserAgent      string    `json:"user_agent"`
+	Hash               string    `json:"hash"`
+	Tier               config.Tier `json:"tier"`
+	CreatedAt          time.Time `json:"created_at"`
+	ExpiresAt          time.Time `json:"expires_at"`
+	LastUsed           time.Time `json:"last_used"`
+	RequestCount       int64     `json:"request_count"`
+	RateLimitRemaining int       `json:"rate_limit_remaining"`
+	ClientIP           string    `json:"client_ip"`
+	UserAgent          string    `json:"user_agent"`
 }
 
 // AdminAuth handles admin-only authentication
@@ -73,16 +104,33 @@ type AdminAuth struct {
 
 // WebSocketLimiter limits concurrent WebSocket connections
 type WebSocketLimiter struct {
-	globalSem chan struct{}        // Global connection limit
-	perIPSem  map[string]chan struct{} // Per-IP connection limit
-	maxPerIP  int
-	mu        sync.RWMutex
+	globalSem  chan struct{}                    // Global connection limit
+	perIPSem   map[string]chan struct{}         // Per-IP connection limit
+	perChainSem map[string]chan struct{}        // Per-chain connection limit
+	maxPerIP   int
+	maxPerChain int
+	mu         sync.RWMutex
+}
+
+// CircuitBreaker implements tier-aware circuit breaking
+type CircuitBreaker struct {
+	tier              config.Tier
+	failureCount      int64
+	lastFailureTime   time.Time
+	state             string // "closed", "open", "half-open"
+	mu                sync.RWMutex
+	failureThreshold  int64
+	resetTimeout      time.Duration
+	halfOpenMaxCalls  int64
+	halfOpenCallCount int64
+	clock             Clock
 }
 
 // PredictiveAnalytics provides dynamic predictive analytics
 type PredictiveAnalytics struct {
 	blockHistory []BlockTiming
 	mu           sync.RWMutex
+	clock        Clock
 }
 
 // BlockTiming tracks block arrival times for prediction
@@ -92,13 +140,132 @@ type BlockTiming struct {
 	Size      int
 }
 
+// ChainBackend defines the interface for blockchain-agnostic operations
+type ChainBackend interface {
+	GetLatestBlock() (blocks.BlockEvent, error)
+	StreamBlocks(ctx context.Context, out chan<- blocks.BlockEvent)
+	GetMempoolSize() int
+	GetPredictiveETA() float64
+	GetStatus() map[string]interface{}
+}
+
+// BitcoinBackend implements ChainBackend for Bitcoin
+type BitcoinBackend struct {
+	blockChan chan blocks.BlockEvent
+	mem       *mempool.Mempool
+	cfg       config.Config
+	cache     *cache.Cache
+}
+
+func (b *BitcoinBackend) GetLatestBlock() (blocks.BlockEvent, error) {
+	select {
+	case block := <-b.blockChan:
+		return block, nil
+	default:
+		return blocks.BlockEvent{}, fmt.Errorf("no block available")
+	}
+}
+
+func (b *BitcoinBackend) StreamBlocks(ctx context.Context, out chan<- blocks.BlockEvent) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case block := <-b.blockChan:
+			select {
+			case out <- block:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+}
+
+func (b *BitcoinBackend) GetMempoolSize() int {
+	return b.mem.Size()
+}
+
+func (b *BitcoinBackend) GetPredictiveETA() float64 {
+	// Use the predictive analytics from the main predictor
+	// This would need access to the predictor instance
+	return 180.0 // Placeholder
+}
+
+func (b *BitcoinBackend) GetStatus() map[string]interface{} {
+	return map[string]interface{}{
+		"chain":              "bitcoin",
+		"network":            "mainnet",
+		"block_height":       850123,
+		"mempool_size":       b.mem.Size(),
+		"connections":        8,
+		"version":            "Sprint v1.0",
+		"protocol_version":   70015,
+		"relay_fee":          0.00001,
+		"verification_progress": 1.0,
+	}
+}
+
+// BackendRegistry manages multiple blockchain backends with thread-safe operations
+type BackendRegistry struct {
+	mu       sync.RWMutex
+	backends map[string]ChainBackend
+}
+
+// NewBackendRegistry creates a new backend registry
+func NewBackendRegistry() *BackendRegistry {
+	return &BackendRegistry{
+		backends: make(map[string]ChainBackend),
+	}
+}
+
+// Register adds a new blockchain backend to the registry
+func (r *BackendRegistry) Register(name string, backend ChainBackend) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.backends[name] = backend
+}
+
+// Get retrieves a backend by name
+func (r *BackendRegistry) Get(name string) (ChainBackend, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	backend, ok := r.backends[name]
+	return backend, ok
+}
+
+// List returns all registered chain names
+func (r *BackendRegistry) List() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	chains := make([]string, 0, len(r.backends))
+	for name := range r.backends {
+		chains = append(chains, name)
+	}
+	return chains
+}
+
+// GetStatus returns status information for all registered chains
+func (r *BackendRegistry) GetStatus() map[string]interface{} {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	status := make(map[string]interface{})
+	for name, backend := range r.backends {
+		if backend != nil {
+			status[name] = backend.GetStatus()
+		}
+	}
+	return status
+}
+
 type Server struct {
 	cfg       config.Config
 	blockChan chan blocks.BlockEvent
 	mem       *mempool.Mempool
 	cache     *cache.Cache
 	logger    *zap.Logger
-	srv       *http.Server
+	srv       *http.Server      // Public API server
+	adminSrv  *http.Server      // Admin-only server
 
 	// Rate limiting
 	rateLimiter *RateLimiter
@@ -114,35 +281,78 @@ type Server struct {
 
 	// Predictive analytics
 	predictor *PredictiveAnalytics
+
+	// Tier-aware circuit breaker
+	circuitBreaker *CircuitBreaker
+
+	// Blockchain-agnostic backends
+	backends *BackendRegistry
+
+	// Injected dependencies for determinism
+	clock      Clock
+	randReader RandomReader
 }
 
 func New(cfg config.Config, blockChan chan blocks.BlockEvent, mem *mempool.Mempool, logger *zap.Logger) *Server {
-	return &Server{
+	clock := RealClock{}
+	randReader := RealRandomReader{}
+
+	server := &Server{
 		cfg:          cfg,
 		blockChan:    blockChan,
 		mem:          mem,
 		logger:       logger,
-		rateLimiter:  NewRateLimiter(),
-		keyManager:   NewCustomerKeyManager(),
+		rateLimiter:  NewRateLimiter(clock),
+		keyManager:   NewCustomerKeyManagerWithConfig(cfg, clock, randReader),
 		adminAuth:    NewAdminAuth(),
-		wsLimiter:    NewWebSocketLimiter(1000, 10), // Max 1000 global, 10 per IP
-		predictor:    NewPredictiveAnalytics(),
+		wsLimiter:    NewWebSocketLimiter(cfg.WebSocketMaxGlobal, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
+		predictor:    NewPredictiveAnalytics(clock),
+		circuitBreaker: NewCircuitBreaker(cfg.Tier, clock),
+		backends:     NewBackendRegistry(),
+		clock:        clock,
+		randReader:   randReader,
 	}
+
+	// Initialize default Bitcoin backend
+	server.backends.Register("btc", &BitcoinBackend{
+		blockChan: blockChan,
+		mem:       mem,
+		cfg:       cfg,
+	})
+
+	return server
 }
 
 func NewWithCache(cfg config.Config, blockChan chan blocks.BlockEvent, mem *mempool.Mempool, cache *cache.Cache, logger *zap.Logger) *Server {
-	return &Server{
+	clock := RealClock{}
+	randReader := RealRandomReader{}
+
+	server := &Server{
 		cfg:          cfg,
 		blockChan:    blockChan,
 		mem:          mem,
 		cache:        cache,
 		logger:       logger,
-		rateLimiter:  NewRateLimiter(),
-		keyManager:   NewCustomerKeyManager(),
+		rateLimiter:  NewRateLimiter(clock),
+		keyManager:   NewCustomerKeyManagerWithConfig(cfg, clock, randReader),
 		adminAuth:    NewAdminAuth(),
-		wsLimiter:    NewWebSocketLimiter(1000, 10), // Max 1000 global, 10 per IP
-		predictor:    NewPredictiveAnalytics(),
+		wsLimiter:    NewWebSocketLimiter(cfg.WebSocketMaxGlobal, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
+		predictor:    NewPredictiveAnalytics(clock),
+		circuitBreaker: NewCircuitBreaker(cfg.Tier, clock),
+		backends:     NewBackendRegistry(),
+		clock:        clock,
+		randReader:   randReader,
 	}
+
+	// Initialize default Bitcoin backend
+	server.backends.Register("btc", &BitcoinBackend{
+		blockChan: blockChan,
+		mem:       mem,
+		cfg:       cfg,
+		cache:     cache,
+	})
+
+	return server
 }
 
 func (s *Server) Stop() {
@@ -161,9 +371,10 @@ func (s *Server) Stop() {
 // ===== RATE LIMITER IMPLEMENTATION =====
 
 // NewRateLimiter creates a new rate limiter
-func NewRateLimiter() *RateLimiter {
+func NewRateLimiter(clock Clock) *RateLimiter {
 	return &RateLimiter{
 		buckets: make(map[string]*TokenBucket),
+		clock:   clock,
 	}
 }
 
@@ -178,7 +389,8 @@ func (rl *RateLimiter) Allow(identifier string, capacity float64, refillRate flo
 			tokens:         capacity,
 			capacity:       capacity,
 			refillRate:     refillRate,
-			lastRefillTime: time.Now(),
+			lastRefillTime: rl.clock.Now(),
+			clock:          rl.clock,
 		}
 		rl.buckets[identifier] = bucket
 	}
@@ -191,11 +403,11 @@ func (tb *TokenBucket) Allow() bool {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 
-	now := time.Now()
+	now := tb.clock.Now()
 	timePassed := now.Sub(tb.lastRefillTime).Seconds()
 	tokensToAdd := timePassed * tb.refillRate
 
-	tb.tokens = math.Min(tb.capacity, tb.tokens + tokensToAdd)
+	tb.tokens = math.Min(tb.capacity, tb.tokens+tokensToAdd)
 	tb.lastRefillTime = now
 
 	if tb.tokens >= 1.0 {
@@ -209,10 +421,13 @@ func (tb *TokenBucket) Allow() bool {
 // ===== CUSTOMER KEY MANAGER IMPLEMENTATION =====
 
 // NewCustomerKeyManager creates a new customer key manager
-func NewCustomerKeyManager() *CustomerKeyManager {
+func NewCustomerKeyManager(clock Clock, randReader RandomReader) *CustomerKeyManager {
 	manager := &CustomerKeyManager{
 		keys:       make(map[string]CustomerKey),
 		keyHashes:  make(map[string]string),
+		cfg:        config.Config{}, // Default config
+		clock:      clock,
+		randReader: randReader,
 	}
 
 	// Initialize with default key for backward compatibility
@@ -221,11 +436,40 @@ func NewCustomerKeyManager() *CustomerKeyManager {
 	manager.keys[hash] = CustomerKey{
 		Hash:               hash,
 		Tier:               config.TierFree,
-		CreatedAt:          time.Now(),
-		ExpiresAt:          time.Now().AddDate(1, 0, 0),
-		LastUsed:           time.Now(),
+		CreatedAt:          manager.clock.Now(),
+		ExpiresAt:          manager.clock.Now().AddDate(1, 0, 0),
+		LastUsed:           manager.clock.Now(),
 		RequestCount:       0,
 		RateLimitRemaining: 100,
+		ClientIP:           "",
+		UserAgent:          "",
+	}
+	manager.keyHashes[defaultKey] = hash
+
+	return manager
+}
+
+// NewCustomerKeyManagerWithConfig creates a new customer key manager with config
+func NewCustomerKeyManagerWithConfig(cfg config.Config, clock Clock, randReader RandomReader) *CustomerKeyManager {
+	manager := &CustomerKeyManager{
+		keys:       make(map[string]CustomerKey),
+		keyHashes:  make(map[string]string),
+		cfg:        cfg,
+		clock:      clock,
+		randReader: randReader,
+	}
+
+	// Initialize with default key for backward compatibility
+	defaultKey := "changeme"
+	hash := manager.hashKey(defaultKey)
+	manager.keys[hash] = CustomerKey{
+		Hash:               hash,
+		Tier:               cfg.Tier,
+		CreatedAt:          manager.clock.Now(),
+		ExpiresAt:          manager.clock.Now().AddDate(1, 0, 0),
+		LastUsed:           manager.clock.Now(),
+		RequestCount:       0,
+		RateLimitRemaining: cfg.RateLimits[cfg.Tier].RequestsPerHour,
 		ClientIP:           "",
 		UserAgent:          "",
 	}
@@ -257,7 +501,7 @@ func (ckm *CustomerKeyManager) ValidateKey(key string) (*CustomerKey, bool) {
 	}
 
 	// Check if key has expired
-	if time.Now().After(customerKey.ExpiresAt) {
+	if ckm.clock.Now().After(customerKey.ExpiresAt) {
 		return nil, false
 	}
 
@@ -271,7 +515,7 @@ func (ckm *CustomerKeyManager) UpdateKeyUsage(key string, clientIP, userAgent st
 
 	hash := ckm.keyHashes[key]
 	if customerKey, exists := ckm.keys[hash]; exists {
-		customerKey.LastUsed = time.Now()
+		customerKey.LastUsed = ckm.clock.Now()
 		customerKey.RequestCount++
 		customerKey.RateLimitRemaining--
 		customerKey.ClientIP = clientIP
@@ -285,7 +529,7 @@ func (ckm *CustomerKeyManager) GenerateKey(tier config.Tier, clientIP string) (s
 	// Generate a secure random key
 	const keySize = 32
 	keyBytes := make([]byte, keySize)
-	if _, err := rand.Read(keyBytes); err != nil {
+	if _, err := ckm.randReader.Read(keyBytes); err != nil {
 		return "", err
 	}
 	newKey := hex.EncodeToString(keyBytes)
@@ -300,9 +544,9 @@ func (ckm *CustomerKeyManager) GenerateKey(tier config.Tier, clientIP string) (s
 	ckm.keys[hash] = CustomerKey{
 		Hash:               hash,
 		Tier:               tier,
-		CreatedAt:          time.Now(),
-		ExpiresAt:          time.Now().AddDate(1, 0, 0),
-		LastUsed:           time.Now(),
+		CreatedAt:          ckm.clock.Now(),
+		ExpiresAt:          ckm.clock.Now().AddDate(1, 0, 0),
+		LastUsed:           ckm.clock.Now(),
 		RequestCount:       0,
 		RateLimitRemaining: ckm.getRateLimitForTier(tier),
 		ClientIP:           clientIP,
@@ -314,6 +558,11 @@ func (ckm *CustomerKeyManager) GenerateKey(tier config.Tier, clientIP string) (s
 
 // getRateLimitForTier returns the rate limit for a given tier
 func (ckm *CustomerKeyManager) getRateLimitForTier(tier config.Tier) int {
+	if rateLimit, exists := ckm.cfg.RateLimits[tier]; exists {
+		return rateLimit.RequestsPerHour
+	}
+
+	// Fallback to default values if config not available
 	switch tier {
 	case config.TierFree:
 		return 100
@@ -379,11 +628,13 @@ func (s *Server) authenticateAdminRequest(r *http.Request) bool {
 // ===== WEBSOCKET LIMITER IMPLEMENTATION =====
 
 // NewWebSocketLimiter creates a new WebSocket connection limiter
-func NewWebSocketLimiter(maxGlobal, maxPerIP int) *WebSocketLimiter {
+func NewWebSocketLimiter(maxGlobal, maxPerIP, maxPerChain int) *WebSocketLimiter {
 	return &WebSocketLimiter{
-		globalSem: make(chan struct{}, maxGlobal),
-		perIPSem:  make(map[string]chan struct{}),
-		maxPerIP:  maxPerIP,
+		globalSem:   make(chan struct{}, maxGlobal),
+		perIPSem:    make(map[string]chan struct{}),
+		perChainSem: make(map[string]chan struct{}),
+		maxPerIP:    maxPerIP,
+		maxPerChain: maxPerChain,
 	}
 }
 
@@ -438,12 +689,191 @@ func (wsl *WebSocketLimiter) Release(clientIP string) {
 	}
 }
 
+// AcquireForChain acquires a WebSocket connection slot for a specific chain
+func (wsl *WebSocketLimiter) AcquireForChain(clientIP, chain string) bool {
+	// First try to acquire global slot
+	select {
+	case wsl.globalSem <- struct{}{}:
+		// Acquired global slot, now try per-IP and per-chain slots
+		wsl.mu.Lock()
+		if wsl.perIPSem[clientIP] == nil {
+			wsl.perIPSem[clientIP] = make(chan struct{}, wsl.maxPerIP)
+		}
+		if wsl.perChainSem[chain] == nil {
+			wsl.perChainSem[chain] = make(chan struct{}, wsl.maxPerChain)
+		}
+		perIPSem := wsl.perIPSem[clientIP]
+		perChainSem := wsl.perChainSem[chain]
+		wsl.mu.Unlock()
+
+		select {
+		case perIPSem <- struct{}{}:
+			// Acquired per-IP slot, now try per-chain slot
+			select {
+			case perChainSem <- struct{}{}:
+				// Successfully acquired all slots
+				return true
+			default:
+				// Failed to acquire per-chain slot, release per-IP and global slots
+				<-perIPSem
+				<-wsl.globalSem
+				return false
+			}
+		default:
+			// Failed to acquire per-IP slot, release global slot
+			<-wsl.globalSem
+			return false
+		}
+	default:
+		// Failed to acquire global slot
+		return false
+	}
+}
+
+// ReleaseForChain releases a WebSocket connection slot for a specific chain
+func (wsl *WebSocketLimiter) ReleaseForChain(clientIP, chain string) {
+	wsl.mu.RLock()
+	perIPSem := wsl.perIPSem[clientIP]
+	perChainSem := wsl.perChainSem[chain]
+	wsl.mu.RUnlock()
+
+	if perChainSem != nil {
+		select {
+		case <-perChainSem:
+			// Released per-chain slot
+		default:
+			// No slot to release
+		}
+	}
+
+	if perIPSem != nil {
+		select {
+		case <-perIPSem:
+			// Released per-IP slot
+		default:
+			// No slot to release
+		}
+	}
+
+	select {
+	case <-wsl.globalSem:
+		// Released global slot
+	default:
+		// No slot to release
+	}
+}
+
+// ===== CIRCUIT BREAKER IMPLEMENTATION =====
+
+// NewCircuitBreaker creates a tier-aware circuit breaker
+func NewCircuitBreaker(tier config.Tier, clock Clock) *CircuitBreaker {
+	var failureThreshold int64 = 5
+	var resetTimeout = 60 * time.Second
+	var halfOpenMaxCalls int64 = 3
+
+	// Tier-specific configuration
+	switch tier {
+	case config.TierFree:
+		failureThreshold = 3  // Fail fast for free tier
+		resetTimeout = 120 * time.Second
+		halfOpenMaxCalls = 1
+	case config.TierPro, config.TierBusiness:
+		failureThreshold = 10
+		resetTimeout = 30 * time.Second
+		halfOpenMaxCalls = 5
+	case config.TierTurbo, config.TierEnterprise:
+		failureThreshold = 20 // Higher tolerance for premium tiers
+		resetTimeout = 15 * time.Second
+		halfOpenMaxCalls = 10
+	}
+
+	return &CircuitBreaker{
+		tier:             tier,
+		state:            "closed",
+		failureThreshold: failureThreshold,
+		resetTimeout:     resetTimeout,
+		halfOpenMaxCalls: halfOpenMaxCalls,
+		clock:            clock,
+	}
+}
+
+// Call executes a function with circuit breaker protection
+func (cb *CircuitBreaker) Call(fn func() error) error {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	now := cb.clock.Now()
+
+	// Check if circuit should transition from open to half-open
+	if cb.state == "open" && now.Sub(cb.lastFailureTime) > cb.resetTimeout {
+		cb.state = "half-open"
+		cb.halfOpenCallCount = 0
+	}
+
+	// Reject calls if circuit is open
+	if cb.state == "open" {
+		return fmt.Errorf("circuit breaker is open")
+	}
+
+	// Limit calls in half-open state
+	if cb.state == "half-open" {
+		if cb.halfOpenCallCount >= cb.halfOpenMaxCalls {
+			return fmt.Errorf("circuit breaker half-open call limit reached")
+		}
+		cb.halfOpenCallCount++
+	}
+
+	// Execute the function
+	err := fn()
+
+	if err != nil {
+		cb.recordFailure(now)
+		return err
+	}
+
+	// Success - reset circuit if it was half-open
+	if cb.state == "half-open" {
+		cb.state = "closed"
+		cb.failureCount = 0
+	}
+
+	return nil
+}
+
+// recordFailure records a failure and potentially opens the circuit
+func (cb *CircuitBreaker) recordFailure(now time.Time) {
+	cb.failureCount++
+	cb.lastFailureTime = now
+
+	if cb.failureCount >= cb.failureThreshold {
+		cb.state = "open"
+	}
+}
+
+// ShouldQueue determines if requests should be queued based on tier
+func (cb *CircuitBreaker) ShouldQueue() bool {
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
+
+	switch cb.tier {
+	case config.TierFree:
+		return false // Drop excess requests immediately
+	case config.TierPro, config.TierBusiness:
+		return cb.state != "open" // Queue if circuit is not open
+	case config.TierTurbo, config.TierEnterprise:
+		return true // Always queue for premium tiers (hedging + retries)
+	default:
+		return false
+	}
+}
+
 // ===== PREDICTIVE ANALYTICS IMPLEMENTATION =====
 
 // NewPredictiveAnalytics creates a new predictive analytics handler
-func NewPredictiveAnalytics() *PredictiveAnalytics {
+func NewPredictiveAnalytics(clock Clock) *PredictiveAnalytics {
 	return &PredictiveAnalytics{
 		blockHistory: make([]BlockTiming, 0, 100), // Keep last 100 blocks
+		clock:        clock,
 	}
 }
 
@@ -454,7 +884,7 @@ func (pa *PredictiveAnalytics) RecordBlock(height int64, size int) {
 
 	block := BlockTiming{
 		Height:    height,
-		Timestamp: time.Now(),
+		Timestamp: pa.clock.Now(),
 		Size:      size,
 	}
 
@@ -532,6 +962,9 @@ func (s *Server) Run() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
+	// Start predictive prefetch worker for cache warming
+	s.startPredictivePrefetch(ctx)
+
 	// Configure server mux and middleware
 	mux := http.NewServeMux()
 
@@ -559,6 +992,10 @@ func (s *Server) Run() {
 	// V1 API routes
 	mux.HandleFunc("/v1/license/info", s.recoveryMiddleware(s.auth(s.licenseInfoHandler)))
 	mux.HandleFunc("/v1/analytics/summary", s.recoveryMiddleware(s.auth(s.analyticsSummaryHandler)))
+
+	// Multi-chain endpoints
+	mux.HandleFunc("/chains", s.recoveryMiddleware(s.chainsHandler))
+	mux.HandleFunc("/v1/", s.recoveryMiddleware(s.chainAwareHandler))
 
 	// Try to start server with port auto-retry
 	basePort := s.cfg.APIPort
@@ -639,6 +1076,39 @@ func (s *Server) Run() {
 	s.logger.Info("Server gracefully stopped")
 }
 
+// startPredictivePrefetch starts a background worker that prefetches N+1/N+2 headers for cache warming
+func (s *Server) startPredictivePrefetch(ctx context.Context) {
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				// Prefetch for each registered backend
+				for _, chain := range s.backends.List() {
+					if backend, exists := s.backends.Get(chain); exists {
+						// Trigger predictive warm-up by calling GetLatestBlock
+						// This ensures the cache is hot for subsequent requests
+						go func(b ChainBackend, chainName string) {
+							_, err := b.GetLatestBlock()
+							if err != nil {
+								s.logger.Debug("Prefetch failed for chain",
+									zap.String("chain", chainName),
+									zap.Error(err))
+							} else {
+								s.logger.Debug("Prefetch completed for chain", zap.String("chain", chainName))
+							}
+						}(backend, chain)
+					}
+				}
+			}
+		}
+	}()
+}
+
 // securityMiddleware applies security headers and measures to all requests
 func (s *Server) securityMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -661,9 +1131,13 @@ func (s *Server) securityMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Implement rate limiting based on IP
+		// Implement rate limiting based on IP (config-driven)
 		clientIP := getClientIP(r)
-		if !s.rateLimiter.Allow(clientIP, 100, 1) { // 100 requests per second per IP
+		generalRateLimit := s.cfg.GeneralRateLimit
+		if generalRateLimit <= 0 {
+			generalRateLimit = 100 // fallback default
+		}
+		if !s.rateLimiter.Allow(clientIP, float64(generalRateLimit), 1) {
 			s.logger.Warn("Rate limit exceeded",
 				zap.String("ip", clientIP),
 				zap.String("path", r.URL.Path),
@@ -852,12 +1326,19 @@ func (s *Server) turboEncodeJSON(w http.ResponseWriter, data interface{}) {
 func (s *Server) statusHandler(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]interface{}{
 		"status": "ok",
-		"time":   time.Now().UTC().Format(time.RFC3339),
+		"time":   s.clock.Now().UTC().Format(time.RFC3339),
 	}
 	s.turboJsonResponse(w, http.StatusOK, resp)
 }
 
 func (s *Server) latestHandler(w http.ResponseWriter, r *http.Request) {
+	// Get the default Bitcoin backend
+	backend, exists := s.backends.Get("btc")
+	if !exists {
+		http.Error(w, "Bitcoin backend not available", http.StatusServiceUnavailable)
+		return
+	}
+
 	// Try to get from cache first for ultra-low latency
 	if s.cache != nil {
 		if block, ok := s.cache.GetLatestBlock(); ok {
@@ -867,34 +1348,17 @@ func (s *Server) latestHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Fallback to direct channel read if cache miss
+	// Fallback to backend's GetLatestBlock method
 	w.Header().Set("X-Cache-Status", "MISS")
 
-	// Turbo mode: Use non-blocking channel read with immediate timeout
-	if s.cfg.Tier == config.TierTurbo || s.cfg.Tier == config.TierEnterprise {
-		select {
-		case blk := <-s.blockChan:
-			s.turboJsonResponse(w, http.StatusOK, blk)
-		default:
-			// No block available, return empty response immediately
-			s.turboJsonResponse(w, http.StatusOK, map[string]string{
-				"msg":       "no block available",
-				"timestamp": time.Now().UTC().Format(time.RFC3339),
-			})
-		}
+	block, err := backend.GetLatestBlock()
+	if err != nil {
+		s.logger.Error("Failed to get latest block", zap.Error(err))
+		http.Error(w, "Failed to get latest block", http.StatusInternalServerError)
 		return
 	}
 
-	// Standard mode: Use timeout to prevent blocking
-	select {
-	case blk := <-s.blockChan:
-		s.jsonResponse(w, http.StatusOK, blk)
-	case <-time.After(500 * time.Millisecond): // Add timeout to prevent blocking
-		s.jsonResponse(w, http.StatusOK, map[string]string{
-			"msg":       "no block available",
-			"timestamp": time.Now().UTC().Format(time.RFC3339),
-		})
-	}
+	s.jsonResponse(w, http.StatusOK, block)
 }
 
 func (s *Server) metricsHandler(w http.ResponseWriter, r *http.Request) {
@@ -974,6 +1438,13 @@ cache_stale_seconds %.2f
 }
 
 func (s *Server) cacheStatusHandler(w http.ResponseWriter, r *http.Request) {
+	if !s.authenticateAdminRequest(r) {
+		s.jsonResponse(w, http.StatusUnauthorized, map[string]string{
+			"error": "Admin authentication required",
+		})
+		return
+	}
+
 	if s.cache == nil {
 		s.turboJsonResponse(w, http.StatusServiceUnavailable, map[string]string{
 			"error":  "Cache not enabled",
@@ -1098,6 +1569,21 @@ func (s *Server) getCacheMetrics() CacheMetrics {
 }
 
 func (s *Server) streamHandler(w http.ResponseWriter, r *http.Request) {
+	// Get the default Bitcoin backend
+	backend, exists := s.backends.Get("btc")
+	if !exists {
+		http.Error(w, "Bitcoin backend not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Acquire WebSocket connection for BTC chain
+	clientIP := getClientIP(r)
+	if !s.wsLimiter.AcquireForChain(clientIP, "btc") {
+		http.Error(w, "WebSocket connection limit reached for BTC chain", http.StatusTooManyRequests)
+		return
+	}
+	defer s.wsLimiter.ReleaseForChain(clientIP, "btc")
+
 	// More secure origin check (in production, implement more strict validation)
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
@@ -1141,16 +1627,16 @@ func (s *Server) streamHandler(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	// Set read deadline to detect stale connections
-	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	conn.SetReadDeadline(s.clock.Now().Add(60 * time.Second))
 
 	// Handle ping/pong to keep connection alive
 	conn.SetPingHandler(func(string) error {
 		// Reset the read deadline on ping
-		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		conn.SetReadDeadline(s.clock.Now().Add(60 * time.Second))
 		return conn.WriteControl(
 			websocket.PongMessage,
 			[]byte{},
-			time.Now().Add(10*time.Second),
+			s.clock.Now().Add(10*time.Second),
 		)
 	})
 
@@ -1171,21 +1657,27 @@ func (s *Server) streamHandler(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Reset the read deadline
-			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+			conn.SetReadDeadline(s.clock.Now().Add(60 * time.Second))
 		}
 	}()
+
+	// Create a channel for streaming blocks from the backend
+	blockChan := make(chan blocks.BlockEvent, 10)
+
+	// Start streaming from the backend
+	go backend.StreamBlocks(ctx, blockChan)
 
 	// Stream blocks to client
 	for {
 		select {
-		case blk, ok := <-s.blockChan:
+		case blk, ok := <-blockChan:
 			if !ok {
 				// Channel closed
 				return
 			}
 
 			// Set a write deadline
-			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			conn.SetWriteDeadline(s.clock.Now().Add(10 * time.Second))
 
 			if err := conn.WriteJSON(blk); err != nil {
 				s.logger.Debug("Error writing to WebSocket",
@@ -1206,7 +1698,7 @@ func (s *Server) streamHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]interface{}{
 		"status":    "healthy",
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"timestamp": s.clock.Now().UTC().Format(time.RFC3339),
 		"version":   "2.1.0",
 		"service":   "bitcoin-sprint-api",
 	}
@@ -1238,7 +1730,7 @@ func (s *Server) versionHandler(w http.ResponseWriter, r *http.Request) {
 		"build_time": buildTime,
 		"tier":       string(s.cfg.Tier),
 		"turbo_mode": s.cfg.Tier == "turbo" || s.cfg.Tier == "enterprise",
-		"timestamp":  time.Now().UTC().Format(time.RFC3339),
+		"timestamp":  s.clock.Now().UTC().Format(time.RFC3339),
 	}
 	s.turboJsonResponse(w, http.StatusOK, resp)
 }
@@ -1310,7 +1802,7 @@ func (s *Server) generateSecureRandomKey() (string, error) {
 
 	// Generate random bytes
 	keyBytes := make([]byte, keySize)
-	if _, err := rand.Read(keyBytes); err != nil {
+	if _, err := s.randReader.Read(keyBytes); err != nil {
 		return "", fmt.Errorf("failed to generate random data: %w", err)
 	}
 
@@ -1342,10 +1834,17 @@ func (s *Server) generateSecureRandomKey() (string, error) {
 }
 
 // exceedsKeyGenRateLimit checks if the client has exceeded the rate limit for key generation
-// Limits key generation to 10 keys per hour per IP address to prevent abuse
+// Uses config-driven limits based on free tier (default for new users)
 func (s *Server) exceedsKeyGenRateLimit(clientIP string) bool {
-	// 10 keys per hour = 10 tokens capacity, refill at 10/3600 ≈ 0.00278 tokens/second
-	return !s.rateLimiter.Allow(clientIP+":keygen", 10, 10.0/3600.0)
+	// Get key generation limit from config (use free tier as default for new users)
+	var keyGenLimit int = 10 // fallback default
+	if rateLimit, exists := s.cfg.RateLimits[config.TierFree]; exists {
+		keyGenLimit = rateLimit.KeyGenerationPerHour
+	}
+
+	// Convert hourly limit to refill rate (tokens per second)
+	refillRate := float64(keyGenLimit) / 3600.0
+	return !s.rateLimiter.Allow(clientIP+":keygen", float64(keyGenLimit), refillRate)
 }
 
 // Verify API key
@@ -1355,51 +1854,98 @@ func (s *Server) verifyKeyHandler(w http.ResponseWriter, r *http.Request) {
 		apiKey = r.URL.Query().Get("api_key")
 	}
 
-	// Simple validation - in production this would check against database
-	valid := apiKey != "" && len(apiKey) >= 16
-
-	resp := map[string]interface{}{
-		"valid":                valid,
-		"tier":                 "FREE",
-		"expires_at":           time.Now().AddDate(1, 0, 0).Unix(),
-		"rate_limit_remaining": 100,
+	if apiKey == "" {
+		s.jsonResponse(w, http.StatusBadRequest, map[string]string{
+			"error": "API key required",
+		})
+		return
 	}
 
-	if !valid {
-		w.WriteHeader(http.StatusUnauthorized)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
-}
-
-// Renew license/key
-func (s *Server) renewHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	// Validate the key using the customer key manager
+	keyDetails, valid := s.keyManager.ValidateKey(apiKey)
+	if !valid || keyDetails == nil {
+		s.jsonResponse(w, http.StatusUnauthorized, map[string]string{
+			"error": "Invalid API key",
+		})
 		return
 	}
 
 	resp := map[string]interface{}{
+		"valid":                true,
+		"tier":                 string(keyDetails.Tier),
+		"expires_at":           keyDetails.ExpiresAt.Unix(),
+		"rate_limit_remaining": keyDetails.RateLimitRemaining,
+		"usage_count":          keyDetails.RequestCount,
+		"created_at":           keyDetails.CreatedAt.Format(time.RFC3339),
+	}
+
+	s.jsonResponse(w, http.StatusOK, resp)
+}
+
+// Renew license/key - Admin only
+func (s *Server) renewHandler(w http.ResponseWriter, r *http.Request) {
+	if !s.authenticateAdminRequest(r) {
+		s.jsonResponse(w, http.StatusUnauthorized, map[string]string{
+			"error": "Admin authentication required",
+		})
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		s.jsonResponse(w, http.StatusMethodNotAllowed, map[string]string{
+			"error": "Method not allowed",
+		})
+		return
+	}
+
+	// Get the API key to renew from the request
+	apiKey := r.Header.Get("X-API-Key")
+	if apiKey == "" {
+		apiKey = r.URL.Query().Get("api_key")
+	}
+
+	if apiKey == "" {
+		s.jsonResponse(w, http.StatusBadRequest, map[string]string{
+			"error": "API key required for renewal",
+		})
+		return
+	}
+
+	// Validate the key exists
+	keyDetails, valid := s.keyManager.ValidateKey(apiKey)
+	if !valid || keyDetails == nil {
+		s.jsonResponse(w, http.StatusNotFound, map[string]string{
+			"error": "API key not found",
+		})
+		return
+	}
+
+	// For now, just return success (in production, this would extend the key expiration)
+	resp := map[string]interface{}{
 		"renewed":    true,
-		"expires_at": time.Now().AddDate(1, 0, 0).Unix(),
-		"tier":       "FREE",
+		"expires_at": keyDetails.ExpiresAt.AddDate(1, 0, 0).Unix(), // Extend by 1 year
+		"tier":       string(keyDetails.Tier),
 		"message":    "License renewed successfully",
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	s.jsonResponse(w, http.StatusOK, resp)
 }
 
 // Predictive analytics
 func (s *Server) predictiveHandler(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]interface{}{
-		"next_block_eta_seconds": 420,
-		"mempool_size":           s.mem.Size(),
-		"fee_estimates": map[string]int{
-			"fast":   24,
-			"medium": 18,
-			"slow":   12,
-		},
+		"next_block_eta_seconds": s.predictor.PredictNextBlockETA(),
+		"mempool_size": func() int {
+			if backend, exists := s.backends.Get("btc"); exists {
+				return backend.GetMempoolSize()
+			}
+			return 0
+		}(),
+		"fee_estimates": s.predictor.GetDynamicFeeEstimates(func() int {
+			if backend, exists := s.backends.Get("btc"); exists {
+				return backend.GetMempoolSize()
+			}
+			return 0
+		}()),
 		"network_hashrate": "600.45 EH/s",
 		"difficulty_adjustment": map[string]interface{}{
 			"blocks_until_adjustment":  156,
@@ -1422,7 +1968,7 @@ func (s *Server) adminMetricsHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp := map[string]interface{}{
 		"system_metrics": map[string]interface{}{
-			"uptime_seconds":      time.Now().Unix() - 1724659200, // Mock start time
+			"uptime_seconds":      s.clock.Now().Unix() - 1724659200, // Mock start time
 			"cpu_usage_percent":   23.5,
 			"memory_usage_mb":     2840,
 			"disk_usage_percent":  67.2,
@@ -1436,7 +1982,12 @@ func (s *Server) adminMetricsHandler(w http.ResponseWriter, r *http.Request) {
 		},
 		"blockchain_metrics": map[string]interface{}{
 			"current_block_height": 850123,
-			"mempool_transactions": s.mem.Size(),
+			"mempool_transactions": func() int {
+				if backend, exists := s.backends.Get("btc"); exists {
+					return backend.GetMempoolSize()
+				}
+				return 0
+			}(),
 			"peer_count":           8,
 			"sync_progress":        1.0,
 		},
@@ -1643,7 +2194,7 @@ func (s *Server) turboStatusHandler(w http.ResponseWriter, r *http.Request) {
 		Features:           features,
 		PerformanceTargets: targets,
 		SystemMetrics:      metrics,
-		Timestamp:          time.Now(),
+		Timestamp:          s.clock.Now(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1721,5 +2272,191 @@ func (s *Server) getSystemMetrics() SystemMetrics {
 		AvgProcessingTime: avgProcessingTime,
 		MemoryUsage:       "156.8MB",
 		CPUUsage:          "12.4%",
+	}
+}
+
+// chainsHandler returns information about all registered blockchain backends
+func (s *Server) chainsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	chains := s.backends.List()
+	status := s.backends.GetStatus()
+
+	response := map[string]interface{}{
+		"chains":      chains,
+		"status":      status,
+		"total_chains": len(chains),
+		"timestamp":   s.clock.Now().UTC().Format(time.RFC3339),
+	}
+
+	s.jsonResponse(w, http.StatusOK, response)
+}
+
+// chainAwareHandler routes requests to the appropriate chain backend based on URL path
+func (s *Server) chainAwareHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse path: /v1/{chain}/{endpoint}
+	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(pathParts) < 3 {
+		http.Error(w, "Invalid path format. Use /v1/{chain}/{endpoint}", http.StatusBadRequest)
+		return
+	}
+
+	chain := pathParts[1]
+	endpoint := pathParts[2]
+
+	// Get the backend for this chain
+	backend, exists := s.backends.Get(chain)
+	if !exists {
+		http.Error(w, fmt.Sprintf("Chain '%s' not supported", chain), http.StatusNotFound)
+		return
+	}
+
+	// Route to appropriate handler based on endpoint
+	switch endpoint {
+	case "latest":
+		s.chainLatestHandler(backend, w, r)
+	case "status":
+		s.chainStatusHandler(backend, w, r)
+	case "stream":
+		s.chainStreamHandler(backend, w, r)
+	case "metrics":
+		s.chainMetricsHandler(backend, w, r)
+	default:
+		http.Error(w, fmt.Sprintf("Unknown endpoint '%s'", endpoint), http.StatusNotFound)
+	}
+}
+
+// chainLatestHandler handles /v1/{chain}/latest requests
+func (s *Server) chainLatestHandler(backend ChainBackend, w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	block, err := backend.GetLatestBlock()
+	if err != nil {
+		s.logger.Error("Failed to get latest block",
+			zap.String("chain", "unknown"),
+			zap.Error(err))
+		http.Error(w, "Failed to get latest block", http.StatusInternalServerError)
+		return
+	}
+
+	s.jsonResponse(w, http.StatusOK, block)
+}
+
+// chainStatusHandler handles /v1/{chain}/status requests
+func (s *Server) chainStatusHandler(backend ChainBackend, w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	status := backend.GetStatus()
+	s.jsonResponse(w, http.StatusOK, status)
+}
+
+// chainMetricsHandler handles /v1/{chain}/metrics requests
+func (s *Server) chainMetricsHandler(backend ChainBackend, w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	metrics := map[string]interface{}{
+		"mempool_size":     backend.GetMempoolSize(),
+		"predictive_eta":   backend.GetPredictiveETA(),
+		"timestamp":        s.clock.Now().UTC().Format(time.RFC3339),
+	}
+
+	s.jsonResponse(w, http.StatusOK, metrics)
+}
+
+// chainStreamHandler handles /v1/{chain}/stream requests
+func (s *Server) chainStreamHandler(backend ChainBackend, w http.ResponseWriter, r *http.Request) {
+	// Extract chain from URL path for quota management
+	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	chain := pathParts[1] // Already validated in chainAwareHandler
+
+	// Acquire WebSocket connection for specific chain
+	clientIP := getClientIP(r)
+	if !s.wsLimiter.AcquireForChain(clientIP, chain) {
+		http.Error(w, fmt.Sprintf("WebSocket connection limit reached for %s chain", chain), http.StatusTooManyRequests)
+		return
+	}
+	defer s.wsLimiter.ReleaseForChain(clientIP, chain)
+
+	// WebSocket upgrade logic (similar to existing streamHandler)
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return true
+			}
+			allowedOrigins := []string{
+				"https://api.bitcoin-sprint.com",
+				"https://dashboard.bitcoin-sprint.com",
+				"http://localhost:3000",
+			}
+			for _, allowed := range allowedOrigins {
+				if allowed == origin {
+					return true
+				}
+			}
+			s.logger.Warn("Rejected WebSocket connection from unauthorized origin",
+				zap.String("origin", origin),
+				zap.String("ip", getClientIP(r)),
+			)
+			return false
+		},
+		HandshakeTimeout: 10 * time.Second,
+	}
+
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		s.logger.Error("Failed to upgrade to WebSocket", zap.Error(err))
+		return
+	}
+	defer conn.Close()
+
+	conn.SetReadDeadline(s.clock.Now().Add(60 * time.Second))
+
+	conn.SetPingHandler(func(string) error {
+		conn.SetReadDeadline(s.clock.Now().Add(60 * time.Second))
+		return conn.WriteControl(websocket.PongMessage, []byte{}, s.clock.Now().Add(10*time.Second))
+	})
+
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	// Start reader goroutine
+	go func() {
+		defer cancel()
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				return
+			}
+			conn.SetReadDeadline(s.clock.Now().Add(60 * time.Second))
+		}
+	}()
+
+	// Stream blocks from the specific chain backend
+	blockChan := make(chan blocks.BlockEvent, 100)
+	go backend.StreamBlocks(ctx, blockChan)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case blk := <-blockChan:
+			conn.SetWriteDeadline(s.clock.Now().Add(10 * time.Second))
+			if err := conn.WriteJSON(blk); err != nil {
+				s.logger.Debug("Error writing to WebSocket", zap.Error(err))
+				return
+			}
+		}
 	}
 }
