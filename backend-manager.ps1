@@ -116,8 +116,8 @@ function Start-Backend {
         
         Write-Host "API endpoints available at: http://localhost:$Port/" -ForegroundColor Cyan
         Write-Host " - Health check: http://localhost:$Port/health" -ForegroundColor Cyan
-        Write-Host " - Status: http://localhost:$Port/status" -ForegroundColor Cyan
         Write-Host " - Version: http://localhost:$Port/version" -ForegroundColor Cyan
+        Write-Host " - Status (requires auth): http://localhost:$Port/v1/status" -ForegroundColor Cyan
     } else {
         Write-Host "❌ Failed to start backend" -ForegroundColor Red
     }

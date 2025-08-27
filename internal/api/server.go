@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -130,4 +131,14 @@ func (s *Server) Stop() {
 			s.logger.Error("Server shutdown error", zap.Error(err))
 		}
 	}
+}
+
+// Run starts the API server and blocks until shutdown
+func (s *Server) Run(ctx context.Context) {
+	s.logger.Info("Starting API server",
+		zap.String("addr", fmt.Sprintf("%s:%d", s.cfg.APIHost, s.cfg.APIPort)))
+	
+	// TODO: Implement proper server startup logic
+	// This is a placeholder until the API module is fully restructured
+	s.logger.Info("API server run method called - implement server startup")
 }
