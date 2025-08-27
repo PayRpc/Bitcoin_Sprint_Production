@@ -78,6 +78,24 @@ func (b *Buffer) Read(dst []byte) (int, error) {
 	return readLen, nil
 }
 
+// ReadToSlice reads all buffer content to a new slice
+func (b *Buffer) ReadToSlice() ([]byte, error) {
+	if b == nil {
+		return nil, errors.New("buffer is nil")
+	}
+	if b.length == 0 {
+		return []byte{}, nil
+	}
+
+	data := make([]byte, b.length)
+	n, err := b.Read(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return data[:n], nil
+}
+
 // Len returns the current length of data in the buffer
 func (b *Buffer) Len() int {
 	if b == nil {

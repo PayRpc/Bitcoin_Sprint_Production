@@ -13,6 +13,7 @@ import (
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/license"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/securebuf"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )
@@ -180,13 +181,34 @@ func (s *Server) generateKeyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate a new API key
+	// Generate a new API key using secure buffer
+	keyBuf, err := securebuf.New(32)
+	if err != nil {
+		http.Error(w, "buffer creation failed", http.StatusInternalServerError)
+		return
+	}
+	defer keyBuf.Free()
+
+	// Fill with secure random data
 	keyBytes := make([]byte, 32)
 	if _, err := rand.Read(keyBytes); err != nil {
 		http.Error(w, "key generation failed", http.StatusInternalServerError)
 		return
 	}
-	newKey := hex.EncodeToString(keyBytes)
+	
+	if err := keyBuf.Write(keyBytes); err != nil {
+		http.Error(w, "key buffer write failed", http.StatusInternalServerError)
+		return
+	}
+
+	// Read from secure buffer 
+	finalKeyBytes, err := keyBuf.ReadToSlice()
+	if err != nil {
+		http.Error(w, "key buffer read failed", http.StatusInternalServerError)
+		return
+	}
+
+	newKey := hex.EncodeToString(finalKeyBytes)
 
 	resp := map[string]interface{}{
 		"api_key":    newKey,

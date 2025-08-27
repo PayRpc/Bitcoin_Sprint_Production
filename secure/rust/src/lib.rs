@@ -12,6 +12,12 @@ extern crate libc;
 #[cfg(windows)]
 extern crate winapi;
 
+// Entropy module for hybrid Bitcoin + OS + jitter randomness
+pub mod entropy;
+
+// SecureBuffer entropy integration
+pub mod securebuffer_entropy;
+
 mod memory {
     use std::io;
 
