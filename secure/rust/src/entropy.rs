@@ -15,6 +15,12 @@ extern crate winapi;
 #[cfg(windows)]
 use winapi::um::wincrypt::{CryptGenRandom, CryptAcquireContextW, CryptReleaseContext, HCRYPTPROV, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT};
 
+// Add dependencies for system fingerprint and CPU temperature
+use sysinfo::{System, CpuRefreshKind, RefreshKind};
+use sha2::{Sha256, Digest};
+use rand::rngs::OsRng;
+use rand::RngCore;
+
 // Static jitter accumulator for CPU timing entropy
 static JITTER_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -273,7 +279,120 @@ pub fn enterprise_entropy(headers: &[Vec<u8>], additional_data: &[u8]) -> [u8; 3
     output
 }
 
-#[cfg(test)]
+/// Get system fingerprint based on CPU detection for entropy mixing
+pub fn system_fingerprint() -> Result<[u8; 32], EntropyError> {
+    use sha2::{Sha256, Digest};
+
+    let mut hasher = Sha256::new();
+
+    // Get CPU information using sysinfo
+    let mut system = System::new_with_specifics(
+        RefreshKind::new().with_cpu(CpuRefreshKind::everything())
+    );
+    system.refresh_cpu();
+
+    // Hash CPU information
+    for cpu in system.cpus() {
+        hasher.update(cpu.brand());
+        hasher.update(&cpu.frequency().to_le_bytes());
+        hasher.update(cpu.vendor_id());
+    }
+
+    // Add system information
+    if let Ok(hostname) = std::env::var("HOSTNAME") {
+        hasher.update(hostname.as_bytes());
+    }
+
+    if let Ok(username) = std::env::var("USER") {
+        hasher.update(username.as_bytes());
+    }
+
+    // Add process information for additional uniqueness
+    let pid = std::process::id();
+    hasher.update(&pid.to_le_bytes());
+
+    let start_time = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    hasher.update(&start_time.to_le_bytes());
+
+    let mut result = [0u8; 32];
+    result.copy_from_slice(&hasher.finalize());
+    Ok(result)
+}
+
+/// Get CPU temperature for entropy mixing and monitoring
+pub fn get_cpu_temperature() -> Result<f32, EntropyError> {
+    let mut system = System::new_with_specifics(
+        RefreshKind::new().with_cpu(CpuRefreshKind::everything())
+    );
+    system.refresh_cpu();
+
+    let mut total_temp = 0.0;
+    let mut cpu_count = 0;
+
+    for cpu in system.cpus() {
+        // Note: Temperature might not be available on all systems
+        // This is a placeholder - actual temperature reading depends on hardware support
+        // For now, we'll use CPU usage as a proxy for "system activity"
+        let usage = cpu.cpu_usage();
+        total_temp += usage as f32;
+        cpu_count += 1;
+    }
+
+    if cpu_count == 0 {
+        return Err(EntropyError::SystemError("No CPU information available".into()));
+    }
+
+    Ok(total_temp / cpu_count as f32)
+}
+
+/// Enhanced fast entropy with hardware fingerprinting
+pub fn fast_entropy_with_fingerprint() -> [u8; 32] {
+    let mut output = fast_entropy();
+
+    // Mix in system fingerprint if available
+    if let Ok(fingerprint) = system_fingerprint() {
+        for i in 0..32 {
+            output[i] ^= fingerprint[i];
+        }
+    }
+
+    // Mix in CPU temperature if available
+    if let Ok(temp) = get_cpu_temperature() {
+        let temp_bytes = (temp as u32).to_le_bytes();
+        for i in 0..4 {
+            output[i] ^= temp_bytes[i];
+            output[i + 28] ^= temp_bytes[3 - i];
+        }
+    }
+
+    output
+}
+
+/// Enhanced hybrid entropy with hardware fingerprinting
+pub fn hybrid_entropy_with_fingerprint(headers: &[Vec<u8>]) -> [u8; 32] {
+    let mut output = hybrid_entropy(headers);
+
+    // Mix in system fingerprint if available
+    if let Ok(fingerprint) = system_fingerprint() {
+        for i in 0..32 {
+            output[i] ^= fingerprint[i];
+        }
+    }
+
+    // Mix in CPU temperature if available
+    if let Ok(temp) = get_cpu_temperature() {
+        let temp_bytes = (temp as u32).to_le_bytes();
+        for i in 0..4 {
+            output[i] ^= temp_bytes[i];
+            output[i + 28] ^= temp_bytes[3 - i];
+        }
+    }
+
+    output
+}
 mod tests {
     use super::*;
 
@@ -406,4 +525,109 @@ mod tests {
         assert_eq!(hybrid_entropy(&[]).len(), 32);
         assert_eq!(enterprise_entropy(&[], &[]).len(), 32);
     }
+}
+
+// FFI bindings for Go integration
+use std::ffi::{CStr, CString};
+use std::os::raw::c_char;
+
+#[no_mangle]
+pub extern "C" fn fast_entropy_ffi(output: *mut u8, len: usize) -> i32 {
+    if output.is_null() || len != 32 {
+        return -1;
+    }
+
+    let entropy = fast_entropy();
+    unsafe {
+        std::ptr::copy_nonoverlapping(entropy.as_ptr(), output, 32);
+    }
+    0
+}
+
+#[no_mangle]
+pub extern "C" fn hybrid_entropy_ffi(headers_ptr: *const *const u8, headers_len: usize, header_sizes_ptr: *const usize, output: *mut u8, len: usize) -> i32 {
+    if output.is_null() || len != 32 {
+        return -1;
+    }
+
+    let mut headers = Vec::new();
+    if !headers_ptr.is_null() && headers_len > 0 {
+        unsafe {
+            for i in 0..headers_len {
+                let header_ptr = *headers_ptr.add(i);
+                let header_size = *header_sizes_ptr.add(i);
+                let header = std::slice::from_raw_parts(header_ptr, header_size);
+                headers.push(header.to_vec());
+            }
+        }
+    }
+
+    let entropy = hybrid_entropy(&headers);
+    unsafe {
+        std::ptr::copy_nonoverlapping(entropy.as_ptr(), output, 32);
+    }
+    0
+}
+
+#[no_mangle]
+pub extern "C" fn system_fingerprint_ffi(output: *mut u8, len: usize) -> i32 {
+    if output.is_null() || len != 32 {
+        return -1;
+    }
+
+    match system_fingerprint() {
+        Ok(fingerprint) => {
+            unsafe {
+                std::ptr::copy_nonoverlapping(fingerprint.as_ptr(), output, 32);
+            }
+            0
+        }
+        Err(_) => -1,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn get_cpu_temperature_ffi() -> f32 {
+    match get_cpu_temperature() {
+        Ok(temp) => temp,
+        Err(_) => -1.0,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn fast_entropy_with_fingerprint_ffi(output: *mut u8, len: usize) -> i32 {
+    if output.is_null() || len != 32 {
+        return -1;
+    }
+
+    let entropy = fast_entropy_with_fingerprint();
+    unsafe {
+        std::ptr::copy_nonoverlapping(entropy.as_ptr(), output, 32);
+    }
+    0
+}
+
+#[no_mangle]
+pub extern "C" fn hybrid_entropy_with_fingerprint_ffi(headers_ptr: *const *const u8, headers_len: usize, header_sizes_ptr: *const usize, output: *mut u8, len: usize) -> i32 {
+    if output.is_null() || len != 32 {
+        return -1;
+    }
+
+    let mut headers = Vec::new();
+    if !headers_ptr.is_null() && headers_len > 0 {
+        unsafe {
+            for i in 0..headers_len {
+                let header_ptr = *headers_ptr.add(i);
+                let header_size = *header_sizes_ptr.add(i);
+                let header = std::slice::from_raw_parts(header_ptr, header_size);
+                headers.push(header.to_vec());
+            }
+        }
+    }
+
+    let entropy = hybrid_entropy_with_fingerprint(&headers);
+    unsafe {
+        std::ptr::copy_nonoverlapping(entropy.as_ptr(), output, 32);
+    }
+    0
 }

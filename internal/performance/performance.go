@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sync"
+	"syscall"
+	"unsafe"
 
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 	"go.uber.org/zap"
@@ -66,7 +68,7 @@ func NewBufferPool() *BufferPool {
 	}
 }
 
-// Get retrieves a buffer from the pool
+// Get retrieves a buffer from the pool with optional memory locking
 func (bp *BufferPool) Get(size int) []byte {
 	if size > bp.maxSize {
 		return make([]byte, size)
@@ -89,15 +91,23 @@ func (bp *BufferPool) Get(size int) []byte {
 		bp.mu.Unlock()
 	}
 	
-	return pool.Get().([]byte)
+	buf := pool.Get().([]byte)
+	
+	// Attempt to lock buffer in memory for sensitive data (best-effort)
+	bp.lockBufferInMemory(buf)
+	
+	return buf
 }
 
-// Put returns a buffer to the pool
+// Put returns a buffer to the pool with secure zeroization
 func (bp *BufferPool) Put(buf []byte) {
 	size := cap(buf)
 	if size > bp.maxSize {
 		return
 	}
+	
+	// Unlock buffer from memory before returning to pool
+	bp.unlockBufferFromMemory(buf)
 	
 	bp.mu.RLock()
 	pool, exists := bp.pools[size]
@@ -109,6 +119,52 @@ func (bp *BufferPool) Put(buf []byte) {
 			buf[i] = 0
 		}
 		pool.Put(buf[:0]) // Reset length but keep capacity
+	}
+}
+
+// lockBufferInMemory attempts to lock buffer in memory (best-effort)
+func (bp *BufferPool) lockBufferInMemory(buf []byte) {
+	// On Windows, use VirtualLock for memory locking
+	// This is a best-effort operation - failure is not fatal
+	defer func() {
+		if r := recover(); r != nil {
+			// Silently ignore locking failures
+		}
+	}()
+	
+	// For sensitive data buffers, attempt to lock in memory
+	// This prevents sensitive data from being paged out
+	if len(buf) > 0 {
+		// Use Windows VirtualLock via kernel32.dll
+		kernel32 := syscall.NewLazyDLL("kernel32.dll")
+		virtualLock := kernel32.NewProc("VirtualLock")
+		
+		if virtualLock != nil {
+			addr := uintptr(unsafe.Pointer(&buf[0]))
+			size := uintptr(len(buf))
+			virtualLock.Call(addr, size)
+		}
+	}
+}
+
+// unlockBufferFromMemory unlocks buffer from memory
+func (bp *BufferPool) unlockBufferFromMemory(buf []byte) {
+	defer func() {
+		if r := recover(); r != nil {
+			// Silently ignore unlocking failures
+		}
+	}()
+	
+	if len(buf) > 0 {
+		// Use Windows VirtualUnlock via kernel32.dll
+		kernel32 := syscall.NewLazyDLL("kernel32.dll")
+		virtualUnlock := kernel32.NewProc("VirtualUnlock")
+		
+		if virtualUnlock != nil {
+			addr := uintptr(unsafe.Pointer(&buf[0]))
+			size := uintptr(len(buf))
+			virtualUnlock.Call(addr, size)
+		}
 	}
 }
 

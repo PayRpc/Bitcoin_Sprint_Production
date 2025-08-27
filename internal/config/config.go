@@ -38,13 +38,17 @@ type Config struct {
 	LockOSThread    bool // Pin main thread to OS thread
 	PreallocBuffers bool // Pre-allocate memory buffers
 
-	// Turbo mode enhancements
-	Tier               Tier
-	WriteDeadline      time.Duration
-	UseSharedMemory    bool
-	BlockBufferSize    int
-	EnableKernelBypass bool
-	MockFastBlocks     bool // Enable fast block simulation for testing/demo
+	// Tier-aware P2P settings
+	Tier                    Tier
+	WriteDeadline           time.Duration
+	UseSharedMemory         bool
+	BlockBufferSize         int
+	EnableKernelBypass      bool
+	MockFastBlocks          bool // Enable fast block simulation for testing/demo
+	
+	// Tier-aware limits
+	MaxOutstandingHeadersPerPeer int // Maximum headers per peer
+	PipelineWorkers             int // Number of pipeline workers
 }
 
 // Load reads config from env
@@ -88,6 +92,8 @@ func Load() Config {
 		cfg.BlockBufferSize = 2048
 		cfg.UseMemoryChannel = true
 		cfg.UseDirectP2P = true
+		cfg.MaxOutstandingHeadersPerPeer = 5000
+		cfg.PipelineWorkers = 2
 	case TierEnterprise:
 		cfg.WriteDeadline = 200 * time.Microsecond
 		cfg.UseSharedMemory = true
@@ -95,12 +101,21 @@ func Load() Config {
 		cfg.UseMemoryChannel = true
 		cfg.UseDirectP2P = true
 		cfg.OptimizeSystem = true
+		cfg.MaxOutstandingHeadersPerPeer = 2000
+		cfg.PipelineWorkers = 1
 	case TierBusiness:
 		cfg.WriteDeadline = 1 * time.Second
 		cfg.BlockBufferSize = 1536
+		cfg.MaxOutstandingHeadersPerPeer = 1000
+		cfg.PipelineWorkers = 1
 	case TierPro:
 		cfg.WriteDeadline = 1500 * time.Millisecond
 		cfg.BlockBufferSize = 1280
+		cfg.MaxOutstandingHeadersPerPeer = 500
+		cfg.PipelineWorkers = 1
+	case TierFree:
+		cfg.MaxOutstandingHeadersPerPeer = 200
+		cfg.PipelineWorkers = 1
 	}
 
 	return cfg

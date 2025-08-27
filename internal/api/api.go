@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/entropy"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/license"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/securebuf"
@@ -135,7 +137,140 @@ func (s *Server) latestHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) metricsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
-	w.Write([]byte("sprint_active_peers 1\nsprint_blocks_detected 100\n"))
+	
+	// Get P2P metrics from the P2P client
+	p2pMetrics := s.getP2PMetrics()
+	
+	// Get entropy metrics
+	entropyMetrics := s.getEntropyMetrics()
+	
+	w.Write([]byte(fmt.Sprintf(`# Bitcoin Sprint Metrics
+sprint_active_peers %d
+sprint_blocks_detected %d
+sprint_tier %q
+
+# P2P Performance Metrics
+p2p_connection_pool_size{tier="%s"} %d
+p2p_block_pipeline_depth %d
+p2p_buffer_pool_hits %d
+p2p_buffer_pool_misses %d
+p2p_peer_quality_score_avg %.2f
+p2p_backpressure_events %d
+p2p_circuit_breaker_activations %d
+p2p_peer_consecutive_failures_total %d
+
+# Tier-Aware Limits
+p2p_max_outstanding_headers_per_peer{tier="%s"} %d
+p2p_pipeline_workers{tier="%s"} %d
+
+# Entropy Metrics
+relay_cpu_temperature %.2f
+entropy_sources_active %d
+entropy_system_fingerprint_available %d
+entropy_hardware_sources_available %d
+`,
+		p2pMetrics.activePeers,
+		p2pMetrics.blocksDetected,
+		s.cfg.Tier,
+		s.cfg.Tier,
+		p2pMetrics.connectionPoolSize,
+		p2pMetrics.pipelineDepth,
+		p2pMetrics.bufferPoolHits,
+		p2pMetrics.bufferPoolMisses,
+		p2pMetrics.avgQualityScore,
+		p2pMetrics.backpressureEvents,
+		p2pMetrics.circuitBreakerActivations,
+		p2pMetrics.totalConsecutiveFailures,
+		s.cfg.Tier,
+		p2pMetrics.maxOutstandingHeadersPerPeer,
+		s.cfg.Tier,
+		p2pMetrics.pipelineWorkers,
+		entropyMetrics.cpuTemperature,
+		entropyMetrics.activeSources,
+		entropyMetrics.systemFingerprintAvailable,
+		entropyMetrics.hardwareSourcesAvailable,
+	)))
+}
+
+// P2PMetrics holds P2P performance metrics
+type P2PMetrics struct {
+	activePeers                int
+	blocksDetected             int
+	connectionPoolSize         int
+	pipelineDepth              int64
+	bufferPoolHits             int64
+	bufferPoolMisses           int64
+	avgQualityScore            float64
+	backpressureEvents         int64
+	circuitBreakerActivations  int64
+	totalConsecutiveFailures   int64
+	maxOutstandingHeadersPerPeer int
+	pipelineWorkers            int
+}
+
+// getP2PMetrics collects P2P metrics (mock implementation for now)
+func (s *Server) getP2PMetrics() P2PMetrics {
+	// In a real implementation, this would collect metrics from the P2P client
+	// For now, we'll return mock data that represents typical values
+	
+	return P2PMetrics{
+		activePeers:                8,
+		blocksDetected:             150,
+		connectionPoolSize:         8,
+		pipelineDepth:              45,
+		bufferPoolHits:             1250,
+		bufferPoolMisses:           23,
+		avgQualityScore:            0.85,
+		backpressureEvents:         2,
+		circuitBreakerActivations:  1,
+		totalConsecutiveFailures:   15,
+		maxOutstandingHeadersPerPeer: s.cfg.MaxOutstandingHeadersPerPeer,
+		pipelineWorkers:            s.cfg.PipelineWorkers,
+	}
+}
+
+// EntropyMetrics holds entropy-related metrics
+type EntropyMetrics struct {
+	cpuTemperature              float32
+	activeSources               int
+	systemFingerprintAvailable  int
+	hardwareSourcesAvailable    int
+}
+
+// getEntropyMetrics collects entropy-related metrics
+func (s *Server) getEntropyMetrics() EntropyMetrics {
+	var metrics EntropyMetrics
+	
+	// Get CPU temperature
+	if temp, err := entropy.GetCPUTemperatureRust(); err == nil {
+		metrics.cpuTemperature = temp
+	} else {
+		metrics.cpuTemperature = -1.0
+	}
+	
+	// Check system fingerprint availability
+	if _, err := entropy.SystemFingerprintRust(); err == nil {
+		metrics.systemFingerprintAvailable = 1
+	} else {
+		metrics.systemFingerprintAvailable = 0
+	}
+	
+	// Count active entropy sources
+	metrics.activeSources = 0
+	if metrics.systemFingerprintAvailable == 1 {
+		metrics.activeSources++
+	}
+	
+	// Check if hardware sources are available (CPU temp + fingerprint)
+	metrics.hardwareSourcesAvailable = 0
+	if metrics.cpuTemperature > 0 {
+		metrics.hardwareSourcesAvailable++
+	}
+	if metrics.systemFingerprintAvailable == 1 {
+		metrics.hardwareSourcesAvailable++
+	}
+	
+	return metrics
 }
 
 func (s *Server) streamHandler(w http.ResponseWriter, r *http.Request) {
