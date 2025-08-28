@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/cache"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
+	"go.uber.org/zap"
 )
 
 // ===== SERVER STRUCT AND LIFECYCLE =====
@@ -30,12 +30,11 @@ type Server struct {
 	adminSrv  *http.Server // Admin-only server
 	// HTTP router
 
-
 	// Rate limiting
 	rateLimiter *RateLimiter
 
 	// HTTP router
-	httpMux   *http.ServeMux
+	httpMux *http.ServeMux
 
 	// Customer key management
 	keyManager *CustomerKeyManager
@@ -99,16 +98,16 @@ func NewWithCache(cfg config.Config, blockChan chan blocks.BlockEvent, mem *memp
 	randReader := RealRandomReader{}
 
 	server := &Server{
-		cfg:            cfg,
-		blockChan:      blockChan,
-		mem:            mem,
-		cache:          cache,
-		logger:         logger,
-		rateLimiter:    NewRateLimiter(clock),
-		keyManager:     NewCustomerKeyManagerWithConfig(cfg, clock, randReader),
-		adminAuth:      NewAdminAuth(),
-		wsLimiter:      NewWebSocketLimiter(cfg.WebSocketMaxGlobal, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
-		predictor:      NewPredictiveAnalytics(clock),
+		cfg:         cfg,
+		blockChan:   blockChan,
+		mem:         mem,
+		cache:       cache,
+		logger:      logger,
+		rateLimiter: NewRateLimiter(clock),
+		keyManager:  NewCustomerKeyManagerWithConfig(cfg, clock, randReader),
+		adminAuth:   NewAdminAuth(),
+		wsLimiter:   NewWebSocketLimiter(cfg.WebSocketMaxGlobal, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
+		predictor:   NewPredictiveAnalytics(clock),
 	}
 
 	// Initialize default Bitcoin backend
@@ -368,12 +367,13 @@ func (aa *AdminAuth) AddAdminKey(key string) {
 }
 
 // RemoveAdminKey removes an admin key
- 
+
 // AdminAuth provides admin key-based authentication
 type AdminAuth struct {
 	adminKeys map[string]bool
 	mu        sync.RWMutex
 }
+
 func (aa *AdminAuth) RemoveAdminKey(key string) {
 	hasher := sha256.New()
 	hasher.Write([]byte(key))

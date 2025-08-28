@@ -46,8 +46,10 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/PayRpc/Bitcoin-Sprint/internal/api"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/securebuf"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/zmq"
 )
 
 // Config represents the application configuration
@@ -252,19 +254,7 @@ func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
 
 }
 
-// BlockEvent represents a blockchain block event
-
-type BlockEvent struct {
-	Hash string `json:"hash"`
-
-	Timestamp time.Time `json:"timestamp"`
-
-	Size int `json:"size"`
-
-	Height int64 `json:"height"`
-
-	Chain string `json:"chain"`
-}
+// BlockEvent is now imported from internal/blocks package
 
 // Cache implements a simple LRU cache with TTL
 type Cache struct {
@@ -513,7 +503,7 @@ func (p *Performance) applyPreallocatedBuffers() {
 // BackendRegistry manages chain backends
 
 type ChainBackend interface {
-	GetLatestBlock() (BlockEvent, error)
+	GetLatestBlock() (blocks.BlockEvent, error)
 
 	GetMempoolSize() int
 
@@ -521,7 +511,7 @@ type ChainBackend interface {
 
 	GetPredictiveETA() float64
 
-	StreamBlocks(ctx context.Context, blockChan chan<- BlockEvent) error
+	StreamBlocks(ctx context.Context, blockChan chan<- blocks.BlockEvent) error
 }
 
 type BackendRegistry struct {
@@ -640,13 +630,13 @@ func NewChainBackend(chain string, cfg Config, cache *Cache, logger *zap.Logger)
 
 }
 
-func (b *ChainBackendImpl) GetLatestBlock() (BlockEvent, error) {
+func (b *ChainBackendImpl) GetLatestBlock() (blocks.BlockEvent, error) {
 
 	hash := b.chain + ":latest"
 
 	if evt, ok := b.cache.Get(hash); ok {
 
-		return evt.(BlockEvent), nil
+		return evt.(blocks.BlockEvent), nil
 
 	}
 
@@ -668,25 +658,21 @@ func (b *ChainBackendImpl) GetLatestBlock() (BlockEvent, error) {
 
 	}
 
-	return BlockEvent{}, errors.New("failed to fetch latest block after retries")
+	return blocks.BlockEvent{}, errors.New("failed to fetch latest block after retries")
 
 }
 
-func (b *ChainBackendImpl) fetchLatestBlock() (BlockEvent, error) {
+func (b *ChainBackendImpl) fetchLatestBlock() (blocks.BlockEvent, error) {
 
 	hashBytes := sha256.Sum256([]byte(b.chain + time.Now().String()))
 
-	return BlockEvent{
-
-		Hash: hex.EncodeToString(hashBytes[:16]),
-
-		Timestamp: time.Now(),
-
-		Size: 1000,
-
-		Height: 700000 + int64(time.Now().Unix()%1000),
-
-		Chain: b.chain,
+	return blocks.BlockEvent{
+		Hash:       hex.EncodeToString(hashBytes[:16]),
+		Height:     uint32(700000 + int64(time.Now().Unix()%1000)),
+		Timestamp:  time.Now(),
+		DetectedAt: time.Now(),
+		Source:     b.chain,
+		Tier:       "free",
 	}, nil
 
 }
@@ -716,7 +702,7 @@ func (b *ChainBackendImpl) GetPredictiveETA() float64 {
 	return 0.0 // Placeholder implementation
 }
 
-func (b *ChainBackendImpl) StreamBlocks(ctx context.Context, blockChan chan<- BlockEvent) error {
+func (b *ChainBackendImpl) StreamBlocks(ctx context.Context, blockChan chan<- blocks.BlockEvent) error {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
@@ -726,12 +712,13 @@ func (b *ChainBackendImpl) StreamBlocks(ctx context.Context, blockChan chan<- Bl
 			return ctx.Err()
 		case <-ticker.C:
 			hashBytes := sha256.Sum256([]byte(b.chain + time.Now().String()))
-			block := BlockEvent{
-				Hash:      hex.EncodeToString(hashBytes[:16]),
-				Timestamp: time.Now(),
-				Size:      1000,
-				Height:    700000 + int64(time.Now().Unix()%1000),
-				Chain:     b.chain,
+			block := blocks.BlockEvent{
+				Hash:       hex.EncodeToString(hashBytes[:16]),
+				Height:     uint32(700000 + int64(time.Now().Unix()%1000)),
+				Timestamp:  time.Now(),
+				DetectedAt: time.Now(),
+				Source:     b.chain,
+				Tier:       "free",
 			}
 			select {
 			case blockChan <- block:
@@ -1049,17 +1036,19 @@ func (h *GenericLightHandler) DeserializeMessage(data []byte) (interface{}, erro
 
 	}
 
-	header := BlockEvent{
+	header := blocks.BlockEvent{
 
 		Hash: hex.EncodeToString(data[:32]),
 
-		Height: int64(uint32(data[32]) | uint32(data[33])<<8 | uint32(data[34])<<16 | uint32(data[35])<<24),
+		Height: uint32(data[32]) | uint32(data[33])<<8 | uint32(data[34])<<16 | uint32(data[35])<<24,
 
 		Timestamp: time.Unix(int64(uint32(data[68])|uint32(data[69])<<8|uint32(data[70])<<16|uint32(data[71])<<24), 0),
 
-		Size: 80,
+		DetectedAt: time.Now(),
 
-		Chain: string(h.chain),
+		Source: string(h.chain),
+
+		Tier: "free",
 	}
 
 	return header, nil
@@ -1068,7 +1057,7 @@ func (h *GenericLightHandler) DeserializeMessage(data []byte) (interface{}, erro
 
 func (h *GenericLightHandler) ValidateMessage(message interface{}) error {
 
-	_, ok := message.(BlockEvent)
+	_, ok := message.(blocks.BlockEvent)
 
 	if !ok {
 
@@ -2969,7 +2958,7 @@ type Server struct {
 
 	p2pClients map[ProtocolType]*UniversalClient
 
-	blockChan chan BlockEvent
+	blockChan chan blocks.BlockEvent
 
 	metrics *MetricsTracker
 
@@ -2990,6 +2979,10 @@ type Server struct {
 	keyManager *KeyManager
 
 	predictor *AnalyticsPredictor
+
+	zmqClient *zmq.Client
+
+	mempool *Mempool
 }
 
 type Clock interface {
@@ -3168,11 +3161,21 @@ func NewServer(cfg Config, logger *zap.Logger) *Server {
 
 	backend := NewBackendRegistry()
 
+	memPool := NewMempool()
+
 	bfManager := NewBloomFilterManager(logger)
 
 	p2pClients := make(map[ProtocolType]*UniversalClient)
 
-	blockChan := make(chan BlockEvent, cfg.MessageQueueSize)
+	blockChan := make(chan blocks.BlockEvent, cfg.MessageQueueSize)
+
+	// Create config.Config for ZMQ client
+	zmqConfig := config.Config{
+		ZMQNodes: []string{cfg.ZMQEndpoint},
+	}
+
+	// Initialize ZMQ client
+	zmqClient := zmq.New(zmqConfig, blockChan, memPool, logger)
 
 	metrics := metricsTracker
 
@@ -3196,12 +3199,9 @@ func NewServer(cfg Config, logger *zap.Logger) *Server {
 		tierManager:      NewTierManager(),
 		keyManager:       &KeyManager{},
 		predictor:        &AnalyticsPredictor{},
+		zmqClient:        zmqClient,
+		mempool:          memPool,
 	}
-
-	// Create UnifiedAPILayer after server initialization
-	server.ual = NewUnifiedAPILayer(server)
-
-	server.esm = NewEnterpriseSecurityManager(server, logger)
 
 	for _, chain := range []string{"bitcoin", "ethereum", "solana"} {
 
@@ -3911,6 +3911,12 @@ func main() {
 
 		}(protocol, client)
 
+	}
+
+	// Start ZMQ client
+	if server.zmqClient != nil {
+		go server.zmqClient.Run()
+		logger.Info("ZMQ client started")
 	}
 
 	// Graceful shutdown

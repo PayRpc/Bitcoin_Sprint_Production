@@ -741,33 +741,33 @@ func (s *Server) chainStreamHandler(backend ChainBackend, w http.ResponseWriter,
 // simpleLatencyHandler provides basic latency information
 func (s *Server) simpleLatencyHandler(w http.ResponseWriter, r *http.Request) {
 	s.jsonResponse(w, http.StatusOK, map[string]interface{}{
-		"endpoint": "/api/v1/latency",
+		"endpoint":    "/api/v1/latency",
 		"description": "Simple latency monitoring endpoint",
-		"status": "active",
-		"target_p99": "100ms",
-		"note": "Inlined latency optimizer available",
+		"status":      "active",
+		"target_p99":  "100ms",
+		"note":        "Inlined latency optimizer available",
 	})
 }
 
 // simpleCacheHandler provides basic cache information
 func (s *Server) simpleCacheHandler(w http.ResponseWriter, r *http.Request) {
 	s.jsonResponse(w, http.StatusOK, map[string]interface{}{
-		"endpoint": "/api/v1/cache",
+		"endpoint":    "/api/v1/cache",
 		"description": "Simple cache monitoring endpoint",
-		"status": "active",
-		"type": "predictive_cache",
-		"max_size": 1000,
-		"note": "Inlined predictive cache available",
+		"status":      "active",
+		"type":        "predictive_cache",
+		"max_size":    1000,
+		"note":        "Inlined predictive cache available",
 	})
 }
 
 // simpleTiersHandler provides basic tier information
 func (s *Server) simpleTiersHandler(w http.ResponseWriter, r *http.Request) {
 	s.jsonResponse(w, http.StatusOK, map[string]interface{}{
-		"endpoint": "/api/v1/tiers",
-		"description": "Simple tier management endpoint",
-		"status": "active",
+		"endpoint":        "/api/v1/tiers",
+		"description":     "Simple tier management endpoint",
+		"status":          "active",
 		"available_tiers": []string{"free", "pro", "business", "turbo", "enterprise"},
-		"note": "Inlined tier manager available",
+		"note":            "Inlined tier manager available",
 	})
 }

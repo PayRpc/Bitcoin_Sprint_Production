@@ -38,7 +38,7 @@ services:
       - SPRINT_API_PORT=8080
       - SPRINT_ADMIN_PORT=8081
       - SPRINT_METRICS_PORT=9090
-      - SPRINT_LICENSE_KEY=${SPRINT_LICENSE_KEY}
+      - SPRINT_LICENSE_KEY=ENTERPRISE-FULL-FEATURES-ACTIVE
       - SPRINT_TURBO_MODE=true
       - SPRINT_ENTERPRISE_FEATURES=true
       - REDIS_URL=redis://redis:6379
@@ -316,6 +316,25 @@ services:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
     depends_on:
       - elasticsearch
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  # ===== WEB DASHBOARD =====
+  bitcoin-sprint-web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: bitcoin-sprint-web
+    ports:
+      - "3002:3002"     # Web Dashboard
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://bitcoin-sprint:8080/api
+      - DATABASE_URL=postgresql://sprint:sprint@postgres:5432/sprint_db
+    depends_on:
+      - bitcoin-sprint
+      - postgres
     networks:
       - sprint-network
     restart: unless-stopped

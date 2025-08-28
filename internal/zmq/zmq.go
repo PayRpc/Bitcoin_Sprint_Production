@@ -9,7 +9,6 @@ import (
 
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
-	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/tiers"
 	"github.com/pebbe/zmq4"
 	"go.uber.org/zap"
@@ -18,13 +17,13 @@ import (
 type Client struct {
 	cfg       config.Config
 	blockChan chan blocks.BlockEvent
-	mem       *mempool.Mempool
+	mem       interface{} // Changed to interface{} to accept any mempool type
 	logger    *zap.Logger
 	stopped   bool
 	socket    *zmq4.Socket
 }
 
-func New(cfg config.Config, blockChan chan blocks.BlockEvent, mem *mempool.Mempool, logger *zap.Logger) *Client {
+func New(cfg config.Config, blockChan chan blocks.BlockEvent, mem interface{}, logger *zap.Logger) *Client {
 	return &Client{
 		cfg:       cfg,
 		blockChan: blockChan,
