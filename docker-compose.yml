@@ -1,0 +1,321 @@
+# Bitcoin Sprint Multi-Chain Relay Platform
+# Docker Compose configuration for enterprise-grade blockchain infrastructure
+version: '3.8'
+
+networks:
+  sprint-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  bitcoin-data:
+  ethereum-data:
+  solana-data:
+  cosmos-data:
+  polkadot-data:
+  redis-data:
+  postgres-data:
+  prometheus-data:
+  grafana-data:
+
+services:
+  # ===== BITCOIN SPRINT CORE =====
+  bitcoin-sprint:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bitcoin-sprint-core
+    ports:
+      - "8080:8080"     # Main API
+      - "8081:8081"     # Admin API
+      - "9090:9090"     # Metrics
+      - "6060:6060"     # pprof debugging
+    environment:
+      - SPRINT_TIER=enterprise
+      - SPRINT_API_HOST=0.0.0.0
+      - SPRINT_API_PORT=8080
+      - SPRINT_ADMIN_PORT=8081
+      - SPRINT_METRICS_PORT=9090
+      - SPRINT_LICENSE_KEY=${SPRINT_LICENSE_KEY}
+      - SPRINT_TURBO_MODE=true
+      - SPRINT_ENTERPRISE_FEATURES=true
+      - REDIS_URL=redis://redis:6379
+      - POSTGRES_URL=postgres://sprint:sprint@postgres:5432/sprint_db
+    depends_on:
+      - redis
+      - postgres
+      - bitcoin-core
+      - geth
+      - solana-validator
+    networks:
+      - sprint-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===== BITCOIN INFRASTRUCTURE =====
+  bitcoin-core:
+    image: bitcoin/bitcoin:26.0
+    container_name: bitcoin-core
+    ports:
+      - "8332:8332"     # RPC
+      - "8333:8333"     # P2P
+      - "28332:28332"   # ZMQ block notifications
+      - "28333:28333"   # ZMQ tx notifications
+    volumes:
+      - bitcoin-data:/home/bitcoin/.bitcoin
+      - ./bitcoin.conf:/home/bitcoin/.bitcoin/bitcoin.conf:ro
+    command: |
+      bitcoind
+      -printtoconsole
+      -rpcallowip=0.0.0.0/0
+      -rpcbind=0.0.0.0
+      -zmqpubhashblock=tcp://0.0.0.0:28332
+      -zmqpubrawtx=tcp://0.0.0.0:28333
+      -txindex=1
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  # ===== ETHEREUM INFRASTRUCTURE =====
+  geth:
+    image: ethereum/client-go:v1.13.5
+    container_name: ethereum-geth
+    ports:
+      - "8545:8545"     # HTTP RPC
+      - "8546:8546"     # WebSocket RPC
+      - "30303:30303"   # P2P
+    volumes:
+      - ethereum-data:/root/.ethereum
+    command: |
+      --http
+      --http.addr=0.0.0.0
+      --http.port=8545
+      --http.api=eth,net,web3,personal,admin,debug
+      --http.corsdomain="*"
+      --ws
+      --ws.addr=0.0.0.0
+      --ws.port=8546
+      --ws.api=eth,net,web3,personal,admin,debug
+      --ws.origins="*"
+      --syncmode=snap
+      --cache=2048
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  # ===== SOLANA INFRASTRUCTURE =====
+  solana-validator:
+    image: solanalabs/solana:v1.16.0
+    container_name: solana-validator
+    ports:
+      - "8899:8899"     # RPC
+      - "8900:8900"     # WebSocket
+      - "9900:9900"     # Gossip
+    volumes:
+      - solana-data:/root/.config/solana
+    command: |
+      solana-test-validator
+      --rpc-bind-address=0.0.0.0
+      --rpc-port=8899
+      --websocket-url=ws://0.0.0.0:8900
+      --gossip-port=9900
+      --ledger=/root/.config/solana/test-ledger
+      --reset
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  # ===== COSMOS INFRASTRUCTURE =====
+  cosmos-hub:
+    image: cosmoshub/gaia:v12.0.0
+    container_name: cosmos-hub
+    ports:
+      - "26657:26657"   # Tendermint RPC
+      - "26656:26656"   # P2P
+      - "1317:1317"     # REST API
+      - "9090:9090"     # gRPC
+    volumes:
+      - cosmos-data:/root/.gaia
+    command: |
+      gaiad start
+      --rpc.laddr=tcp://0.0.0.0:26657
+      --api.enable=true
+      --api.address=tcp://0.0.0.0:1317
+      --grpc.enable=true
+      --grpc.address=0.0.0.0:9090
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  # ===== POLKADOT INFRASTRUCTURE =====
+  polkadot-node:
+    image: parity/polkadot:v0.9.43
+    container_name: polkadot-node
+    ports:
+      - "9944:9944"     # WebSocket RPC
+      - "9933:9933"     # HTTP RPC
+      - "30333:30333"   # P2P
+    volumes:
+      - polkadot-data:/data
+    command: |
+      polkadot
+      --base-path=/data
+      --chain=polkadot
+      --rpc-external
+      --ws-external
+      --rpc-cors=all
+      --unsafe-rpc-external
+      --unsafe-ws-external
+      --rpc-methods=Safe
+      --pruning=archive
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  # ===== CACHING & DATABASE LAYER =====
+  redis:
+    image: redis:7.2-alpine
+    container_name: sprint-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: |
+      redis-server
+      --appendonly yes
+      --maxmemory 1gb
+      --maxmemory-policy allkeys-lru
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: sprint-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=sprint_db
+      - POSTGRES_USER=sprint
+      - POSTGRES_PASSWORD=sprint
+      - POSTGRES_INITDB_ARGS=--auth-host=md5
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  # ===== MONITORING & OBSERVABILITY =====
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: sprint-prometheus
+    ports:
+      - "9091:9090"     # Avoid conflict with Sprint metrics
+    volumes:
+      - prometheus-data:/prometheus
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.0.0
+    container_name: sprint-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=sprint123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  # ===== LOAD BALANCER & REVERSE PROXY =====
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: sprint-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - bitcoin-sprint
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  # ===== ENTERPRISE SECURITY =====
+  vault:
+    image: vault:1.14.0
+    container_name: sprint-vault
+    ports:
+      - "8200:8200"
+    environment:
+      - VAULT_DEV_ROOT_TOKEN_ID=sprint-dev-token
+      - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
+    cap_add:
+      - IPC_LOCK
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  # ===== MESSAGE QUEUE =====
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: sprint-rabbitmq
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # Management UI
+    environment:
+      - RABBITMQ_DEFAULT_USER=sprint
+      - RABBITMQ_DEFAULT_PASS=sprint123
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  # ===== ELASTIC SEARCH & LOGGING =====
+  elasticsearch:
+    image: elasticsearch:8.9.0
+    container_name: sprint-elasticsearch
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  kibana:
+    image: kibana:8.9.0
+    container_name: sprint-kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+    networks:
+      - sprint-network
+    restart: unless-stopped

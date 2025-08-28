@@ -64,6 +64,9 @@ type Server struct {
 	// High-performance Bloom Filter for UTXO lookups
 	bloomFilter *BloomFilterManager
 
+	// Enterprise Security Manager for enterprise features
+	enterpriseManager *EnterpriseSecurityManager
+
 	// Injected dependencies for determinism
 	clock      Clock
 	randReader RandomReader
@@ -385,5 +388,4 @@ func (aa *AdminAuth) RemoveAdminKey(key string) {
 	aa.mu.Lock()
 	defer aa.mu.Unlock()
 	delete(aa.adminKeys, hash)
-}</content>
-<parameter name="filePath">c:\Projects\Bitcoin_Sprint_final_1\BItcoin_Sprint\internal\api\server.go
+}
