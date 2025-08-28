@@ -65,20 +65,14 @@ func (a *Authenticator) Close() {
 
 // generateNonce creates a random base64 nonce using entropy-backed SecureBuffer
 func generateNonce() (string, error) {
-	// Use entropy-backed secure buffer for nonce generation
-	nonceBuf, err := securebuf.NewNonceBuffer()
-	if err != nil {
-		return "", fmt.Errorf("failed to create entropy nonce buffer: %w", err)
-	}
-	defer nonceBuf.Free()
-
-	// Read nonce from secure buffer
-	nonceBytes, err := nonceBuf.ReadToSlice()
-	if err != nil {
-		return "", fmt.Errorf("failed to read nonce from secure buffer: %w", err)
+	// Use secure random bytes for nonce generation
+	nonceBytes := make([]byte, 32)
+	if _, err := rand.Read(nonceBytes); err != nil {
+		return "", fmt.Errorf("failed to generate nonce: %w", err)
 	}
 
-	return base64.URLEncoding.EncodeToString(nonceBytes), nil
+	// Encode as base64
+	return base64.StdEncoding.EncodeToString(nonceBytes), nil
 }
 
 // signMessage creates HMAC signature for handshake

@@ -4,28 +4,17 @@ package api
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
-	"fmt"
-	"net"
+	"encoding/hex"
 	"net/http"
 	"os"
-	"os/signal"
-	"strconv"
-	"strings"
 	"sync"
-	"syscall"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/cache"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
-	"github.com/PayRpc/Bitcoin-Sprint/internal/entropy"
-	"github.com/PayRpc/Bitcoin-Sprint/internal/license"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
-	"github.com/PayRpc/Bitcoin-Sprint/internal/securebuf"
- 
 )
 
 // ===== SERVER STRUCT AND LIFECYCLE =====
@@ -60,11 +49,11 @@ type Server struct {
 	// Predictive analytics
 	predictor *PredictiveAnalytics
 
+	// Circuit breaker for fault tolerance
+	circuitBreaker *CircuitBreaker
+
 	// Blockchain-agnostic backends
 	backends *BackendRegistry
-
-	// High-performance Bloom Filter for UTXO lookups
-	bloomFilter *BloomFilterManager
 
 	// Enterprise Security Manager for enterprise features
 	enterpriseManager *EnterpriseSecurityManager
@@ -90,6 +79,9 @@ func New(cfg config.Config, blockChan chan blocks.BlockEvent, mem *mempool.Mempo
 		wsLimiter:      NewWebSocketLimiter(cfg.WebSocketMaxGlobal, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
 		predictor:      NewPredictiveAnalytics(clock),
 		circuitBreaker: NewCircuitBreaker(cfg.Tier, clock),
+	}
+
+	// Initialize default Bitcoin backend
 	btcBackend := &BitcoinBackend{
 		blockChan: blockChan,
 		mem:       mem,
@@ -97,13 +89,6 @@ func New(cfg config.Config, blockChan chan blocks.BlockEvent, mem *mempool.Mempo
 	}
 	server.backends.Register("btc", btcBackend)
 	server.backends.Register("bitcoin", btcBackend) // alias for handlers
-
-	// Initialize default Bitcoin backend
-	server.backends.Register("btc", &BitcoinBackend{
-		blockChan: blockChan,
-		mem:       mem,
-		cfg:       cfg,
-	})
 
 	return server
 }
@@ -124,6 +109,9 @@ func NewWithCache(cfg config.Config, blockChan chan blocks.BlockEvent, mem *memp
 		adminAuth:      NewAdminAuth(),
 		wsLimiter:      NewWebSocketLimiter(cfg.WebSocketMaxGlobal, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
 		predictor:      NewPredictiveAnalytics(clock),
+	}
+
+	// Initialize default Bitcoin backend
 	btcBackend := &BitcoinBackend{
 		blockChan: blockChan,
 		mem:       mem,
@@ -132,14 +120,6 @@ func NewWithCache(cfg config.Config, blockChan chan blocks.BlockEvent, mem *memp
 	}
 	server.backends.Register("btc", btcBackend)
 	server.backends.Register("bitcoin", btcBackend)
-
-	// Initialize default Bitcoin backend
-	server.backends.Register("btc", &BitcoinBackend{
-		blockChan: blockChan,
-		mem:       mem,
-		cfg:       cfg,
-		cache:     cache,
-	})
 
 	return server
 }

@@ -16,6 +16,7 @@ type CircuitBreaker struct {
 	tier              config.Tier
 	state             string
 	failureCount      int64
+	failureThreshold  int64
 	lastFailureTime   time.Time
 	resetTimeout      time.Duration
 	halfOpenMaxCalls  int64
