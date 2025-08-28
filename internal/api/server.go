@@ -26,6 +26,11 @@ func (s *Server) RegisterSprintValueRoutes() {
 		s.httpMux.HandleFunc("/api/v1/sprint/cache-stats", s.cacheStatsHandler)
 		s.httpMux.HandleFunc("/api/v1/sprint/tier-comparison", s.tierComparisonHandler)
 
+		// Simple endpoints for inlined components
+		s.httpMux.HandleFunc("/api/v1/latency", s.simpleLatencyHandler)
+		s.httpMux.HandleFunc("/api/v1/cache", s.simpleCacheHandler)
+		s.httpMux.HandleFunc("/api/v1/tiers", s.simpleTiersHandler)
+
 		// Value demonstration endpoint
 		s.httpMux.HandleFunc("/api/v1/sprint/value", SprintValueHandler)
 
