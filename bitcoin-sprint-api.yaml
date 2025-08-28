@@ -1,13 +1,13 @@
 openapi: 3.1.0
 info:
-  title: Bitcoin Sprint Customer API
+  title: Multi-Chain Sprint Customer API
   description: |
-    Enterprise Bitcoin block detection and analytics API with secure memory management.
+    Enterprise blockchain infrastructure and analytics API supporting Bitcoin, Ethereum, Solana, Cosmos, Polkadot and other major networks with secure memory management.
     
     **Security**: All sensitive data secured with Rust SecureBuffer - memory locked and zeroized after use.
-  version: 1.0.0
+  version: 2.1.0
   contact:
-    name: Bitcoin Sprint Support
+    name: Multi-Chain Sprint Support
     url: https://github.com/PayRpc/Bitcoin-Sprint
   license:
     name: MIT

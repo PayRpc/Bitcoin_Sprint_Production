@@ -32,32 +32,32 @@ func NewEnterpriseAPIDemo() *EnterpriseAPIDemo {
 // registerRoutes registers all enterprise API endpoints
 func (demo *EnterpriseAPIDemo) registerRoutes() {
 	fmt.Println("🔐 Registering Enterprise Security API Routes:")
-	
+
 	// Entropy endpoints
 	demo.mux.HandleFunc("/api/v1/enterprise/entropy/fast", demo.handleFastEntropy)
 	demo.mux.HandleFunc("/api/v1/enterprise/entropy/hybrid", demo.handleHybridEntropy)
-	
+
 	// System information
 	demo.mux.HandleFunc("/api/v1/enterprise/system/fingerprint", demo.handleSystemFingerprint)
 	demo.mux.HandleFunc("/api/v1/enterprise/system/temperature", demo.handleCPUTemperature)
-	
+
 	// Buffer management
 	demo.mux.HandleFunc("/api/v1/enterprise/buffer/new", demo.handleNewSecureBuffer)
-	
+
 	// Audit and compliance
 	demo.mux.HandleFunc("/api/v1/enterprise/audit/status", demo.handleAuditStatus)
 	demo.mux.HandleFunc("/api/v1/enterprise/audit/enable", demo.handleEnableAudit)
 	demo.mux.HandleFunc("/api/v1/enterprise/audit/disable", demo.handleDisableAudit)
 	demo.mux.HandleFunc("/api/v1/enterprise/policy", demo.handleSetPolicy)
 	demo.mux.HandleFunc("/api/v1/enterprise/compliance", demo.handleComplianceReport)
-	
+
 	// Bitcoin bloom filters
 	demo.mux.HandleFunc("/api/v1/enterprise/bloom/new", demo.handleNewBloomFilter)
 	demo.mux.HandleFunc("/api/v1/enterprise/bloom/stats", demo.handleBloomStats)
-	
+
 	// Root endpoint
 	demo.mux.HandleFunc("/", demo.handleRoot)
-	
+
 	endpoints := []string{
 		"GET  /api/v1/enterprise/system/fingerprint - Get system hardware fingerprint",
 		"GET  /api/v1/enterprise/system/temperature - Get CPU temperature for entropy",
@@ -72,7 +72,7 @@ func (demo *EnterpriseAPIDemo) registerRoutes() {
 		"POST /api/v1/enterprise/bloom/new - Create Bitcoin bloom filter",
 		"GET  /api/v1/enterprise/bloom/stats - Get bloom filter statistics",
 	}
-	
+
 	for _, endpoint := range endpoints {
 		fmt.Printf("   📍 %s\n", endpoint)
 	}
@@ -83,9 +83,9 @@ func (demo *EnterpriseAPIDemo) registerRoutes() {
 func (demo *EnterpriseAPIDemo) handleRoot(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"service": "Bitcoin Sprint Enterprise Security API",
-		"version": "1.0.0",
-		"status": "running",
+		"service":   "Bitcoin Sprint Enterprise Security API",
+		"version":   "1.0.0",
+		"status":    "running",
 		"timestamp": time.Now(),
 		"endpoints": []string{
 			"/api/v1/enterprise/entropy/fast",
@@ -114,9 +114,9 @@ func (demo *EnterpriseAPIDemo) handleFastEntropy(w http.ResponseWriter, r *http.
 	}
 
 	demo.jsonResponse(w, http.StatusOK, map[string]interface{}{
-		"entropy": fmt.Sprintf("%x", entropy),
-		"size": len(entropy),
-		"source": "hardware",
+		"entropy":   fmt.Sprintf("%x", entropy),
+		"size":      len(entropy),
+		"source":    "hardware",
 		"timestamp": time.Now(),
 	})
 }
@@ -140,11 +140,11 @@ func (demo *EnterpriseAPIDemo) handleHybridEntropy(w http.ResponseWriter, r *htt
 	}
 
 	demo.jsonResponse(w, http.StatusOK, map[string]interface{}{
-		"entropy": fmt.Sprintf("%x", entropy),
-		"size": len(entropy),
+		"entropy":      fmt.Sprintf("%x", entropy),
+		"size":         len(entropy),
 		"headers_used": len(mockHeaders),
-		"source": "hybrid",
-		"timestamp": time.Now(),
+		"source":       "hybrid",
+		"timestamp":    time.Now(),
 	})
 }
 
@@ -162,7 +162,7 @@ func (demo *EnterpriseAPIDemo) handleSystemFingerprint(w http.ResponseWriter, r 
 
 	demo.jsonResponse(w, http.StatusOK, map[string]interface{}{
 		"fingerprint": fmt.Sprintf("%x", fingerprint),
-		"timestamp": time.Now(),
+		"timestamp":   time.Now(),
 	})
 }
 
@@ -180,7 +180,7 @@ func (demo *EnterpriseAPIDemo) handleCPUTemperature(w http.ResponseWriter, r *ht
 
 	demo.jsonResponse(w, http.StatusOK, map[string]interface{}{
 		"temperature_celsius": temperature,
-		"timestamp": time.Now(),
+		"timestamp":           time.Now(),
 	})
 }
 
@@ -199,11 +199,11 @@ func (demo *EnterpriseAPIDemo) handleNewSecureBuffer(w http.ResponseWriter, r *h
 	defer buffer.Free()
 
 	demo.jsonResponse(w, http.StatusOK, map[string]interface{}{
-		"buffer_id": fmt.Sprintf("buf_%d", time.Now().UnixNano()),
-		"size": buffer.Capacity(),
+		"buffer_id":      fmt.Sprintf("buf_%d", time.Now().UnixNano()),
+		"size":           buffer.Capacity(),
 		"security_level": "enterprise",
 		"entropy_filled": true,
-		"timestamp": time.Now(),
+		"timestamp":      time.Now(),
 	})
 }
 
@@ -217,7 +217,7 @@ func (demo *EnterpriseAPIDemo) handleAuditStatus(w http.ResponseWriter, r *http.
 
 	demo.jsonResponse(w, http.StatusOK, map[string]interface{}{
 		"audit_enabled": enabled,
-		"timestamp": time.Now(),
+		"timestamp":     time.Now(),
 	})
 }
 
@@ -234,8 +234,8 @@ func (demo *EnterpriseAPIDemo) handleEnableAudit(w http.ResponseWriter, r *http.
 	}
 
 	demo.jsonResponse(w, http.StatusOK, map[string]interface{}{
-		"status": "enabled",
-		"log_path": logPath,
+		"status":    "enabled",
+		"log_path":  logPath,
 		"timestamp": time.Now(),
 	})
 }
@@ -252,7 +252,7 @@ func (demo *EnterpriseAPIDemo) handleDisableAudit(w http.ResponseWriter, r *http
 	}
 
 	demo.jsonResponse(w, http.StatusOK, map[string]interface{}{
-		"status": "disabled",
+		"status":    "disabled",
 		"timestamp": time.Now(),
 	})
 }
@@ -277,7 +277,7 @@ func (demo *EnterpriseAPIDemo) handleSetPolicy(w http.ResponseWriter, r *http.Re
 	}
 
 	demo.jsonResponse(w, http.StatusOK, map[string]interface{}{
-		"status": "policy_set",
+		"status":    "policy_set",
 		"timestamp": time.Now(),
 	})
 }
@@ -296,7 +296,7 @@ func (demo *EnterpriseAPIDemo) handleComplianceReport(w http.ResponseWriter, r *
 
 	demo.jsonResponse(w, http.StatusOK, map[string]interface{}{
 		"compliance_report": report,
-		"timestamp": time.Now(),
+		"timestamp":         time.Now(),
 	})
 }
 
@@ -315,7 +315,7 @@ func (demo *EnterpriseAPIDemo) handleNewBloomFilter(w http.ResponseWriter, r *ht
 
 	demo.jsonResponse(w, http.StatusOK, map[string]interface{}{
 		"filter_id": fmt.Sprintf("bloom_%d", time.Now().UnixNano()),
-		"type": "bitcoin_utxo",
+		"type":      "bitcoin_utxo",
 		"optimized": true,
 		"timestamp": time.Now(),
 	})
@@ -341,11 +341,11 @@ func (demo *EnterpriseAPIDemo) handleBloomStats(w http.ResponseWriter, r *http.R
 	}
 
 	demo.jsonResponse(w, http.StatusOK, map[string]interface{}{
-		"item_count": stats.ItemCount,
-		"false_positive_rate": stats.TheoreticalFPRate,
-		"memory_usage_bytes": stats.MemoryUsageBytes,
+		"item_count":             stats.ItemCount,
+		"false_positive_rate":    stats.TheoreticalFPRate,
+		"memory_usage_bytes":     stats.MemoryUsageBytes,
 		"optimal_hash_functions": stats.OptimalHashFunctions,
-		"timestamp": time.Now(),
+		"timestamp":              time.Now(),
 	})
 }
 
@@ -359,7 +359,7 @@ func (demo *EnterpriseAPIDemo) jsonResponse(w http.ResponseWriter, statusCode in
 
 func (demo *EnterpriseAPIDemo) jsonError(w http.ResponseWriter, statusCode int, message string) {
 	demo.jsonResponse(w, statusCode, map[string]interface{}{
-		"error": message,
+		"error":     message,
 		"timestamp": time.Now(),
 	})
 }
@@ -374,12 +374,12 @@ func (demo *EnterpriseAPIDemo) ServeHTTP(w http.ResponseWriter, r *http.Request)
 func main() {
 	fmt.Println("🚀 Bitcoin Sprint Enterprise Security API Integration Demo")
 	fmt.Println("===========================================================")
-	
+
 	// Create the enterprise API demo
 	apiDemo := NewEnterpriseAPIDemo()
-	
+
 	// Start the server
-	addr := ":8080"
+	addr := ":9090"
 	fmt.Printf("\n🌐 Starting Enterprise API Server on %s\n", addr)
 	fmt.Println("\n📚 Available Endpoints:")
 	fmt.Println("   🏠 GET  / - API information")
@@ -395,11 +395,11 @@ func main() {
 	fmt.Println("   📊 GET  /api/v1/enterprise/compliance - Compliance report")
 	fmt.Println("   🌸 POST /api/v1/enterprise/bloom/new - Create Bitcoin bloom filter")
 	fmt.Println("   📈 GET  /api/v1/enterprise/bloom/stats - Bloom filter statistics")
-	
+
 	fmt.Printf("\n🔗 Server running at: http://localhost%s\n", addr)
-	fmt.Println("💡 Try: curl http://localhost:8080/api/v1/enterprise/system/fingerprint")
-	fmt.Println("💡 Try: curl -X POST http://localhost:8080/api/v1/enterprise/entropy/fast")
-	
+	fmt.Println("💡 Try: curl http://localhost:9090/api/v1/enterprise/system/fingerprint")
+	fmt.Println("💡 Try: curl -X POST http://localhost:9090/api/v1/enterprise/entropy/fast")
+
 	if err := http.ListenAndServe(addr, apiDemo); err != nil {
 		log.Fatal("Failed to start server:", err)
 	}

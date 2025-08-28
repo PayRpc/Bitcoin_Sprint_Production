@@ -1,4 +1,4 @@
-# Windows Setup Guide for Bitcoin Sprint
+# Windows Setup Guide for Multi-Chain Sprint
 
 ## Quick Setup for Windows Developers
 

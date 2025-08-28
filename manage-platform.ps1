@@ -1,5 +1,5 @@
 #!/usr/bin/env pwsh
-# Bitcoin Sprint Multi-Chain Platform Management Script
+# Multi-Chain Sprint Platform Management Script
 # Comprehensive orchestration for enterprise-grade blockchain infrastructure
 
 param(

@@ -25,7 +25,7 @@ import (
 type SecurityLevel int
 
 const (
-	SecurityStandard           SecurityLevel = C.SECUREBUFFER_SECURITY_STANDARD
+	SecurityStandard          SecurityLevel = C.SECUREBUFFER_SECURITY_STANDARD
 	SecurityHigh              SecurityLevel = C.SECUREBUFFER_SECURITY_HIGH
 	SecurityEnterprise        SecurityLevel = C.SECUREBUFFER_SECURITY_ENTERPRISE
 	SecurityForensicResistant SecurityLevel = C.SECUREBUFFER_SECURITY_FORENSIC_RESISTANT

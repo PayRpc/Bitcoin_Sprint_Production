@@ -1,7 +1,7 @@
-# Bitcoin Sprint README - Quick Start Guide
+# Multi-Chain Sprint README - Quick Start Guide
 
 ## Overview
-Bitcoin Sprint is a high-performance Bitcoin blockchain processing and API server. This guide will help you get the backend up and running quickly.
+Multi-Chain Sprint is a high-performance blockchain infrastructure platform supporting Bitcoin, Ethereum, Solana, Cosmos, Polkadot and other major networks. This guide will help you get the backend up and running quickly.
 
 ## Requirements
 - Windows/Linux/macOS

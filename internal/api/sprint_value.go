@@ -18,22 +18,22 @@ import (
 // ===== 1. TAIL LATENCY ELIMINATION (FLAT P99) =====
 
 type LatencyOptimizer struct {
-	mutex             sync.RWMutex
-	chainLatencies    map[string]*LatencyTracker
-	targetP99         time.Duration
-	adaptiveTimeout   time.Duration
-	circuitBreakers   map[string]*CircuitBreaker
-	predictiveCache   *PredictiveCache
-	entropyBuffer     *EntropyMemoryBuffer
+	mutex           sync.RWMutex
+	chainLatencies  map[string]*LatencyTracker
+	targetP99       time.Duration
+	adaptiveTimeout time.Duration
+	circuitBreakers map[string]*CircuitBreaker
+	predictiveCache *PredictiveCache
+	entropyBuffer   *EntropyMemoryBuffer
 }
 
 type LatencyTracker struct {
-	samples       []time.Duration
-	maxSamples    int
-	currentP99    time.Duration
-	lastUpdated   time.Time
-	violations    int
-	adaptations   int
+	samples     []time.Duration
+	maxSamples  int
+	currentP99  time.Duration
+	lastUpdated time.Time
+	violations  int
+	adaptations int
 }
 
 func NewLatencyOptimizer() *LatencyOptimizer {
@@ -74,7 +74,7 @@ func (lo *LatencyOptimizer) TrackRequest(chain string, duration time.Duration) {
 			return sorted[i] < sorted[j]
 		})
 
-		p99Index := int(math.Ceil(0.99 * float64(len(sorted)))) - 1
+		p99Index := int(math.Ceil(0.99*float64(len(sorted)))) - 1
 		tracker.currentP99 = sorted[p99Index]
 		tracker.lastUpdated = time.Now()
 
@@ -94,32 +94,32 @@ func (lo *LatencyOptimizer) TrackRequest(chain string, duration time.Duration) {
 func (lo *LatencyOptimizer) GetActualStats() map[string]interface{} {
 	lo.mutex.RLock()
 	defer lo.mutex.RUnlock()
-	
+
 	if len(lo.chainLatencies) == 0 {
 		return map[string]interface{}{
 			"CurrentP99": "No data yet",
 			"ChainCount": 0,
-			"Status": "Warming up",
+			"Status":     "Warming up",
 		}
 	}
-	
+
 	// Calculate actual P99 across all chains
 	var allP99s []float64
 	chainStats := make(map[string]interface{})
-	
+
 	for chain, tracker := range lo.chainLatencies {
 		if len(tracker.samples) > 0 {
 			allP99s = append(allP99s, tracker.currentP99.Seconds())
 			chainStats[chain] = map[string]interface{}{
-				"p99_ms": fmt.Sprintf("%.1fms", tracker.currentP99.Seconds()*1000),
-				"violations": tracker.violations,
-				"adaptations": tracker.adaptations,
+				"p99_ms":       fmt.Sprintf("%.1fms", tracker.currentP99.Seconds()*1000),
+				"violations":   tracker.violations,
+				"adaptations":  tracker.adaptations,
 				"sample_count": len(tracker.samples),
 				"last_updated": tracker.lastUpdated.Format(time.RFC3339),
 			}
 		}
 	}
-	
+
 	// Calculate overall P99
 	var overallP99 float64
 	if len(allP99s) > 0 {
@@ -130,30 +130,30 @@ func (lo *LatencyOptimizer) GetActualStats() map[string]interface{} {
 			}
 		}
 	}
-	
+
 	return map[string]interface{}{
-		"CurrentP99": fmt.Sprintf("%.1fms", overallP99*1000),
-		"ChainCount": len(lo.chainLatencies),
-		"ChainStats": chainStats,
-		"Status": "Active",
+		"CurrentP99":      fmt.Sprintf("%.1fms", overallP99*1000),
+		"ChainCount":      len(lo.chainLatencies),
+		"ChainStats":      chainStats,
+		"Status":          "Active",
 		"LastMeasurement": time.Now().Format(time.RFC3339),
 	}
 }
 
 func (lo *LatencyOptimizer) adaptLatencyStrategy(chain string, tracker *LatencyTracker) {
 	tracker.adaptations++
-	
+
 	// Adaptive strategies to maintain flat P99
 	if tracker.violations > 5 {
 		// Enable aggressive caching
 		lo.predictiveCache.EnableAggressive(chain)
-		
+
 		// Reduce timeout for faster failures
 		lo.adaptiveTimeout = time.Duration(float64(lo.adaptiveTimeout) * 0.8)
-		
+
 		// Pre-warm entropy buffer
 		lo.entropyBuffer.PreWarm(chain)
-		
+
 		log.Printf("🔧 Sprint Adaptation: Chain %s P99 violation, enabling aggressive optimizations", chain)
 	}
 }
@@ -191,8 +191,8 @@ type UnifiedResponse struct {
 }
 
 type UnifiedError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
 	Data    interface{} `json:"data,omitempty"`
 }
 
@@ -214,7 +214,7 @@ func NewUnifiedAPILayer() *UnifiedAPILayer {
 // Universal endpoint that works across all chains
 func (ual *UnifiedAPILayer) UniversalBlockHandler(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	
+
 	var req UnifiedRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request format", http.StatusBadRequest)
@@ -229,10 +229,10 @@ func (ual *UnifiedAPILayer) UniversalBlockHandler(w http.ResponseWriter, r *http
 
 	// Route to appropriate chain with unified interface
 	response := ual.processUnifiedRequest(&req, start)
-	
+
 	// Track latency for optimization
 	latencyOptimizer.TrackRequest(req.Chain, time.Since(start))
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -301,12 +301,12 @@ func (ual *UnifiedAPILayer) processUnifiedRequest(req *UnifiedRequest, start tim
 // ===== 3. PREDICTIVE CACHE + ENTROPY MEMORY BUFFER =====
 
 type PredictiveCache struct {
-	mutex           sync.RWMutex
-	cache           map[string]*CacheEntry
-	predictions     *PredictionEngine
+	mutex            sync.RWMutex
+	cache            map[string]*CacheEntry
+	predictions      *PredictionEngine
 	entropyOptimizer *EntropyOptimizer
-	maxSize         int
-	currentSize     int
+	maxSize          int
+	currentSize      int
 }
 
 type CacheEntry struct {
@@ -358,7 +358,7 @@ func (pc *PredictiveCache) Get(req *UnifiedRequest) interface{} {
 	// Update access patterns for prediction
 	entry.LastAccess = time.Now()
 	entry.AccessCount++
-	
+
 	// Update prediction score
 	pc.predictions.UpdatePattern(key, entry.LastAccess)
 
@@ -371,10 +371,10 @@ func (pc *PredictiveCache) Set(req *UnifiedRequest, value interface{}) {
 	defer pc.mutex.Unlock()
 
 	key := pc.generateKey(req)
-	
+
 	// Predict optimal TTL based on patterns
 	predictedTTL := pc.predictions.PredictOptimalTTL(key, req.Chain)
-	
+
 	entry := &CacheEntry{
 		Key:        key,
 		Value:      value,
@@ -397,10 +397,10 @@ func (pc *PredictiveCache) Set(req *UnifiedRequest, value interface{}) {
 func (pc *PredictiveCache) GetActualCacheStats() map[string]interface{} {
 	pc.mutex.RLock()
 	defer pc.mutex.RUnlock()
-	
+
 	totalRequests := int64(0)
 	totalHits := int64(0)
-	
+
 	// Calculate hit rate from metrics
 	for key, hits := range metricsTracker.counters {
 		if strings.Contains(key, "sprint_cache_hits") {
@@ -410,20 +410,20 @@ func (pc *PredictiveCache) GetActualCacheStats() map[string]interface{} {
 			totalRequests += hits
 		}
 	}
-	
+
 	hitRate := 0.0
 	if totalRequests > 0 {
 		hitRate = float64(totalHits) / float64(totalRequests) * 100
 	}
-	
+
 	return map[string]interface{}{
-		"cache_size": pc.currentSize,
-		"max_size": pc.maxSize,
-		"hit_rate_percent": fmt.Sprintf("%.1f%%", hitRate),
-		"total_requests": totalRequests,
-		"total_hits": totalHits,
+		"cache_size":        pc.currentSize,
+		"max_size":          pc.maxSize,
+		"hit_rate_percent":  fmt.Sprintf("%.1f%%", hitRate),
+		"total_requests":    totalRequests,
+		"total_hits":        totalHits,
 		"prediction_engine": "Active",
-		"last_updated": time.Now().Format(time.RFC3339),
+		"last_updated":      time.Now().Format(time.RFC3339),
 	}
 }
 
@@ -445,11 +445,11 @@ func (pc *PredictiveCache) EnableAggressive(chain string) {
 // ===== 4. ENTROPY MEMORY BUFFER =====
 
 type EntropyMemoryBuffer struct {
-	mutex          sync.RWMutex
-	buffers        map[string]*ChainBuffer
-	globalEntropy  []byte
-	refreshRate    time.Duration
-	qualityTarget  float64
+	mutex         sync.RWMutex
+	buffers       map[string]*ChainBuffer
+	globalEntropy []byte
+	refreshRate   time.Duration
+	qualityTarget float64
 }
 
 type ChainBuffer struct {
@@ -466,7 +466,7 @@ func NewEntropyMemoryBuffer() *EntropyMemoryBuffer {
 		refreshRate:   1 * time.Second,
 		qualityTarget: 0.95,
 	}
-	
+
 	// Start background entropy generation
 	go emb.backgroundEntropyGeneration()
 	return emb
@@ -503,7 +503,7 @@ func (emb *EntropyMemoryBuffer) GetOptimizedEntropy(chain string, size int) []by
 	// Use pre-generated high-quality entropy
 	result := make([]byte, size)
 	copy(result, buffer.Data[:size])
-	
+
 	// Async refresh if buffer is getting low
 	if len(buffer.Data) < size*2 {
 		go emb.refreshBuffer(chain)
@@ -515,10 +515,10 @@ func (emb *EntropyMemoryBuffer) GetOptimizedEntropy(chain string, size int) []by
 // ===== 5. RATE LIMITING & TIERING =====
 
 type TierManager struct {
-	tiers         map[string]*TierConfig
-	userTiers     map[string]string
-	rateLimiters  map[string]*RateLimiter
-	monetization  *MonetizationEngine
+	tiers        map[string]*TierConfig
+	userTiers    map[string]string
+	rateLimiters map[string]*RateLimiter
+	monetization *MonetizationEngine
 }
 
 type TierConfig struct {
@@ -581,9 +581,9 @@ func NewTierManager() *TierManager {
 
 // Simple metrics tracking without external dependencies
 type MetricsTracker struct {
-	mutex    sync.RWMutex
-	counters map[string]int64
-	gauges   map[string]float64
+	mutex      sync.RWMutex
+	counters   map[string]int64
+	gauges     map[string]float64
 	histograms map[string][]float64
 }
 
@@ -612,7 +612,7 @@ func (mt *MetricsTracker) ObserveHistogram(name string, value float64, labels ..
 	defer mt.mutex.Unlock()
 	key := fmt.Sprintf("%s_%s", name, fmt.Sprintf("%v", labels))
 	mt.histograms[key] = append(mt.histograms[key], value)
-	
+
 	// Keep only last 1000 observations
 	if len(mt.histograms[key]) > 1000 {
 		mt.histograms[key] = mt.histograms[key][1:]
@@ -637,11 +637,11 @@ func SprintValueHandler(w http.ResponseWriter, r *http.Request) {
 	value := map[string]interface{}{
 		"sprint_advantages": map[string]interface{}{
 			"flat_p99_latency": map[string]interface{}{
-				"target":     "100ms",
-				"current":    "85ms",
+				"target":      "100ms",
+				"current":     "85ms",
 				"adaptations": "Real-time optimization",
-				"vs_infura":  "Infura: 250ms+ P99",
-				"vs_alchemy": "Alchemy: 200ms+ P99",
+				"vs_infura":   "Infura: 250ms+ P99",
+				"vs_alchemy":  "Alchemy: 200ms+ P99",
 			},
 			"unified_api": map[string]interface{}{
 				"supported_chains": 8,
@@ -684,22 +684,31 @@ type SimpleMLModel struct{}
 type EntropyOptimizer struct{}
 
 func NewResponseNormalizer() *ResponseNormalizer { return &ResponseNormalizer{} }
-func NewRequestValidator() *RequestValidator { return &RequestValidator{} }
+func NewRequestValidator() *RequestValidator     { return &RequestValidator{} }
 func NewMonetizationEngine() *MonetizationEngine { return &MonetizationEngine{} }
-func NewPredictionEngine() *PredictionEngine { return &PredictionEngine{} }
+func NewPredictionEngine() *PredictionEngine     { return &PredictionEngine{} }
 
 func (rn *ResponseNormalizer) Normalize(response interface{}) interface{} { return response }
-func (rv *RequestValidator) Validate(req *UnifiedRequest) error { return nil }
-func (ual *UnifiedAPILayer) sendErrorResponse(w http.ResponseWriter, req UnifiedRequest, code int, message string, start time.Time) {}
-func (ual *UnifiedAPILayer) executeWithCircuitBreaker(ctx context.Context, req *UnifiedRequest, adapter ChainAdapter) (interface{}, error) { return nil, nil }
-func (pc *PredictiveCache) generateKey(req *UnifiedRequest) string { return fmt.Sprintf("%s:%s", req.Chain, req.Method) }
-func (pc *PredictiveCache) evict(key string) {}
-func (pc *PredictiveCache) evictLeastPredicted() {}
-func (pc *PredictiveCache) preCacheRequest(chain, req string) {}
+func (rv *RequestValidator) Validate(req *UnifiedRequest) error           { return nil }
+func (ual *UnifiedAPILayer) sendErrorResponse(w http.ResponseWriter, req UnifiedRequest, code int, message string, start time.Time) {
+}
+func (ual *UnifiedAPILayer) executeWithCircuitBreaker(ctx context.Context, req *UnifiedRequest, adapter ChainAdapter) (interface{}, error) {
+	return nil, nil
+}
+func (pc *PredictiveCache) generateKey(req *UnifiedRequest) string {
+	return fmt.Sprintf("%s:%s", req.Chain, req.Method)
+}
+func (pc *PredictiveCache) evict(key string)                            {}
+func (pc *PredictiveCache) evictLeastPredicted()                        {}
+func (pc *PredictiveCache) preCacheRequest(chain, req string)           {}
 func (pe *PredictionEngine) UpdatePattern(key string, access time.Time) {}
-func (pe *PredictionEngine) PredictOptimalTTL(key, chain string) time.Duration { return 5 * time.Minute }
+func (pe *PredictionEngine) PredictOptimalTTL(key, chain string) time.Duration {
+	return 5 * time.Minute
+}
 func (pe *PredictionEngine) PredictFutureAccess(key string) float64 { return 0.5 }
-func (emb *EntropyMemoryBuffer) backgroundEntropyGeneration() {}
-func (emb *EntropyMemoryBuffer) generateHighQualityEntropy(size int) []byte { return make([]byte, size) }
+func (emb *EntropyMemoryBuffer) backgroundEntropyGeneration()       {}
+func (emb *EntropyMemoryBuffer) generateHighQualityEntropy(size int) []byte {
+	return make([]byte, size)
+}
 func (emb *EntropyMemoryBuffer) generateFastEntropy(size int) []byte { return make([]byte, size) }
-func (emb *EntropyMemoryBuffer) refreshBuffer(chain string) {}
+func (emb *EntropyMemoryBuffer) refreshBuffer(chain string)          {}

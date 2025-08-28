@@ -35,13 +35,13 @@ func (esm *EnterpriseSecurityManager) RegisterEnterpriseRoutes() {
 	esm.logger.Info("Enterprise Security API endpoints available:",
 		zap.Strings("endpoints", []string{
 			"POST /api/v1/enterprise/entropy/fast",
-			"POST /api/v1/enterprise/entropy/hybrid", 
+			"POST /api/v1/enterprise/entropy/hybrid",
 			"GET /api/v1/enterprise/system/fingerprint",
 			"GET /api/v1/enterprise/system/temperature",
 			"POST /api/v1/enterprise/buffer/new",
 			"GET /api/v1/enterprise/security/audit-status",
 			"POST /api/v1/enterprise/security/audit/enable",
-			"POST /api/v1/enterprise/security/audit/disable", 
+			"POST /api/v1/enterprise/security/audit/disable",
 			"POST /api/v1/enterprise/security/policy",
 			"GET /api/v1/enterprise/security/compliance-report",
 			"POST /api/v1/enterprise/bloom/new",
@@ -142,7 +142,7 @@ func (esm *EnterpriseSecurityManager) handleHybridEntropy(w http.ResponseWriter,
 			esm.jsonError(w, http.StatusBadRequest, fmt.Sprintf("Header %d must be 160 hex characters (80 bytes)", i))
 			return
 		}
-		
+
 		for j := 0; j < 80; j++ {
 			hexByte := hexHeader[j*2 : j*2+2]
 			if n, err := strconv.ParseUint(hexByte, 16, 8); err != nil {
@@ -235,9 +235,9 @@ func (esm *EnterpriseSecurityManager) handleCPUTemperature(w http.ResponseWriter
 
 // SecureBufferRequest represents a request to create a secure buffer
 type SecureBufferRequest struct {
-	Size          int    `json:"size"`
-	SecurityLevel string `json:"security_level"`
-	FillWithEntropy bool `json:"fill_with_entropy"`
+	Size            int    `json:"size"`
+	SecurityLevel   string `json:"security_level"`
+	FillWithEntropy bool   `json:"fill_with_entropy"`
 }
 
 // SecureBufferResponse represents the response for secure buffer operations
@@ -287,13 +287,13 @@ func (esm *EnterpriseSecurityManager) handleNewSecureBuffer(w http.ResponseWrite
 	// Create buffer
 	var buffer *securebuf.Buffer
 	var err error
-	
+
 	if req.FillWithEntropy {
 		buffer, err = securebuf.NewWithFastEntropy(req.Size)
 	} else {
 		buffer, err = securebuf.NewWithSecurityLevel(req.Size, secLevel)
 	}
-	
+
 	if err != nil {
 		esm.logger.Error("Failed to create secure buffer", zap.Error(err))
 		esm.jsonError(w, http.StatusInternalServerError, "Failed to create secure buffer")
@@ -365,8 +365,8 @@ func (esm *EnterpriseSecurityManager) handleEnableAudit(w http.ResponseWriter, r
 	}
 
 	esm.jsonResponse(w, http.StatusOK, map[string]interface{}{
-		"status": "enabled",
-		"log_path": req.LogPath,
+		"status":    "enabled",
+		"log_path":  req.LogPath,
 		"timestamp": time.Now(),
 	})
 }
@@ -385,7 +385,7 @@ func (esm *EnterpriseSecurityManager) handleDisableAudit(w http.ResponseWriter, 
 	}
 
 	esm.jsonResponse(w, http.StatusOK, map[string]interface{}{
-		"status": "disabled",
+		"status":    "disabled",
 		"timestamp": time.Now(),
 	})
 }
@@ -427,8 +427,8 @@ func (esm *EnterpriseSecurityManager) handleSetPolicy(w http.ResponseWriter, r *
 	}
 
 	esm.jsonResponse(w, http.StatusOK, map[string]interface{}{
-		"status": "policy_set",
-		"policy": policy,
+		"status":    "policy_set",
+		"policy":    policy,
 		"timestamp": time.Now(),
 	})
 }
@@ -452,14 +452,14 @@ func (esm *EnterpriseSecurityManager) handleComplianceReport(w http.ResponseWrit
 	if err := json.Unmarshal([]byte(report), &reportData); err != nil {
 		// If parsing fails, return as string
 		esm.jsonResponse(w, http.StatusOK, map[string]interface{}{
-			"report": report,
+			"report":    report,
 			"timestamp": time.Now(),
 		})
 		return
 	}
 
 	esm.jsonResponse(w, http.StatusOK, map[string]interface{}{
-		"report": reportData,
+		"report":    reportData,
 		"timestamp": time.Now(),
 	})
 }
@@ -513,7 +513,7 @@ func (esm *EnterpriseSecurityManager) handleNewBloomFilter(w http.ResponseWriter
 
 	// Create bloom filter
 	filter, err := securebuf.NewBitcoinBloomFilter(
-		req.NumBits, req.HashFunctions, req.Tweak, 
+		req.NumBits, req.HashFunctions, req.Tweak,
 		req.Flags, req.MaxAge, req.BatchSize,
 	)
 	if err != nil {
@@ -545,7 +545,7 @@ func (esm *EnterpriseSecurityManager) jsonResponse(w http.ResponseWriter, status
 // jsonError sends a JSON error response
 func (esm *EnterpriseSecurityManager) jsonError(w http.ResponseWriter, statusCode int, message string) {
 	esm.jsonResponse(w, statusCode, map[string]string{
-		"error": message,
+		"error":     message,
 		"timestamp": time.Now().Format(time.RFC3339),
 	})
 }

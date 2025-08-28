@@ -20,58 +20,58 @@ import (
 // Universal multi-chain endpoint that demonstrates Sprint's competitive advantages
 func (s *Server) universalChainHandler(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	
+
 	// Extract chain from path
 	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	if len(pathParts) < 3 {
 		s.jsonResponse(w, http.StatusBadRequest, map[string]interface{}{
-			"error": "Invalid path. Use /api/v1/universal/{chain}/{method}",
+			"error":            "Invalid path. Use /api/v1/universal/{chain}/{method}",
 			"sprint_advantage": "Single endpoint for all chains vs competitor's chain-specific APIs",
 		})
 		return
 	}
-	
+
 	chain := pathParts[2]
 	method := ""
 	if len(pathParts) > 3 {
 		method = pathParts[3]
 	}
-	
+
 	// Track latency for P99 optimization
 	defer func() {
 		duration := time.Since(start)
 		if latencyOptimizer != nil {
 			latencyOptimizer.TrackRequest(chain, duration)
 		}
-		
+
 		// Log if we're meeting our flat P99 target
 		if duration > 100*time.Millisecond {
-			s.logger.Warn("P99 target exceeded", 
+			s.logger.Warn("P99 target exceeded",
 				zap.String("chain", chain),
 				zap.Duration("duration", duration),
 				zap.String("target", "100ms"))
 		}
 	}()
-	
+
 	response := map[string]interface{}{
 		"chain":     chain,
 		"method":    method,
 		"timestamp": start.Unix(),
 		"sprint_advantages": map[string]interface{}{
-			"unified_api": "Single endpoint works across all chains",
-			"flat_p99":    "Sub-100ms guaranteed response time",
-			"predictive_cache": "ML-powered caching reduces latency",
+			"unified_api":         "Single endpoint works across all chains",
+			"flat_p99":            "Sub-100ms guaranteed response time",
+			"predictive_cache":    "ML-powered caching reduces latency",
 			"enterprise_security": "Hardware-backed SecureBuffer entropy",
 		},
 		"vs_competitors": map[string]interface{}{
 			"infura": map[string]string{
-				"api_fragmentation": "Requires different integration per chain",
-				"latency_spikes":    "250ms+ P99 latency",
+				"api_fragmentation":   "Requires different integration per chain",
+				"latency_spikes":      "250ms+ P99 latency",
 				"no_predictive_cache": "Basic time-based caching only",
 			},
 			"alchemy": map[string]string{
-				"cost": "2x more expensive ($0.0001 vs our $0.00005)",
-				"latency": "200ms+ P99 without optimization",
+				"cost":           "2x more expensive ($0.0001 vs our $0.00005)",
+				"latency":        "200ms+ P99 without optimization",
 				"limited_chains": "Fewer supported networks",
 			},
 		},
@@ -81,7 +81,7 @@ func (s *Server) universalChainHandler(w http.ResponseWriter, r *http.Request) {
 			"optimization":  "Real-time P99 adaptation enabled",
 		},
 	}
-	
+
 	s.jsonResponse(w, http.StatusOK, response)
 }
 
@@ -93,14 +93,14 @@ func (s *Server) latencyStatsHandler(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	
+
 	// Get ACTUAL measured latency stats instead of hardcoded values
 	realStats := latencyOptimizer.GetActualStats()
-	
+
 	stats := map[string]interface{}{
 		"sprint_latency_advantage": map[string]interface{}{
-			"target_p99":       "100ms",
-			"current_p99":      realStats["CurrentP99"],
+			"target_p99":  "100ms",
+			"current_p99": realStats["CurrentP99"],
 			"competitor_p99": map[string]string{
 				"infura":  "250ms+",
 				"alchemy": "200ms+",
@@ -120,7 +120,7 @@ func (s *Server) latencyStatsHandler(w http.ResponseWriter, r *http.Request) {
 			"enterprise_security":  "Hardware-backed entropy generation",
 		},
 	}
-	
+
 	s.jsonResponse(w, http.StatusOK, stats)
 }
 
@@ -132,14 +132,14 @@ func (s *Server) cacheStatsHandler(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	
+
 	// Get ACTUAL cache statistics instead of hardcoded values
 	realCacheStats := predictiveCache.GetActualCacheStats()
-	
+
 	stats := map[string]interface{}{
 		"predictive_cache_advantage": map[string]interface{}{
 			"hit_rate":          realCacheStats["hit_rate_percent"],
-			"cache_size":        realCacheStats["cache_size"], 
+			"cache_size":        realCacheStats["cache_size"],
 			"total_requests":    realCacheStats["total_requests"],
 			"ml_optimization":   "Pattern-based TTL prediction",
 			"entropy_buffering": "Pre-warmed high-quality entropy",
@@ -154,11 +154,11 @@ func (s *Server) cacheStatsHandler(w http.ResponseWriter, r *http.Request) {
 		},
 		"performance_impact": map[string]interface{}{
 			"average_response_reduction": "75%",
-			"p99_improvement":           "85%",
-			"resource_efficiency":       "60% less backend load",
+			"p99_improvement":            "85%",
+			"resource_efficiency":        "60% less backend load",
 		},
 	}
-	
+
 	s.jsonResponse(w, http.StatusOK, stats)
 }
 
@@ -170,7 +170,7 @@ func (s *Server) tierComparisonHandler(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	
+
 	comparison := map[string]interface{}{
 		"sprint_vs_competitors": map[string]interface{}{
 			"enterprise_tier": map[string]interface{}{
@@ -189,7 +189,7 @@ func (s *Server) tierComparisonHandler(w http.ResponseWriter, r *http.Request) {
 			"pro_tier": map[string]interface{}{
 				"sprint_target_latency": "100ms",
 				"competitor_typical":    "250ms+",
-				"cache_hit_rate":       "90%+",
+				"cache_hit_rate":        "90%+",
 				"concurrent_requests":   "50 vs their 25",
 			},
 		},
@@ -201,7 +201,7 @@ func (s *Server) tierComparisonHandler(w http.ResponseWriter, r *http.Request) {
 			"50% cost reduction vs market leaders",
 		},
 	}
-	
+
 	s.jsonResponse(w, http.StatusOK, comparison)
 }
 

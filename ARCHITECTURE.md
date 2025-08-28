@@ -1,8 +1,8 @@
-# Bitcoin Sprint Architecture: Hub-and-Spoke Security Model
+# Multi-Chain Sprint Architecture: Hub-and-Spoke Security Model
 
 ## Core Architecture Overview
 
-Bitcoin Sprint uses a **hub-and-spoke security architecture** where the Rust SecureBuffer library serves as the secure memory core, with all other components as consumers or bindings.
+Multi-Chain Sprint uses a **hub-and-spoke security architecture** where the Rust SecureBuffer library serves as the secure memory core, with all other components as consumers or bindings. This architecture supports Bitcoin, Ethereum, Solana, Cosmos, Polkadot and other blockchain networks.
 
 ```
                 ┌─────────────────┐

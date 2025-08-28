@@ -45,7 +45,7 @@ func FastEntropy() ([]byte, error) {
 // SystemFingerprint gets unique system identifier for entropy
 func SystemFingerprint() ([32]byte, error) {
 	var fingerprint [32]byte
-	
+
 	if !CGoEnabled {
 		// Generate mock fingerprint based on system characteristics
 		for i := range fingerprint {
@@ -92,16 +92,16 @@ func NewWithFastEntropy(size int) (*Buffer, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	entropy := make([]byte, size)
 	if _, err := rand.Read(entropy); err != nil {
 		return nil, err
 	}
-	
+
 	if err := buf.Write(entropy); err != nil {
 		return nil, err
 	}
-	
+
 	return buf, nil
 }
 
@@ -127,7 +127,7 @@ func HybridEntropy(headers [][]byte) ([]byte, error) {
 	if _, err := rand.Read(entropy); err != nil {
 		return nil, err
 	}
-	
+
 	// Mix with header data
 	for i, header := range headers {
 		for j, b := range header {
@@ -136,7 +136,7 @@ func HybridEntropy(headers [][]byte) ([]byte, error) {
 			}
 		}
 	}
-	
+
 	return entropy, nil
 }
 
@@ -146,19 +146,19 @@ func NewWithHybridEntropy(size int, headers [][]byte) (*Buffer, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Generate hybrid entropy and fill buffer
 	entropy, err := HybridEntropy(headers)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Expand entropy to fill buffer if needed
 	fillData := make([]byte, size)
 	for i := 0; i < size; i++ {
 		fillData[i] = entropy[i%len(entropy)]
 	}
-	
+
 	if err := buf.Write(fillData); err != nil {
 		return nil, err
 	}
@@ -287,9 +287,9 @@ type BloomFilter struct {
 
 // BloomFilterStats contains bloom filter statistics
 type BloomFilterStats struct {
-	ItemCount           int
-	TheoreticalFPRate   float64
-	MemoryUsageBytes    int
+	ItemCount            int
+	TheoreticalFPRate    float64
+	MemoryUsageBytes     int
 	OptimalHashFunctions int
 }
 
@@ -334,9 +334,9 @@ func (bf *BloomFilter) ContainsUTXO(txid []byte, outputIndex uint32) (bool, erro
 // GetStats returns bloom filter statistics
 func (bf *BloomFilter) GetStats() (BloomFilterStats, error) {
 	return BloomFilterStats{
-		ItemCount:           0, // Mock stats
-		TheoreticalFPRate:   0.001,
-		MemoryUsageBytes:    len(bf.data),
+		ItemCount:            0, // Mock stats
+		TheoreticalFPRate:    0.001,
+		MemoryUsageBytes:     len(bf.data),
 		OptimalHashFunctions: bf.hashFns,
 	}, nil
 }

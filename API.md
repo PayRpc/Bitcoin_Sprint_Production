@@ -1,8 +1,8 @@
-# Bitcoin Sprint Customer API Documentation
+# Multi-Chain Sprint Customer API Documentation
 
 ## Overview
 
-**Bitcoin Sprint delivers HFT-grade performance for enterprise Bitcoin applications.**
+**Multi-Chain Sprint delivers HFT-grade performance for enterprise blockchain applications across Bitcoin, Ethereum, Solana, Cosmos, and Polkadot.**
 
 - ⚡ **4.1M ops/sec** sustained throughput
 - 🎯 **Sub-microsecond latency** (558ns average)

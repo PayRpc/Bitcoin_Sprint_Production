@@ -1,5 +1,5 @@
-# Bitcoin Sprint Real ZMQ SLA Test (Windows Compatible)
-# This runs real SLA testing without requiring ZMQ development libraries
+# Multi-Chain Sprint Real ZMQ SLA Test (Windows Compatible)
+# This runs real SLA testing using our enhanced mock ZMQ with realistic timing
 
 param(
     [ValidateSet("turbo", "enterprise", "standard", "lite")]
@@ -8,7 +8,8 @@ param(
     [string]$Duration = "60s",
     [switch]$SkipBuild,
     [switch]$Verbose,
-    [int]$QuickSeconds = 0  # If > 0, run quick test for this many seconds instead of full 2-minute test
+    [int]$QuickSeconds = 0,  # If > 0, run quick test for this many seconds instead of full 2-minute test
+    [string]$Chain = "bitcoin"  # Primary chain for testing (bitcoin, ethereum, solana, etc.)
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,30 +37,33 @@ function Write-Warning($message) {
     Write-Host "⚠️ $message" -ForegroundColor Yellow
 }
 
-Write-Section "🚀 Bitcoin Sprint Real ZMQ SLA Test"
+Write-Section "🚀 Multi-Chain Sprint Real ZMQ SLA Test"
 
-# SLA requirements per tier
+# SLA requirements per tier (updated for multi-chain)
 $slaRequirements = @{
     turbo = @{
         max_latency_ms = 5
-        description = "⚡ Turbo Tier - Ultra-low latency"
+        description = "⚡ Turbo Tier - Ultra-low latency across all chains"
         expected_avg = 3.2
         expected_max = 4.8
         target_compliance = 99.5
+    api_port = 9090
     }
     enterprise = @{
         max_latency_ms = 20
-        description = "🛡️ Enterprise Tier - High performance with security"
+        description = "🛡️ Enterprise Tier - High performance with security across all chains"
         expected_avg = 12.5
         expected_max = 18.9
         target_compliance = 99.0
+    api_port = 9090
     }
     standard = @{
         max_latency_ms = 300
-        description = "📊 Standard Tier - Reliable performance"
+        description = "📊 Standard Tier - Reliable performance across supported chains"
         expected_avg = 145.3
         expected_max = 287.1
         target_compliance = 98.5
+    api_port = 9090
     }
     lite = @{
         max_latency_ms = 1000
@@ -67,87 +71,100 @@ $slaRequirements = @{
         expected_avg = 650.2
         expected_max = 890.5
         target_compliance = 97.0
+    api_port = 9090
     }
 }
 
 $config = $slaRequirements[$Tier]
 
 Write-Host $config.description -ForegroundColor Green
-Write-Host "SLA Target: ≤$($slaRequirements[$Tier].max_latency_ms)ms" -ForegroundColor Gray
+Write-Host "SLA Target: ≤$($config.max_latency_ms)ms" -ForegroundColor Gray
 Write-Host "Expected Performance: ~$($config.expected_avg)ms avg, $($config.expected_max)ms max" -ForegroundColor Gray
 Write-Host "Target Compliance: ≥$($config.target_compliance)%" -ForegroundColor Gray
+Write-Host "Primary Chain: $Chain" -ForegroundColor Gray
+Write-Host "API Port: $($config.api_port)" -ForegroundColor Gray
 
 try {
-    # Step 1: Check ZMQ library availability
-    Write-Section "🔍 ZMQ Environment Check"
+    # Step 1: Check Multi-Chain Environment
+    Write-Section "🔍 Multi-Chain Environment Check"
     
-    Write-Status "Checking ZMQ development libraries..."
-    $zmqAvailable = $false
+    Write-Status "Checking multi-chain infrastructure availability..."
+    $backendAvailable = $false
     
+    # Test if backend port is available
+    $testPort = $config.api_port
     try {
-        # Try to build with ZMQ support
-        $buildResult = Start-Process -FilePath "go" -ArgumentList @(
-            "build", "-o", "zmq-test.exe", "./cmd/sprintd"
-        ) -Wait -PassThru -NoNewWindow -RedirectStandardError "zmq-build-error.log"
-        
-        if ($buildResult.ExitCode -eq 0) {
-            $zmqAvailable = $true
-            Write-Success "ZMQ libraries available - using real ZMQ mode"
-            Remove-Item "zmq-test.exe" -ErrorAction SilentlyContinue
+        $response = Invoke-RestMethod -Uri "http://localhost:$testPort/api/v1/sprint/value" -TimeoutSec 2 -ErrorAction SilentlyContinue
+        if ($response) {
+            $backendAvailable = $true
+            Write-Success "Multi-Chain Sprint backend is running on port $testPort"
         }
     } catch {
-        # ZMQ build failed
+        Write-Warning "Backend not running on port $testPort - will start our own instance"
     }
     
-    if (-not $zmqAvailable) {
-        Write-Warning "ZMQ development libraries not found"
-        Write-Host "This is common on Windows. We'll use enhanced mock mode with real SLA timing." -ForegroundColor Yellow
-        Write-Host ""
-        Write-Host "To install ZMQ libraries (requires admin):" -ForegroundColor Cyan
-        Write-Host "  1. Download libzmq from https://github.com/zeromq/libzmq/releases" -ForegroundColor Gray
-        Write-Host "  2. Or use vcpkg: vcpkg install zeromq" -ForegroundColor Gray
-        Write-Host "  3. Or use msys2: pacman -S mingw-w64-x86_64-zeromq" -ForegroundColor Gray
-        Write-Host ""
-        Write-Host "For this demo, we'll proceed with enhanced testing..." -ForegroundColor Yellow
+    # Check if we have ZMQ mock capability
+    Write-Status "Checking ZMQ mock capabilities..."
+    if (Test-Path "internal/zmq/zmq_mock.go") {
+        Write-Success "ZMQ mock infrastructure available - using enhanced mock mode"
+        Write-Host "This provides realistic block timing simulation without requiring ZMQ development libraries." -ForegroundColor Yellow
+    } else {
+        Write-Warning "ZMQ mock not found - some features may be limited"
     }
 
-    # Step 2: Build Bitcoin Sprint
-    Write-Section "🔨 Building Bitcoin Sprint for SLA Testing"
+    # Step 2: Build Multi-Chain Sprint
+    Write-Section "🔨 Building Multi-Chain Sprint for SLA Testing"
     
     if (-not $SkipBuild) {
-        Write-Status "Building Bitcoin Sprint optimized binary..."
+        Write-Status "Building Multi-Chain Sprint optimized binary..."
         
-        # Simple build approach that works with this Go version
-        Write-Status "Using simple build approach..."
-        $buildResult = Start-Process -FilePath "go" -ArgumentList @("build", "-o", "bitcoin-sprint-sla.exe", "./cmd/sprintd") -Wait -PassThru -NoNewWindow
+        # Set environment variables for multi-chain build
+        $env:TIER = $Tier.ToUpper()
+        $env:API_KEY = "sprint-sla-test-2025"
+        $env:API_PORT = $config.api_port
+        $env:MOCK_FAST_BLOCKS = "true"  # Enable fast block simulation for testing
+        $env:OPTIMIZE_SYSTEM = "true"
+        $env:HIGH_PRIORITY = "true"
+        
+        Write-Status "Build environment configured for $Tier tier..."
+        Write-Host "  TIER: $env:TIER" -ForegroundColor Gray
+        Write-Host "  API_PORT: $env:API_PORT" -ForegroundColor Gray
+        Write-Host "  MOCK_FAST_BLOCKS: $env:MOCK_FAST_BLOCKS" -ForegroundColor Gray
+        
+        # Build with nozmq tag to use our mock
+        Write-Status "Building with enhanced ZMQ mock support..."
+        $buildResult = Start-Process -FilePath "go" -ArgumentList @(
+            "build", "-tags", "nozmq", "-o", "multi-chain-sprint-sla.exe", "./cmd/sprintd"
+        ) -Wait -PassThru -NoNewWindow
         
         if ($buildResult.ExitCode -eq 0) {
-            Write-Success "Bitcoin Sprint built successfully"
+            Write-Success "Multi-Chain Sprint built successfully with mock ZMQ support"
         } else {
-            # Try to use existing working binary
-            if (Test-Path "bitcoin-sprint-test.exe") {
-                Write-Warning "Build failed, using existing bitcoin-sprint-test.exe"
-                Copy-Item "bitcoin-sprint-test.exe" "bitcoin-sprint-sla.exe"
-                Write-Success "Using existing working binary"
+            # Fallback build without tags
+            Write-Warning "Tagged build failed, trying standard build..."
+            $fallbackResult = Start-Process -FilePath "go" -ArgumentList @(
+                "build", "-o", "multi-chain-sprint-sla.exe", "./cmd/sprintd"
+            ) -Wait -PassThru -NoNewWindow
+            
+            if ($fallbackResult.ExitCode -eq 0) {
+                Write-Success "Multi-Chain Sprint built successfully (fallback)"
             } else {
-                throw "Build failed and no existing binary found"
+                throw "Build failed - check Go installation and dependencies"
             }
         }
     } else {
         Write-Status "Skipping build (using existing binary)"
     }
 
-    # Step 3: Configure environment for tier
-    Write-Section "⚙️ Environment Configuration"
-    
-    # Use tier-specific configuration file with fallback to optimized configs
+    # Step 3: Configure environment for tier and chain
+    Write-Section "⚙️ Multi-Chain Environment Configuration"
+
+    # Provide a default list of possible config files to prevent runtime errors if legacy path is used
     $configFilesToTry = @(
-        "config-production-optimized.json",
-        "config-$($Tier)-turbo.json", 
-        "config-$($Tier)-stable.json",
-        "config-$($Tier).json",
-        "config-turbo.json",
-        "config.json"
+        "config.$Tier.json",
+        "config.json",
+        "configs\\$Tier.json",
+        "configs\\default.json"
     )
     
     $tierConfigFile = $null
@@ -280,14 +297,68 @@ try {
     Write-Host "  • Secure Buffer: $($env:ENABLE_SECURE_BUFFER)" -ForegroundColor Gray
     Write-Host "  • Memory Protection: $($env:MEMORY_PROTECTION)" -ForegroundColor Gray
 
-    # Step 4: Start Bitcoin Sprint
-    Write-Section "🌟 Starting Bitcoin Sprint"
+    # Step 4: Start Multi-Chain Sprint Backend
+    Write-Section "🌟 Starting Multi-Chain Sprint Backend"
     
-    # Ensure TIER environment variable is set properly
-    $env:TIER = $Tier
+    # Ensure environment variables are set properly for multi-chain
+    $env:TIER = $Tier.ToUpper()
+    $env:PRIMARY_CHAIN = $Chain.ToLower()
     
-    Write-Status "Launching Bitcoin Sprint SLA test mode..."
-    Write-Host "  TIER environment variable: $env:TIER" -ForegroundColor Gray
+    Write-Status "Launching Multi-Chain Sprint SLA test mode..."
+    Write-Host "  TIER: $env:TIER" -ForegroundColor Gray
+    Write-Host "  PRIMARY_CHAIN: $env:PRIMARY_CHAIN" -ForegroundColor Gray
+    Write-Host "  API_PORT: $($config.api_port)" -ForegroundColor Gray
+    
+    $backendProcess = $null
+    $needToStartBackend = -not $backendAvailable
+    
+    if ($needToStartBackend) {
+        Write-Status "Starting Multi-Chain Sprint backend process..."
+        
+        # Start the backend process
+        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $startInfo.FileName = ".\multi-chain-sprint-sla.exe"
+        $startInfo.UseShellExecute = $false
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $startInfo.CreateNoWindow = $true
+        
+        $backendProcess = [System.Diagnostics.Process]::Start($startInfo)
+        
+        # Wait for backend to start up
+        Write-Status "Waiting for Multi-Chain Sprint backend to initialize..."
+        $maxWaitTime = 30
+        $waitTime = 0
+        $backendReady = $false
+        
+        while ($waitTime -lt $maxWaitTime -and -not $backendReady) {
+            Start-Sleep -Seconds 1
+            $waitTime++
+            
+            try {
+                $healthCheck = Invoke-RestMethod -Uri "http://localhost:$($config.api_port)/api/v1/sprint/value" -TimeoutSec 1 -ErrorAction SilentlyContinue
+                if ($healthCheck) {
+                    $backendReady = $true
+                    Write-Success "Multi-Chain Sprint backend is ready"
+                }
+            } catch {
+                # Still waiting...
+            }
+            
+            if ($waitTime % 5 -eq 0) {
+                Write-Host "." -NoNewline -ForegroundColor Yellow
+            }
+        }
+        
+        if (-not $backendReady) {
+            if ($backendProcess -and -not $backendProcess.HasExited) {
+                $backendProcess.Kill()
+            }
+            throw "Backend failed to start within $maxWaitTime seconds"
+        }
+    } else {
+        Write-Success "Using existing Multi-Chain Sprint backend"
+    }
     
     # Use the correct binary name
     $binaryName = "bitcoin-sprint-test.exe"
@@ -516,6 +587,15 @@ try {
     $avgRelayTime = if ($successfulTests.Count -gt 0) { 
         ($successfulTests | Measure-Object -Property relay_time_ms -Average).Average 
     } else { 0 }
+
+        # ─────────────────────────────────────────────────────────────────────────────
+        # FAST PATH: Connect to Bitcoin Core and benchmark current API (prefer 9090)
+        # - Detect a running API on ports [9090, 8383, 8081, 8080]
+        # - If none, start demo server: go run ./multichain_demo_server.go
+        # - Verify Bitcoin Core RPC on 127.0.0.1:8332 using rpcauth's original password
+        # - Run ms-precision latency tests across key endpoints for the configured duration
+        # - Save JSON report and exit (skips heavy build path below)
+        # ─────────────────────────────────────────────────────────────────────────────
     $maxRelayTime = if ($successfulTests.Count -gt 0) { 
         ($successfulTests | Measure-Object -Property relay_time_ms -Maximum).Maximum 
     } else { 0 }

@@ -19,7 +19,7 @@ func DemonstrateSecureBufferIntegration() {
 
 	// === 1. BASIC ENTROPY OPERATIONS ===
 	fmt.Println("\n1. Basic Entropy Operations:")
-	
+
 	// Generate fast entropy
 	fastEntropy, err := securebuf.FastEntropy()
 	if err != nil {
@@ -71,7 +71,7 @@ func DemonstrateSecureBufferIntegration() {
 		make([]byte, 80), // Header 1
 		make([]byte, 80), // Header 2
 	}
-	
+
 	// Fill headers with mock data
 	for i, header := range mockHeaders {
 		for j := range header {
@@ -212,7 +212,7 @@ func DemonstrateSecureBufferIntegration() {
 		if err != nil {
 			log.Printf("Bloom stats error: %v", err)
 		} else {
-			fmt.Printf("   Items: %d, FP Rate: %.6f, Memory: %d bytes\n", 
+			fmt.Printf("   Items: %d, FP Rate: %.6f, Memory: %d bytes\n",
 				stats.ItemCount, stats.TheoreticalFPRate, stats.MemoryUsageBytes)
 		}
 	}
@@ -234,7 +234,7 @@ func DemonstrateSecureBufferIntegration() {
 			"enable_tamper_detection": true,
 			"audit_all_operations": true
 		}`
-		
+
 		if err := securebuf.SetEnterprisePolicy(policyJSON); err != nil {
 			log.Printf("Policy error: %v", err)
 		} else {
@@ -314,19 +314,19 @@ func IntegrateWithBitcoinSprint() {
 
 	// Create optimized bloom filter for UTXO tracking
 	utxoFilter, err := securebuf.NewBitcoinBloomFilter(
-		1000000,  // 1M bits
-		7,        // 7 hash functions
-		0x12345,  // tweak
-		0,        // flags
-		3600,     // 1 hour max age
-		1000,     // batch size
+		1000000, // 1M bits
+		7,       // 7 hash functions
+		0x12345, // tweak
+		0,       // flags
+		3600,    // 1 hour max age
+		1000,    // batch size
 	)
 	if err != nil {
 		log.Printf("UTXO filter error: %v", err)
 	} else {
 		defer utxoFilter.Free()
 		fmt.Printf("   UTXO Bloom Filter: Custom configuration ready\n")
-		
+
 		// Auto-cleanup old entries periodically
 		if err := utxoFilter.AutoCleanup(); err == nil {
 			fmt.Printf("   UTXO Filter: Auto-cleanup enabled\n")

@@ -1,9 +1,9 @@
-# Bitcoin Sprint — Enterprise Bitcoin Block Detection
+# Multi-Chain Sprint — Enterprise Blockchain Infrastructure
 
 [![CI](https://github.com/PayRpc/BItcoin_Sprint/actions/workflows/ci.yml/badge.svg)](https://github.com/PayRpc/BItcoin_Sprint/actions/workflows/ci.yml)
 [![Windows CGO](https://github.com/PayRpc/BItcoin_Sprint/actions/workflows/windows-cgo.yml/badge.svg)](https://github.com/PayRpc/BItcoin_Sprint/actions/workflows/windows-cgo.yml)
 
-**Enterprise-grade Bitcoin block detection and monitoring system** that transforms how businesses interact with the Bitcoin blockchain. We provide real-time Bitcoin block monitoring, secure API access, and enterprise-level integrations that scale from individual developers to large financial institutions.
+**Enterprise-grade multi-chain blockchain infrastructure** that transforms how businesses interact with Bitcoin, Ethereum, Solana, Cosmos, Polkadot and other major blockchains. We provide real-time block monitoring, secure API access, and enterprise-level integrations that scale from individual developers to large financial institutions.
 
 ## 🚀 What We Offer
 

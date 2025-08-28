@@ -6,9 +6,11 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "main.go",
+            "program": "${workspaceFolder}/cmd/sprintd",
             "env": {
-                "GOMAXPROCS": "4"
+                "GOMAXPROCS": "4",
+                "CGO_ENABLED": "1",
+                "RUST_BACKTRACE": "1"
             },
             "args": [],
             "console": "integratedTerminal",
@@ -19,12 +21,14 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "main.go",
+            "program": "${workspaceFolder}/cmd/sprintd",
             "env": {
                 "GOMAXPROCS": "4",
-                "GO_RELEASE": "true"
+                "GO_RELEASE": "true",
+                "CGO_ENABLED": "1",
+                "RUST_BACKTRACE": "1"
             },
-            "args": [],
+            "args": ["-tags", "nozmq"],
             "console": "integratedTerminal",
             "buildFlags": "-ldflags=-s -w -trimpath",
             "showLog": true
@@ -34,22 +38,38 @@
             "type": "go",
             "request": "launch",
             "mode": "debug",
-            "program": "main.go",
-            "env": {},
+            "program": "${workspaceFolder}/cmd/sprintd",
+            "env": {
+                "CGO_ENABLED": "1",
+                "RUST_BACKTRACE": "1"
+            },
             "args": [],
             "console": "integratedTerminal",
             "stopOnEntry": false,
             "showLog": true
         },
         {
-            "name": "Build Optimized Binary",
+            "name": "Build Optimized Binary (PowerShell)",
             "type": "go",
             "request": "launch",
             "mode": "exec",
             "program": "powershell.exe",
             "args": [
                 "-ExecutionPolicy", "Bypass",
-                "-File", "./build-optimized.ps1",
+                "-File", "${workspaceFolder}/build-optimized.ps1",
+                "-Release"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Build Optimized Binary (Linux/macOS)",
+            "type": "go",
+            "request": "launch",
+            "mode": "exec",
+            "program": "bash",
+            "args": [
+                "${workspaceFolder}/build-optimized.sh",
                 "-Release"
             ],
             "console": "integratedTerminal",

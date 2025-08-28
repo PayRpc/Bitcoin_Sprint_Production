@@ -27,12 +27,12 @@ type BitcoinBloomFilter struct {
 
 // BloomFilterStats contains bloom filter performance statistics
 type BloomFilterStats struct {
-	ItemCount           uint64  `json:"item_count"`
-	FalsePositiveCount  uint64  `json:"false_positive_count"`
-	TheoreticalFPRate   float64 `json:"theoretical_fp_rate"`
-	MemoryUsageBytes    uint64  `json:"memory_usage_bytes"`
-	TimestampEntries    uint64  `json:"timestamp_entries"`
-	AverageAgeSeconds   float64 `json:"average_age_seconds"`
+	ItemCount          uint64  `json:"item_count"`
+	FalsePositiveCount uint64  `json:"false_positive_count"`
+	TheoreticalFPRate  float64 `json:"theoretical_fp_rate"`
+	MemoryUsageBytes   uint64  `json:"memory_usage_bytes"`
+	TimestampEntries   uint64  `json:"timestamp_entries"`
+	AverageAgeSeconds  float64 `json:"average_age_seconds"`
 }
 
 // NewBitcoinBloomFilter creates a new Bitcoin Bloom filter with custom parameters
@@ -238,12 +238,12 @@ func (bf *BitcoinBloomFilter) GetStats() (*BloomFilterStats, error) {
 	}
 
 	var (
-		itemCount         C.uint64_t
+		itemCount          C.uint64_t
 		falsePositiveCount C.uint64_t
-		theoreticalFPRate C.double
-		memoryUsageBytes  C.size_t
-		timestampEntries  C.size_t
-		averageAgeSeconds C.double
+		theoreticalFPRate  C.double
+		memoryUsageBytes   C.size_t
+		timestampEntries   C.size_t
+		averageAgeSeconds  C.double
 	)
 
 	result := C.bitcoin_bloom_filter_get_stats(
@@ -261,12 +261,12 @@ func (bf *BitcoinBloomFilter) GetStats() (*BloomFilterStats, error) {
 	}
 
 	return &BloomFilterStats{
-		ItemCount:           uint64(itemCount),
-		FalsePositiveCount:  uint64(falsePositiveCount),
-		TheoreticalFPRate:   float64(theoreticalFPRate),
-		MemoryUsageBytes:    uint64(memoryUsageBytes),
-		TimestampEntries:    uint64(timestampEntries),
-		AverageAgeSeconds:   float64(averageAgeSeconds),
+		ItemCount:          uint64(itemCount),
+		FalsePositiveCount: uint64(falsePositiveCount),
+		TheoreticalFPRate:  float64(theoreticalFPRate),
+		MemoryUsageBytes:   uint64(memoryUsageBytes),
+		TimestampEntries:   uint64(timestampEntries),
+		AverageAgeSeconds:  float64(averageAgeSeconds),
 	}, nil
 }
 

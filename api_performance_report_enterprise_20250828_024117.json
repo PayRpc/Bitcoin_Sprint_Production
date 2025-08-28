@@ -1,0 +1,60 @@
+{
+  "timestamp": "2025-08-28T02:41:17",
+  "overall": {
+    "min": 0.551,
+    "max": 8.819,
+    "samples": 165,
+    "p95": 2.395,
+    "p99": 4.672,
+    "avg": 1.423,
+    "p50": 1.267
+  },
+  "api_base": "http://127.0.0.1:9090",
+  "per_endpoint": {
+    "/api/v1/sprint/latency-stats": {
+      "min": 0.0,
+      "max": 0.0,
+      "p95": 0,
+      "count": 0,
+      "p99": 0,
+      "avg": 0.0,
+      "p50": 0
+    },
+    "/api/v1/universal/bitcoin/latest": {
+      "min": 0.551,
+      "max": 2.877,
+      "p95": 1.679,
+      "count": 55,
+      "p99": 2.877,
+      "avg": 1.016,
+      "p50": 0.975
+    },
+    "/api/v1/sprint/value": {
+      "min": 0.677,
+      "max": 4.672,
+      "p95": 2.395,
+      "count": 55,
+      "p99": 4.672,
+      "avg": 1.372,
+      "p50": 1.264
+    },
+    "/health": {
+      "min": 1.009,
+      "max": 8.819,
+      "p95": 2.916,
+      "count": 55,
+      "p99": 8.819,
+      "avg": 1.88,
+      "p50": 1.746
+    },
+    "/api/v1/universal/bitcoin/stats": {
+      "min": 0.0,
+      "max": 0.0,
+      "p95": 0,
+      "count": 0,
+      "p99": 0,
+      "avg": 0.0,
+      "p50": 0
+    }
+  }
+}

@@ -4,7 +4,6 @@ package api
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -26,6 +25,7 @@ import (
 	"github.com/PayRpc/Bitcoin-Sprint/internal/license"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/securebuf"
+ 
 )
 
 // ===== SERVER STRUCT AND LIFECYCLE =====
@@ -39,9 +39,14 @@ type Server struct {
 	logger    *zap.Logger
 	srv       *http.Server // Public API server
 	adminSrv  *http.Server // Admin-only server
+	// HTTP router
+
 
 	// Rate limiting
 	rateLimiter *RateLimiter
+
+	// HTTP router
+	httpMux   *http.ServeMux
 
 	// Customer key management
 	keyManager *CustomerKeyManager
@@ -54,9 +59,6 @@ type Server struct {
 
 	// Predictive analytics
 	predictor *PredictiveAnalytics
-
-	// Tier-aware circuit breaker
-	circuitBreaker *CircuitBreaker
 
 	// Blockchain-agnostic backends
 	backends *BackendRegistry
@@ -88,10 +90,13 @@ func New(cfg config.Config, blockChan chan blocks.BlockEvent, mem *mempool.Mempo
 		wsLimiter:      NewWebSocketLimiter(cfg.WebSocketMaxGlobal, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
 		predictor:      NewPredictiveAnalytics(clock),
 		circuitBreaker: NewCircuitBreaker(cfg.Tier, clock),
-		backends:       NewBackendRegistry(),
-		clock:          clock,
-		randReader:     randReader,
+	btcBackend := &BitcoinBackend{
+		blockChan: blockChan,
+		mem:       mem,
+		cfg:       cfg,
 	}
+	server.backends.Register("btc", btcBackend)
+	server.backends.Register("bitcoin", btcBackend) // alias for handlers
 
 	// Initialize default Bitcoin backend
 	server.backends.Register("btc", &BitcoinBackend{
@@ -119,11 +124,14 @@ func NewWithCache(cfg config.Config, blockChan chan blocks.BlockEvent, mem *memp
 		adminAuth:      NewAdminAuth(),
 		wsLimiter:      NewWebSocketLimiter(cfg.WebSocketMaxGlobal, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
 		predictor:      NewPredictiveAnalytics(clock),
-		circuitBreaker: NewCircuitBreaker(cfg.Tier, clock),
-		backends:       NewBackendRegistry(),
-		clock:          clock,
-		randReader:     randReader,
+	btcBackend := &BitcoinBackend{
+		blockChan: blockChan,
+		mem:       mem,
+		cfg:       cfg,
+		cache:     cache,
 	}
+	server.backends.Register("btc", btcBackend)
+	server.backends.Register("bitcoin", btcBackend)
 
 	// Initialize default Bitcoin backend
 	server.backends.Register("btc", &BitcoinBackend{
@@ -380,6 +388,12 @@ func (aa *AdminAuth) AddAdminKey(key string) {
 }
 
 // RemoveAdminKey removes an admin key
+ 
+// AdminAuth provides admin key-based authentication
+type AdminAuth struct {
+	adminKeys map[string]bool
+	mu        sync.RWMutex
+}
 func (aa *AdminAuth) RemoveAdminKey(key string) {
 	hasher := sha256.New()
 	hasher.Write([]byte(key))

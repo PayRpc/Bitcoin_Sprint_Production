@@ -1,7 +1,7 @@
 {
   "name": "bitcoin-sprint-web",
   "version": "2.1.0",
-  "description": "Bitcoin Sprint Enterprise Web Dashboard and API",
+  "description": "Multi-Chain Sprint Enterprise Web Dashboard and API - Supporting Bitcoin, Ethereum, Solana, Cosmos, Polkadot and more",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3002",
