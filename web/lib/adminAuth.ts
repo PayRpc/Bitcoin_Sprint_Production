@@ -1,6 +1,7 @@
 import crypto from "crypto"
 import type { NextApiRequest, NextApiResponse } from "next"
 import { generateAdminSecret, isEntropyBridgeAvailable } from "./rust-entropy-bridge"
+import { recordEntropySecretGeneration } from "./prometheus"
 
 // Cache for the admin secret to avoid regenerating on every request
 let cachedAdminSecret: string | null = null
@@ -20,11 +21,18 @@ async function getAdminSecret(): Promise<string> {
 
   try {
     // Generate new secret using enterprise entropy
+    const startTime = Date.now()
     const newSecret = await generateAdminSecret('base64')
-    cachedAdminSecret = newSecret
-    secretLastGenerated = now
+    const duration = (Date.now() - startTime) / 1000 // Convert to seconds
 
-    console.log(`🔐 Admin secret ${isEntropyBridgeAvailable() ? 'generated with Rust entropy' : 'generated with fallback entropy'}`)
+    cachedAdminSecret = newSecret
+    secretLastGenerated = Date.now()
+
+    // Record metrics
+    const source = isEntropyBridgeAvailable() ? 'rust' : 'nodejs'
+    recordEntropySecretGeneration(source, 'base64', duration)
+
+    console.log(`🔐 Admin secret ${source === 'rust' ? 'generated with Rust entropy' : 'generated with fallback entropy'} (${duration.toFixed(4)}s)`)
     return newSecret
   } catch (error) {
     console.error('Failed to generate admin secret:', error)
@@ -34,7 +42,10 @@ async function getAdminSecret(): Promise<string> {
     if (envSecret) {
       console.warn('⚠️ Using fallback ADMIN_SECRET from environment')
       cachedAdminSecret = envSecret
-      secretLastGenerated = now
+      secretLastGenerated = Date.now()
+
+      // Record environment fallback metrics
+      recordEntropySecretGeneration('env', 'base64', 0)
       return envSecret
     }
 

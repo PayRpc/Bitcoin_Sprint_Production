@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net/http"
 	"time"
+	"encoding/json"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -54,9 +55,123 @@ var (
 	)
 )
 
+// Entropy Bridge Metrics
+var (
+	entropyBridgeAvailable = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "bitcoin_sprint_entropy_bridge_available",
+			Help: "Entropy bridge availability status (1 = available, 0 = unavailable)",
+		},
+	)
+
+	entropyBridgeRustAvailable = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "bitcoin_sprint_entropy_bridge_rust_available",
+			Help: "Rust entropy bridge availability (1 = available, 0 = unavailable)",
+		},
+	)
+
+	entropyBridgeFallbackMode = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "bitcoin_sprint_entropy_bridge_fallback_mode",
+			Help: "Entropy bridge fallback mode status (1 = fallback active, 0 = primary active)",
+		},
+	)
+
+	entropyBridgeStatusFetchTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "bitcoin_sprint_entropy_bridge_status_fetch_total",
+			Help: "Total number of entropy bridge status fetches",
+		},
+	)
+
+	entropyBridgeStatusFetchErrors = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "bitcoin_sprint_entropy_bridge_status_fetch_errors_total",
+			Help: "Total number of entropy bridge status fetch errors",
+		},
+	)
+)
+
 func init() {
 	// Initialize random seed
 	rand.Seed(time.Now().UnixNano())
+}
+
+// Entropy Bridge Status Structure
+type EntropyBridgeStatus struct {
+	Status struct {
+		Available    bool `json:"available"`
+		RustAvailable bool `json:"rustAvailable"`
+		FallbackMode bool `json:"fallbackMode"`
+		Timestamp    int64 `json:"timestamp"`
+	} `json:"status"`
+	Uptime            float64 `json:"uptime"`
+	LastSecretGenerated *int64 `json:"lastSecretGenerated,omitempty"`
+}
+
+// Fetch entropy bridge status from Next.js application
+func fetchEntropyBridgeStatus() (*EntropyBridgeStatus, error) {
+	entropyBridgeStatusFetchTotal.Inc()
+
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	resp, err := client.Get("http://localhost:3002/api/admin/entropy-status")
+	if err != nil {
+		entropyBridgeStatusFetchErrors.Inc()
+		return nil, fmt.Errorf("failed to fetch entropy bridge status: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		entropyBridgeStatusFetchErrors.Inc()
+		return nil, fmt.Errorf("entropy bridge status endpoint returned status: %d", resp.StatusCode)
+	}
+
+	var status EntropyBridgeStatus
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		entropyBridgeStatusFetchErrors.Inc()
+		return nil, fmt.Errorf("failed to decode entropy bridge status: %v", err)
+	}
+
+	return &status, nil
+}
+
+// Update entropy bridge metrics
+func updateEntropyBridgeMetrics() {
+	status, err := fetchEntropyBridgeStatus()
+	if err != nil {
+		log.Printf("Failed to fetch entropy bridge status: %v", err)
+		// Set error state
+		entropyBridgeAvailable.Set(0)
+		entropyBridgeRustAvailable.Set(0)
+		entropyBridgeFallbackMode.Set(1)
+		return
+	}
+
+	// Update metrics based on status
+	if status.Status.Available {
+		entropyBridgeAvailable.Set(1)
+	} else {
+		entropyBridgeAvailable.Set(0)
+	}
+
+	if status.Status.RustAvailable {
+		entropyBridgeRustAvailable.Set(1)
+	} else {
+		entropyBridgeRustAvailable.Set(0)
+	}
+
+	if status.Status.FallbackMode {
+		entropyBridgeFallbackMode.Set(1)
+	} else {
+		entropyBridgeFallbackMode.Set(0)
+	}
+
+	log.Printf("Updated entropy bridge metrics: available=%t, rust=%t, fallback=%t",
+		status.Status.Available, status.Status.RustAvailable, status.Status.FallbackMode)
 }
 
 func updateMetrics() {
@@ -74,6 +189,9 @@ func updateMetrics() {
 		sprintAPIRequestsTotal.WithLabelValues("ethereum", "eth_blockNumber").Inc()
 		sprintAPIRequestDuration.WithLabelValues("ethereum", "eth_blockNumber").Observe(0.05 + rand.Float64()*0.1)
 
+		// Update entropy bridge metrics
+		updateEntropyBridgeMetrics()
+
 		fmt.Printf("Updated metrics: block=%d, peers=%d, health=%.1f\n", blockHeight, peerCount, healthScore)
 
 		time.Sleep(30 * time.Second)
@@ -89,6 +207,14 @@ func main() {
 	prometheus.MustRegister(sprintChainHealthScore)
 	prometheus.MustRegister(sprintAPIRequestsTotal)
 	prometheus.MustRegister(sprintAPIRequestDuration)
+
+	// Register entropy bridge metrics
+	prometheus.MustRegister(entropyBridgeAvailable)
+	prometheus.MustRegister(entropyBridgeRustAvailable)
+	prometheus.MustRegister(entropyBridgeFallbackMode)
+	prometheus.MustRegister(entropyBridgeStatusFetchTotal)
+	prometheus.MustRegister(entropyBridgeStatusFetchErrors)
+
 	log.Println("Prometheus metrics registered successfully")
 
 	// Start metrics update goroutine

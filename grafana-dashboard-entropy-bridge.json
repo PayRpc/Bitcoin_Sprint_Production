@@ -1,0 +1,248 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Bitcoin Sprint - Entropy Bridge Monitoring",
+    "tags": ["bitcoin", "sprint", "entropy", "security"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Entropy Bridge Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "bitcoin_sprint_entropy_bridge_available",
+            "legendFormat": "Bridge Available"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "options": {
+                  "0": {
+                    "text": "UNAVAILABLE",
+                    "color": "red"
+                  },
+                  "1": {
+                    "text": "AVAILABLE",
+                    "color": "green"
+                  }
+                },
+                "type": "value"
+              }
+            ]
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "Rust Entropy Available",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "bitcoin_sprint_entropy_bridge_rust_available",
+            "legendFormat": "Rust Available"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "options": {
+                  "0": {
+                    "text": "FALLBACK",
+                    "color": "orange"
+                  },
+                  "1": {
+                    "text": "RUST ACTIVE",
+                    "color": "green"
+                  }
+                },
+                "type": "value"
+              }
+            ]
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "Fallback Mode",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "bitcoin_sprint_entropy_bridge_fallback_mode",
+            "legendFormat": "Fallback Mode"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "options": {
+                  "0": {
+                    "text": "PRIMARY",
+                    "color": "green"
+                  },
+                  "1": {
+                    "text": "FALLBACK",
+                    "color": "orange"
+                  }
+                },
+                "type": "value"
+              }
+            ]
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 4,
+        "title": "Secret Generation by Source",
+        "type": "barchart",
+        "targets": [
+          {
+            "expr": "sum(rate(bitcoin_sprint_entropy_bridge_secret_generation_total[5m])) by (source)",
+            "legendFormat": "{{source}}"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 4
+        }
+      },
+      {
+        "id": 5,
+        "title": "Secret Generation Duration",
+        "type": "heatmap",
+        "targets": [
+          {
+            "expr": "bitcoin_sprint_entropy_bridge_secret_generation_duration_seconds",
+            "legendFormat": "{{source}} - {{encoding}}"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 4
+        }
+      },
+      {
+        "id": 6,
+        "title": "Entropy Bridge Status History",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "bitcoin_sprint_entropy_bridge_available",
+            "legendFormat": "Bridge Available"
+          },
+          {
+            "expr": "bitcoin_sprint_entropy_bridge_rust_available",
+            "legendFormat": "Rust Available"
+          },
+          {
+            "expr": "bitcoin_sprint_entropy_bridge_fallback_mode",
+            "legendFormat": "Fallback Mode"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 12
+        }
+      },
+      {
+        "id": 7,
+        "title": "Status Fetch Errors",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(bitcoin_sprint_entropy_bridge_status_fetch_errors_total[5m])",
+            "legendFormat": "Fetch Errors/min"
+          }
+        ],
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 0,
+          "y": 20
+        }
+      },
+      {
+        "id": 8,
+        "title": "Total Status Fetches",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "bitcoin_sprint_entropy_bridge_status_fetch_total",
+            "legendFormat": "Total Fetches"
+          }
+        ],
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 8,
+          "y": 20
+        }
+      },
+      {
+        "id": 9,
+        "title": "Last Secret Generated",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "bitcoin_sprint_entropy_bridge_last_secret_generated_timestamp",
+            "legendFormat": "Last Secret"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "dateTimeFromNow"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 16,
+          "y": 20
+        }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    },
+    "refresh": "30s",
+    "schemaVersion": 27,
+    "version": 0,
+    "links": []
+  }
+}

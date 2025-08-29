@@ -2,22 +2,46 @@ import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
-// Dynamic import for FFI (ESM compatible)
+// Dynamic import for FFI (conditional loading)
 let ffi: any = null;
 let ref: any = null;
 let ffiAvailable = false;
+let ffiInitialized = false;
 
-try {
-  // Try to load FFI modules dynamically
-  const ffiModule = await import('ffi-napi');
-  const refModule = await import('ref-napi');
-  ffi = ffiModule.default;
-  ref = refModule.default;
-  ffiAvailable = true;
-} catch (error) {
-  console.warn('FFI modules not available, using Node.js crypto fallback');
-  console.warn('To enable Rust entropy: npm install ffi-napi ref-napi ref-struct-di');
-  ffiAvailable = false;
+// Initialize FFI conditionally
+async function initializeFFI() {
+  if (ffiInitialized) return;
+
+  try {
+    // Check if we're in Node.js environment and try to load FFI
+    if (typeof process !== 'undefined' && process.versions && process.versions.node) {
+      // Use require for CommonJS modules to avoid TypeScript issues
+      const Module = require('module');
+      const originalRequire = Module.prototype.require;
+
+      try {
+        // @ts-ignore - Dynamic require for optional dependency
+        ffi = originalRequire('ffi-napi');
+        // @ts-ignore - Dynamic require for optional dependency
+        ref = originalRequire('ref-napi');
+        ffiAvailable = true;
+        console.log('✅ FFI modules loaded successfully');
+      } catch (e) {
+        // FFI modules not available
+        console.warn('FFI modules not available, using Node.js crypto fallback');
+        console.warn('To enable Rust entropy: npm install ffi-napi ref-napi ref-struct-di');
+        ffiAvailable = false;
+      }
+    } else {
+      console.warn('Not in Node.js environment, using fallback');
+      ffiAvailable = false;
+    }
+  } catch (error) {
+    console.warn('Error initializing FFI:', error);
+    ffiAvailable = false;
+  }
+
+  ffiInitialized = true;
 }
 
 /**
@@ -29,13 +53,17 @@ export class RustEntropyBridge {
   private isInitialized = false;
 
   constructor() {
-    // Initialize immediately since FFI check is done at module level
-    this.isInitialized = ffiAvailable;
-    if (ffiAvailable) {
-      this.initializeFFI();
-    } else {
+    // Initialize FFI asynchronously
+    initializeFFI().then(() => {
+      if (ffiAvailable) {
+        this.initializeFFI();
+      } else {
+        console.log('✅ Rust entropy bridge initialized with Node.js crypto fallback');
+      }
+    }).catch((error) => {
+      console.warn('Failed to initialize FFI:', error);
       console.log('✅ Rust entropy bridge initialized with Node.js crypto fallback');
-    }
+    });
   }
 
   private initializeFFI() {
