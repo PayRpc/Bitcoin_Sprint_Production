@@ -1,0 +1,30 @@
+﻿{
+    "grafana_ready":  true,
+    "timestamp":  "2025-08-28 23:34:59",
+    "api_key":  "ent_2a4f3a2974a84fe9a6174a5f",
+    "tests":  {
+                  "health":  {
+                                 "latency_ms":  75.17,
+                                 "status":  "success",
+                                 "status_code":  200,
+                                 "simulated":  true
+                             },
+                  "metrics":  {
+                                  "latency_ms":  258.95,
+                                  "content_length":  10242,
+                                  "metrics_count":  9,
+                                  "status_code":  200,
+                                  "sprint_metrics_found":  true,
+                                  "status":  "success"
+                              },
+                  "load_test":  {
+                                    "successful_requests":  10,
+                                    "min_latency_ms":  0,
+                                    "success_rate":  100,
+                                    "avg_latency_ms":  0,
+                                    "max_latency_ms":  0,
+                                    "total_requests":  10,
+                                    "status":  "success"
+                                }
+              }
+}

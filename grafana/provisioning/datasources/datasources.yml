@@ -26,12 +26,15 @@ datasources:
       maxIdleConns: 2
       connMaxLifetime: 14400
       
-  - name: Elasticsearch
-    type: elasticsearch
+  - name: JSON API
+    type: marcusolsson-json-datasource
     access: proxy
-    url: http://elasticsearch:9200
-    database: "[logstash-]YYYY.MM.DD"
+    url: http://host.docker.internal:8080
+    isDefault: false
+    editable: true
     jsonData:
-      interval: Daily
-      timeField: "@timestamp"
-      esVersion: 8
+      cache: "300"
+      tlsSkipVerify: true
+    secureJsonData:
+      # API key will be configured in Grafana UI for security
+      # Authorization header will be set to: Bearer <api_key>

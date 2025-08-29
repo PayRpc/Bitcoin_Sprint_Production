@@ -1,0 +1,19 @@
+{
+  "endpoints": {
+    "analytics": "http://localhost:8080/analytics",
+    "health": "http://localhost:8080/health",
+    "status": "http://localhost:8080/status",
+    "metrics": "http://localhost:8081/metrics"
+  },
+  "test_results": {
+    "generated_at": "2025-08-28 23:32:24",
+    "main_api_endpoint": false,
+    "metrics_endpoint": true
+  },
+  "enterprise_api_key": "ent_2a4f3a2974a84fe9a6174a5f",
+  "grafana_config": {
+    "auth_header": "Bearer ent_2a4f3a2974a84fe9a6174a5f",
+    "refresh_interval": "30s",
+    "datasource_url": "http://host.docker.internal:8081"
+  }
+}
