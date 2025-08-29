@@ -664,8 +664,14 @@
     </div>
 
     <script>
-        // API endpoints
-        const API_BASE = 'http://127.0.0.1:9090';
+        // API endpoints - flexible for different environments
+        const API_BASE = window.location.hostname === 'localhost'
+            ? 'http://127.0.0.1:9090'
+            : `${window.location.protocol}//${window.location.hostname}:9090`;
+
+        // Internal metrics API (Next.js proxy)
+        const INTERNAL_METRICS_API = '/api/metrics';
+
         const MEMPOOL_API = 'https://mempool.space/api/v1/blocks';
         const BLOCKSTREAM_API = 'https://blockstream.info/api/blocks';
         const BITCOINCOM_API = 'https://api.blockchain.com/v3/exchange/tickers/BTC-USD';
@@ -675,6 +681,10 @@
             { name: 'Mempool.space', url: MEMPOOL_API, type: 'blocks' },
             { name: 'Blockstream', url: BLOCKSTREAM_API, type: 'blocks' }
         ];
+
+        // Environment detection
+        const isProduction = window.location.hostname !== 'localhost';
+        const isSecure = window.location.protocol === 'https:';
 
         // Global data storage
         let healthData = {};
@@ -972,6 +982,57 @@
                 originalClick.call(this);
             };
         });
+
+        // Internal metrics integration
+        async function fetchInternalMetrics() {
+            try {
+                const response = await fetch(INTERNAL_METRICS_API);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.log('Internal metrics not available:', error);
+                return null;
+            }
+        }
+
+        // Enhanced refresh function that combines external and internal data
+        async function refreshAllWithInternal() {
+            // Refresh external Bitcoin data
+            await Promise.all([
+                refreshHealth(),
+                refreshPerformance(),
+                refreshEntropy()
+            ]);
+
+            // Try to get internal metrics
+            const internalData = await fetchInternalMetrics();
+            if (internalData) {
+                // Update internal metrics display
+                updateInternalMetricsDisplay(internalData);
+            }
+        }
+
+        function updateInternalMetricsDisplay(data) {
+            // Update system resources with real internal data
+            if (data.system_health) {
+                document.getElementById('cpu-usage').textContent = `${data.system_health.cpu_usage_percent.toFixed(1)}%`;
+                document.getElementById('memory-usage').textContent = `${(data.system_health.memory_usage_mb / 1024).toFixed(1)} GB`;
+            }
+
+            // Update API usage info
+            if (data.api_usage) {
+                document.getElementById('current-tier').textContent = `Tier: ${data.api_usage.tier}`;
+                document.getElementById('turbo-mode').textContent = data.api_usage.tier === 'ENTERPRISE_PLUS' ? 'Active' : 'Standard';
+            }
+
+            console.log('Internal metrics updated:', data);
+        }
+
+        // Override the main refresh function
+        window.refreshAll = refreshAllWithInternal;
     </script>
 </body>
 </html>

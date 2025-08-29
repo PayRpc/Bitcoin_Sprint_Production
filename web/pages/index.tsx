@@ -55,6 +55,14 @@ export default function ApiFrontPage() {
             </Link>
 
             <Link
+              href="/dashboard"
+              className="inline-flex items-center justify-center rounded-2xl px-6 py-3 border border-white/20 text-white font-medium hover:bg-white/5"
+              aria-label="View Dashboard"
+            >
+              Live Dashboard
+            </Link>
+
+            <Link
               href="/docs"
               className="inline-flex items-center justify-center rounded-2xl px-6 py-3 border border-white/20 text-white font-medium hover:bg-white/5"
               aria-label="View Docs"
@@ -105,6 +113,56 @@ export default function ApiFrontPage() {
             </ul>
           </CardContent>
         </Card>
+      </section>
+
+      {/* Live Dashboard Section */}
+      <section className="py-16 px-8 bg-gradient-to-r from-blue-900/20 to-purple-900/20">
+        <div className="max-w-6xl mx-auto text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+          >
+            <h2 className="text-4xl font-bold mb-6">Real-Time Bitcoin Network Monitoring</h2>
+            <p className="text-xl text-gray-300 mb-8">
+              Monitor live Bitcoin blockchain data, network performance, and system health with our comprehensive dashboard
+            </p>
+
+            <div className="grid md:grid-cols-3 gap-6 mb-8">
+              <Card className="bg-gray-800/50 border-gray-700">
+                <CardContent className="p-6 text-center">
+                  <div className="text-3xl mb-3">📊</div>
+                  <h3 className="text-xl font-semibold mb-2">Live Block Data</h3>
+                  <p className="text-gray-400">Real-time block height, transaction counts, and network statistics from Mempool.space</p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gray-800/50 border-gray-700">
+                <CardContent className="p-6 text-center">
+                  <div className="text-3xl mb-3">⚡</div>
+                  <h3 className="text-xl font-semibold mb-2">Performance Metrics</h3>
+                  <p className="text-gray-400">Block processing times, network latency, and system resource monitoring</p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gray-800/50 border-gray-700">
+                <CardContent className="p-6 text-center">
+                  <div className="text-3xl mb-3">🔐</div>
+                  <h3 className="text-xl font-semibold mb-2">Security & Entropy</h3>
+                  <p className="text-gray-400">Real-time entropy scoring and security status monitoring</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center justify-center rounded-2xl px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold text-lg shadow-lg hover:shadow-xl transition-all duration-300"
+              aria-label="View Live Dashboard"
+            >
+              🚀 View Live Dashboard
+            </Link>
+          </motion.div>
+        </div>
       </section>
 
       {/* Configuration / How users provide credentials */}
