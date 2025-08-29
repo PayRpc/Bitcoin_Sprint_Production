@@ -14,7 +14,7 @@ func main() {
 	fmt.Println("   Users call: /v1/{chain}/... with API key")
 	fmt.Println("   Sprint hides all the messy node details")
 	fmt.Println()
-	
+
 	demo := &SprintAbstractionDemo{}
 	demo.showAbstractionLayer()
 }
@@ -24,16 +24,16 @@ type SprintAbstractionDemo struct{}
 func (d *SprintAbstractionDemo) showAbstractionLayer() {
 	fmt.Println("🎯 Sprint Abstraction Layer Architecture:")
 	fmt.Println()
-	
+
 	// Show the abstraction
 	d.showUserExperience()
-	
+
 	// Show what Sprint provides
 	d.showSprintCapabilities()
-	
+
 	// Show the hidden complexity
 	d.showHiddenComplexity()
-	
+
 	// Show the value proposition
 	d.showValueProposition()
 }
@@ -44,7 +44,7 @@ func (d *SprintAbstractionDemo) showUserExperience() {
 	fmt.Println()
 	fmt.Println("   🎯 Simple, unified API calls:")
 	fmt.Println("      GET /v1/bitcoin/latest_block")
-	fmt.Println("      GET /v1/ethereum/latest_block") 
+	fmt.Println("      GET /v1/ethereum/latest_block")
 	fmt.Println("      GET /v1/solana/latest_block")
 	fmt.Println("      GET /v1/cosmos/latest_block")
 	fmt.Println()
@@ -64,11 +64,11 @@ func (d *SprintAbstractionDemo) showSprintCapabilities() {
 	fmt.Println("🚀 SPRINT LAYER (What Sprint provides)")
 	fmt.Println("   ===================================")
 	fmt.Println()
-	
+
 	capabilities := map[string][]string{
 		"🎯 Flat Latency Relay": {
 			"Convert spiky node latency → flat 15ms responses",
-			"Deterministic pipeline for trading algorithms", 
+			"Deterministic pipeline for trading algorithms",
 			"Circuit breaker protection against slow nodes",
 			"Real-time optimization across node connections",
 		},
@@ -91,7 +91,7 @@ func (d *SprintAbstractionDemo) showSprintCapabilities() {
 			"One authentication for 8+ blockchain networks",
 		},
 	}
-	
+
 	for capability, features := range capabilities {
 		fmt.Printf("   %s:\n", capability)
 		for _, feature := range features {
@@ -115,7 +115,7 @@ func (d *SprintAbstractionDemo) showHiddenComplexity() {
 	fmt.Println("      • Node failures and reconnection logic")
 	fmt.Println("      • Rate limiting per node provider")
 	fmt.Println()
-	
+
 	fmt.Println("   Performance Issues Sprint Fixes:")
 	fmt.Println("      • Unpredictable node latency (50ms-2000ms)")
 	fmt.Println("      • Node timeouts and failures")
@@ -123,7 +123,7 @@ func (d *SprintAbstractionDemo) showHiddenComplexity() {
 	fmt.Println("      • Different rate limits per provider")
 	fmt.Println("      • Complex error handling per chain")
 	fmt.Println()
-	
+
 	fmt.Println("   ✅ Users never see this complexity!")
 	fmt.Println("      Sprint abstracts it all away")
 	fmt.Println()
@@ -133,7 +133,7 @@ func (d *SprintAbstractionDemo) showValueProposition() {
 	fmt.Println("💎 VALUE PROPOSITION")
 	fmt.Println("   =================")
 	fmt.Println()
-	
+
 	fmt.Println("   Before Sprint (Raw Node Access):")
 	fmt.Println("      ❌ Different API per blockchain")
 	fmt.Println("      ❌ Unpredictable latency (50ms-2000ms)")
@@ -141,7 +141,7 @@ func (d *SprintAbstractionDemo) showValueProposition() {
 	fmt.Println("      ❌ Complex integration for each chain")
 	fmt.Println("      ❌ No predictive caching")
 	fmt.Println()
-	
+
 	fmt.Println("   After Sprint (Clean Abstraction):")
 	fmt.Println("      ✅ Single API for all blockchains")
 	fmt.Println("      ✅ Flat latency (15ms ± 2ms always)")
@@ -149,7 +149,7 @@ func (d *SprintAbstractionDemo) showValueProposition() {
 	fmt.Println("      ✅ One integration, works everywhere")
 	fmt.Println("      ✅ Predictive caching (85% zero-latency)")
 	fmt.Println()
-	
+
 	fmt.Println("   🚀 Sprint Result:")
 	fmt.Println("      'Where blockchain complexity goes to die,'")
 	fmt.Println("      'and developer productivity is born.'")
@@ -161,13 +161,13 @@ func simulateSprintAbstraction() {
 	fmt.Println("🎬 SPRINT ABSTRACTION IN ACTION")
 	fmt.Println("   ============================")
 	fmt.Println()
-	
+
 	// Simulate user API call
 	fmt.Println("   1. User makes API call:")
 	fmt.Println("      GET /v1/ethereum/latest_block")
 	fmt.Println("      Authorization: Bearer abc123...")
 	fmt.Println()
-	
+
 	// Simulate Sprint processing
 	fmt.Println("   2. Sprint processes (hidden from user):")
 	time.Sleep(10 * time.Millisecond)
@@ -176,7 +176,7 @@ func simulateSprintAbstraction() {
 	fmt.Println("      ✓ Response normalization: Applied")
 	fmt.Println("      ✓ Analytics logging: Recorded")
 	fmt.Println()
-	
+
 	// Simulate response
 	fmt.Println("   3. User receives clean response:")
 	fmt.Println("      HTTP 200 - 12ms response time")
@@ -187,7 +187,7 @@ func simulateSprintAbstraction() {
 	fmt.Println("        \"transactions\": 157")
 	fmt.Println("      }")
 	fmt.Println()
-	
+
 	fmt.Println("   🎯 User Experience: Simple, fast, reliable")
 	fmt.Println("   🔧 Sprint Handled: All the complexity")
 }

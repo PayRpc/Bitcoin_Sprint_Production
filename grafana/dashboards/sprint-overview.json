@@ -487,6 +487,117 @@
       ],
       "title": "CPU Usage by Service",
       "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sprint_chain_block_height{chain=\"ethereum\"}",
+          "legendFormat": "Ethereum Block Height",
+          "refId": "A"
+        },
+        {
+          "expr": "sprint_chain_peer_count{chain=\"ethereum\"}",
+          "legendFormat": "Ethereum Peer Count",
+          "refId": "B"
+        },
+        {
+          "expr": "sprint_chain_health_score{chain=\"ethereum\"}",
+          "legendFormat": "Ethereum Health Score",
+          "refId": "C"
+        }
+      ],
+      "title": "Ethereum Chain Metrics",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 500
+              },
+              {
+                "color": "red",
+                "value": 2000
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, rate(sprint_api_request_duration_seconds_bucket{chain=\"ethereum\"}[5m])) * 1000",
+          "legendFormat": "Ethereum P50 Latency",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(sprint_api_request_duration_seconds_bucket{chain=\"ethereum\"}[5m])) * 1000",
+          "legendFormat": "Ethereum P95 Latency",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(sprint_api_request_duration_seconds_bucket{chain=\"ethereum\"}[5m])) * 1000",
+          "legendFormat": "Ethereum P99 Latency",
+          "refId": "C"
+        }
+      ],
+      "title": "Ethereum API Latency (P50 / P95 / P99)",
+      "type": "timeseries"
     }
   ],
   "schemaVersion": 27,

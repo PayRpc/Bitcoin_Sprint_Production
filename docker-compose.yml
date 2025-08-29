@@ -90,6 +90,7 @@ services:
       - "8545:8545"     # HTTP RPC
       - "8546:8546"     # WebSocket RPC
       - "30303:30303"   # P2P
+      - "6060:6060"     # Metrics
     volumes:
       - ethereum-data:/root/.ethereum
     command: |
@@ -105,6 +106,10 @@ services:
       --ws.origins="*"
       --syncmode=snap
       --cache=2048
+      --metrics
+      --metrics.addr=0.0.0.0
+      --metrics.port=6060
+      --metrics.expensive
     networks:
       - sprint-network
     restart: unless-stopped

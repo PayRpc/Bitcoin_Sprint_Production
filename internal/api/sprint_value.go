@@ -120,18 +120,36 @@ func (lo *LatencyOptimizer) GetActualStats() map[string]interface{} {
 		}
 	}
 
-	// Calculate overall P99
-	var overallP99 float64
+	// Calculate overall percentiles for all chains
+	var overallP50, overallP95, overallP99 float64
 	if len(allP99s) > 0 {
-		// Take max P99 as worst case
-		for _, p99 := range allP99s {
-			if p99 > overallP99 {
-				overallP99 = p99
-			}
+		// Sort P99 values to find percentiles
+		sortedP99s := make([]float64, len(allP99s))
+		copy(sortedP99s, allP99s)
+		sort.Float64s(sortedP99s)
+		
+		// Calculate percentiles
+		p50Index := int(0.5 * float64(len(sortedP99s)))
+		p95Index := int(0.95 * float64(len(sortedP99s)))
+		p99Index := int(0.99 * float64(len(sortedP99s)))
+		
+		if p50Index < len(sortedP99s) {
+			overallP50 = sortedP99s[p50Index]
+		}
+		if p95Index < len(sortedP99s) {
+			overallP95 = sortedP99s[p95Index]
+		}
+		if p99Index < len(sortedP99s) {
+			overallP99 = sortedP99s[p99Index]
+		} else {
+			// Fallback to max if p99 index is out of bounds
+			overallP99 = sortedP99s[len(sortedP99s)-1]
 		}
 	}
 
 	return map[string]interface{}{
+		"CurrentP50":      fmt.Sprintf("%.1fms", overallP50*1000),
+		"CurrentP95":      fmt.Sprintf("%.1fms", overallP95*1000),
 		"CurrentP99":      fmt.Sprintf("%.1fms", overallP99*1000),
 		"ChainCount":      len(lo.chainLatencies),
 		"ChainStats":      chainStats,
