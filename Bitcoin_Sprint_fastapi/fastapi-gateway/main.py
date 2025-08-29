@@ -76,6 +76,11 @@ class Settings(BaseSettings):
     # Redis Settings
     redis_url: str = "redis://localhost:6379"
     redis_pool_size: int = 10
+    redis_cache_url: str = "redis://localhost:6379/1"
+    redis_rate_limit_url: str = "redis://localhost:6379/2"
+
+    # Database Settings
+    database_url: str = "postgresql://user:password@localhost:5432/bitcoin_sprint"
 
     # Rate Limiting
     rate_limit_requests: int = 100
@@ -93,6 +98,14 @@ class Settings(BaseSettings):
     # API Key Settings
     api_key_header: str = "X-API-Key"
     api_key_query: str = "api_key"
+
+    # Logging Settings
+    log_level: str = "INFO"
+    log_format: str = "json"
+
+    # Monitoring Settings
+    prometheus_enabled: bool = True
+    metrics_port: int = 9090
 
     class Config:
         env_file = ".env"

@@ -127,12 +127,12 @@ func (lo *LatencyOptimizer) GetActualStats() map[string]interface{} {
 		sortedP99s := make([]float64, len(allP99s))
 		copy(sortedP99s, allP99s)
 		sort.Float64s(sortedP99s)
-		
+
 		// Calculate percentiles
 		p50Index := int(0.5 * float64(len(sortedP99s)))
 		p95Index := int(0.95 * float64(len(sortedP99s)))
 		p99Index := int(0.99 * float64(len(sortedP99s)))
-		
+
 		if p50Index < len(sortedP99s) {
 			overallP50 = sortedP99s[p50Index]
 		}

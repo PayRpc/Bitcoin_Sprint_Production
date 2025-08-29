@@ -1,313 +1,296 @@
 package main
 
+
 import (
-	"context"
 
-	"crypto/rand"
+"context"
 
-	"crypto/sha256"
+"crypto/rand"
 
-	"encoding/hex"
+"crypto/sha256"
 
-	"encoding/json"
+"encoding/hex"
 
-	"errors"
+"encoding/json"
 
-	"fmt"
+"errors"
 
-	"log"
+"fmt"
 
-	"math"
+"log"
 
-	"net"
+"math"
 
-	"net/http"
+"net"
 
-	"os"
+"net/http"
 
-	"os/signal"
+"os"
 
-	"runtime"
+"os/signal"
 
-	"sort"
+"runtime"
 
-	"strconv"
+"sort"
 
-	"strings"
+"strconv"
 
-	"sync"
+"strings"
 
-	"sync/atomic"
+"sync"
 
-	"syscall"
+"sync/atomic"
 
-	"time"
+"syscall"
 
-	"go.uber.org/zap"
+"time"
 
-	"github.com/PayRpc/Bitcoin-Sprint/internal/api"
-	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
-	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
-	"github.com/PayRpc/Bitcoin-Sprint/internal/relay"
-	"github.com/PayRpc/Bitcoin-Sprint/internal/securebuf"
-	"github.com/PayRpc/Bitcoin-Sprint/internal/zmq"
+
+"go.uber.org/zap"
+
+"golang.org/x/sys/unix"
+
 )
+
 
 // Config represents the application configuration
 
 type Config struct {
-	Tier string `json:"tier"`
 
-	APIHost string `json:"api_host"`
+Tier                      string        `json:"tier"`
 
-	APIPort int `json:"api_port"`
+APIHost                   string        `json:"api_host"`
 
-	MaxConnections int `json:"max_connections"`
+APIPort                   int           `json:"api_port"`
 
-	MessageQueueSize int `json:"message_queue_size"`
+MaxConnections            int           `json:"max_connections"`
 
-	CircuitBreakerThreshold int `json:"circuit_breaker_threshold"`
+MessageQueueSize          int           `json:"message_queue_size"`
 
-	CircuitBreakerTimeout int `json:"circuit_breaker_timeout"`
+CircuitBreakerThreshold   int           `json:"circuit_breaker_threshold"`
 
-	CircuitBreakerHalfOpenMax int `json:"circuit_breaker_half_open_max"`
+CircuitBreakerTimeout     int           `json:"circuit_breaker_timeout"`
 
-	EnableEncryption bool `json:"enable_encryption"`
+CircuitBreakerHalfOpenMax int           `json:"circuit_breaker_half_open_max"`
 
-	PipelineWorkers int `json:"pipeline_workers"`
+EnableEncryption          bool          `json:"enable_encryption"`
 
-	WriteDeadline time.Duration `json:"write_deadline"`
+PipelineWorkers           int           `json:"pipeline_workers"`
 
-	OptimizeSystem bool `json:"optimize_system"`
+WriteDeadline             time.Duration `json:"write_deadline"`
 
-	BufferSize int `json:"buffer_size"`
+OptimizeSystem            bool          `json:"optimize_system"`
 
-	WorkerCount int `json:"worker_count"`
+BufferSize                int           `json:"buffer_size"`
 
-	SimulateBlocks bool `json:"simulate_blocks"`
+WorkerCount               int           `json:"worker_count"`
 
-	TCPKeepAlive time.Duration `json:"tcp_keep_alive"`
+SimulateBlocks            bool          `json:"simulate_blocks"`
 
-	ReadBufferSize int `json:"read_buffer_size"`
+TCPKeepAlive              time.Duration `json:"tcp_keep_alive"`
 
-	WriteBufferSize int `json:"write_buffer_size"`
+ReadBufferSize            int           `json:"read_buffer_size"`
 
-	ConnectionTimeout time.Duration `json:"connection_timeout"`
+WriteBufferSize           int           `json:"write_buffer_size"`
 
-	IdleTimeout time.Duration `json:"idle_timeout"`
+ConnectionTimeout         time.Duration `json:"connection_timeout"`
 
-	MaxCPU int `json:"max_cpu"`
+IdleTimeout               time.Duration `json:"idle_timeout"`
 
-	GCPercent int `json:"gc_percent"`
+MaxCPU                    int           `json:"max_cpu"`
 
-	PreallocBuffers bool `json:"prealloc_buffers"`
+GCPercent                 int           `json:"gc_percent"`
 
-	LockOSThread bool `json:"lock_os_thread"`
+PreallocBuffers           bool          `json:"prealloc_buffers"`
 
-	LicenseKey string `json:"license_key"`
+LockOSThread              bool          `json:"lock_os_thread"`
 
-	ZMQEndpoint string `json:"zmq_endpoint"`
+LicenseKey                string        `json:"license_key"`
 
-	BloomFilterEnabled bool `json:"bloom_filter_enabled"`
+ZMQEndpoint               string        `json:"zmq_endpoint"`
 
-	EnterpriseSecurityEnabled bool `json:"enterprise_security_enabled"`
+BloomFilterEnabled        bool          `json:"bloom_filter_enabled"`
 
-	AuditLogPath string `json:"audit_log_path"`
+EnterpriseSecurityEnabled bool          `json:"enterprise_security_enabled"`
 
-	MaxRetries int `json:"max_retries"`
+AuditLogPath              string        `json:"audit_log_path"`
 
-	RetryBackoff time.Duration `json:"retry_backoff"`
+MaxRetries                int           `json:"max_retries"`
 
-	CacheSize int `json:"cache_size"`
+RetryBackoff              time.Duration `json:"retry_backoff"`
 
-	CacheTTL time.Duration `json:"cache_ttl"`
+CacheSize                 int           `json:"cache_size"`
 
-	WebSocketMaxConnections int `json:"websocket_max_connections"`
+CacheTTL                  time.Duration `json:"cache_ttl"`
 
-	WebSocketMaxPerIP int `json:"websocket_max_per_ip"`
+WebSocketMaxConnections   int           `json:"websocket_max_connections"`
 
-	WebSocketMaxPerChain int `json:"websocket_max_per_chain"`
+WebSocketMaxPerIP         int           `json:"websocket_max_per_ip"`
+
+WebSocketMaxPerChain      int           `json:"websocket_max_per_chain"`
+
 }
+
 
 func LoadConfig() Config {
 
 	// Load environment variables if .env file exists
 	// _ = godotenv.Load()
 
-	return Config{
+return Config{
 
-		Tier: getEnv("RELAY_TIER", "Enterprise"),
+Tier:                      getEnv("RELAY_TIER", "Enterprise"),
 
-		APIHost: getEnv("API_HOST", "0.0.0.0"),
+APIHost:                   getEnv("API_HOST", "0.0.0.0"),
 
-		APIPort: getEnvInt("API_PORT", 8080),
+APIPort:                   getEnvInt("API_PORT", 8080),
 
-		MaxConnections: getEnvInt("MAX_CONNECTIONS", 20),
+MaxConnections:            getEnvInt("MAX_CONNECTIONS", 20),
 
-		MessageQueueSize: getEnvInt("MESSAGE_QUEUE_SIZE", 1000),
+MessageQueueSize:          getEnvInt("MESSAGE_QUEUE_SIZE", 1000),
 
-		CircuitBreakerThreshold: getEnvInt("CIRCUIT_BREAKER_THRESHOLD", 3),
+CircuitBreakerThreshold:   getEnvInt("CIRCUIT_BREAKER_THRESHOLD", 3),
 
-		CircuitBreakerTimeout: getEnvInt("CIRCUIT_BREAKER_TIMEOUT", 30),
+CircuitBreakerTimeout:     getEnvInt("CIRCUIT_BREAKER_TIMEOUT", 30),
 
-		CircuitBreakerHalfOpenMax: getEnvInt("CIRCUIT_BREAKER_HALF_OPEN_MAX", 2),
+CircuitBreakerHalfOpenMax: getEnvInt("CIRCUIT_BREAKER_HALF_OPEN_MAX", 2),
 
-		EnableEncryption: getEnv("ENABLE_ENCRYPTION", "true") == "true",
+EnableEncryption:          getEnv("ENABLE_ENCRYPTION", "true") == "true",
 
-		PipelineWorkers: getEnvInt("PIPELINE_WORKERS", 10),
+PipelineWorkers:           getEnvInt("PIPELINE_WORKERS", 10),
 
-		WriteDeadline: getEnvDuration("WRITE_DEADLINE", 100*time.Millisecond),
+WriteDeadline:             getEnvDuration("WRITE_DEADLINE", 100*time.Millisecond),
 
-		OptimizeSystem: getEnv("OPTIMIZE_SYSTEM", "true") == "true",
+OptimizeSystem:            getEnv("OPTIMIZE_SYSTEM", "true") == "true",
 
-		BufferSize: getEnvInt("BUFFER_SIZE", 1000),
+BufferSize:                getEnvInt("BUFFER_SIZE", 1000),
 
-		WorkerCount: getEnvInt("WORKER_COUNT", runtime.NumCPU()),
+WorkerCount:               getEnvInt("WORKER_COUNT", runtime.NumCPU()),
 
-		SimulateBlocks: getEnv("SIMULATE_BLOCKS", "false") == "true",
+SimulateBlocks:            getEnv("SIMULATE_BLOCKS", "false") == "true",
 
-		TCPKeepAlive: getEnvDuration("TCP_KEEP_ALIVE", 15*time.Second),
+TCPKeepAlive:              getEnvDuration("TCP_KEEP_ALIVE", 15*time.Second),
 
-		ReadBufferSize: getEnvInt("READ_BUFFER_SIZE", 16*1024),
+ReadBufferSize:            getEnvInt("READ_BUFFER_SIZE", 16*1024),
 
-		WriteBufferSize: getEnvInt("WRITE_BUFFER_SIZE", 16*1024),
+WriteBufferSize:           getEnvInt("WRITE_BUFFER_SIZE", 16*1024),
 
-		ConnectionTimeout: getEnvDuration("CONNECTION_TIMEOUT", 5*time.Second),
+ConnectionTimeout:         getEnvDuration("CONNECTION_TIMEOUT", 5*time.Second),
 
-		IdleTimeout: getEnvDuration("IDLE_TIMEOUT", 120*time.Second),
+IdleTimeout:               getEnvDuration("IDLE_TIMEOUT", 120*time.Second),
 
-		MaxCPU: getEnvInt("MAX_CPU", runtime.NumCPU()),
+MaxCPU:                    getEnvInt("MAX_CPU", runtime.NumCPU()),
 
-		GCPercent: getEnvInt("GC_PERCENT", 100),
+GCPercent:                 getEnvInt("GC_PERCENT", 100),
 
-		PreallocBuffers: getEnv("PREALLOC_BUFFERS", "true") == "true",
+PreallocBuffers:           getEnv("PREALLOC_BUFFERS", "true") == "true",
 
-		LockOSThread: getEnv("LOCK_OS_THREAD", "true") == "true",
+LockOSThread:              getEnv("LOCK_OS_THREAD", "true") == "true",
 
-		LicenseKey: getEnv("LICENSE_KEY", ""),
+LicenseKey:                getEnv("LICENSE_KEY", ""),
 
-		ZMQEndpoint: getEnv("ZMQ_ENDPOINT", "tcp://127.0.0.1:28332"),
+ZMQEndpoint:               getEnv("ZMQ_ENDPOINT", "tcp://127.0.0.1:28332"),
 
-		BloomFilterEnabled: getEnv("BLOOM_FILTER_ENABLED", "true") == "true",
+BloomFilterEnabled:        getEnv("BLOOM_FILTER_ENABLED", "true") == "true",
 
-		EnterpriseSecurityEnabled: getEnv("ENTERPRISE_SECURITY_ENABLED", "true") == "true",
+EnterpriseSecurityEnabled: getEnv("ENTERPRISE_SECURITY_ENABLED", "true") == "true",
 
-		AuditLogPath: getEnv("AUDIT_LOG_PATH", "/var/log/sprint/audit.log"),
+AuditLogPath:              getEnv("AUDIT_LOG_PATH", "/var/log/sprint/audit.log"),
 
-		MaxRetries: getEnvInt("MAX_RETRIES", 3),
+MaxRetries:                getEnvInt("MAX_RETRIES", 3),
 
-		RetryBackoff: getEnvDuration("RETRY_BACKOFF", 100*time.Millisecond),
+RetryBackoff:              getEnvDuration("RETRY_BACKOFF", 100*time.Millisecond),
 
-		CacheSize: getEnvInt("CACHE_SIZE", 10000),
+CacheSize:                 getEnvInt("CACHE_SIZE", 10000),
 
-		CacheTTL: getEnvDuration("CACHE_TTL", 5*time.Minute),
+CacheTTL:                  getEnvDuration("CACHE_TTL", 5*time.Minute),
 
-		WebSocketMaxConnections: getEnvInt("WEBSOCKET_MAX_CONNECTIONS", 1000),
+WebSocketMaxConnections:   getEnvInt("WEBSOCKET_MAX_CONNECTIONS", 1000),
 
-		WebSocketMaxPerIP: getEnvInt("WEBSOCKET_MAX_PER_IP", 100),
+WebSocketMaxPerIP:         getEnvInt("WEBSOCKET_MAX_PER_IP", 100),
 
-		WebSocketMaxPerChain: getEnvInt("WEBSOCKET_MAX_PER_CHAIN", 200),
-	}
+WebSocketMaxPerChain:      getEnvInt("WEBSOCKET_MAX_PER_CHAIN", 200),
 
 }
+
+}
+
 
 func getEnv(key, defaultValue string) string {
 
-	if value := os.Getenv(key); value != "" {
+if value := os.Getenv(key); value != "" {
 
-		return value
-
-	}
-
-	return defaultValue
+return value
 
 }
+
+return defaultValue
+
+}
+
 
 func getEnvInt(key string, defaultValue int) int {
 
-	if value := os.Getenv(key); value != "" {
+if value := os.Getenv(key); value != "" {
 
-		if intValue, err := strconv.Atoi(value); err == nil {
+if intValue, err := strconv.Atoi(value); err == nil {
 
-			return intValue
-
-		}
-
-	}
-
-	return defaultValue
+return intValue
 
 }
+
+}
+
+return defaultValue
+
+}
+
 
 func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
 
-	if value := os.Getenv(key); value != "" {
+if value := os.Getenv(key); value != "" {
 
-		if d, err := time.ParseDuration(value); err == nil {
+if d, err := time.ParseDuration(value); err == nil {
 
-			return d
-
-		}
-
-	}
-
-	return defaultValue
+return d
 
 }
 
-// BlockEvent is now imported from internal/blocks package
+}
+
+return defaultValue
+
+}
+
+
+// BlockEvent represents a blockchain block event
+
+type BlockEvent struct {
+
+Hash      string    `json:"hash"`
+
+Timestamp time.Time `json:"timestamp"`
+
+Size      int       `json:"size"`
+
+Height    int64     `json:"height"`
+
+Chain     string    `json:"chain"`
+
+}
 
 // Cache implements a simple LRU cache with TTL
 type Cache struct {
-	items   map[string]cacheItem
-	maxSize int
-	mu      sync.RWMutex
-	logger  *zap.Logger
+	items    map[string]cacheItem
+	maxSize  int
+	mu       sync.RWMutex
+	logger   *zap.Logger
 }
 
 // cacheItem represents a cached item with expiration
 type cacheItem struct {
 	value      interface{}
-	expiration time.Time
-}
-
-// BlockBufferPool manages a pool of reusable buffers with securebuf integration
-
-type BlockBufferPool struct {
-	pool      *securebuf.SecureBufferPool // Updated to use securebuf.SecureBufferPool
-	size      int
-	secureBuf *securebuf.Buffer
-}
-
-func NewBlockBufferPool(bufferSize, initialCount int, secure bool) *BlockBufferPool {
-	bp := &BlockBufferPool{size: bufferSize}
-
-	if secure {
-		// Create a secure buffer for enterprise/turbo tiers
-		secBuf, err := securebuf.New(bufferSize)
-		if err != nil {
-			log.Printf("Failed to create secure buffer: %v", err)
-			bp.pool = securebuf.NewSecureBufferPool() // Fallback to secure buffer pool
-		} else {
-			bp.secureBuf = secBuf
-			bp.pool = securebuf.NewSecureBufferPool()
-			// Pre-allocate initial buffers
-			for i := 0; i < initialCount; i++ {
-				buf, _ := securebuf.New(bufferSize)
-				bp.pool.Put(buf)
-			}
-		}
-	} else {
-		bp.pool = securebuf.NewSecureBufferPool()
-		// Pre-allocate initial buffers
-		for i := 0; i < initialCount; i++ {
-			buf, _ := securebuf.New(bufferSize)
-			bp.pool.Put(buf)
-		}
-	}
-
-	return bp
-
+	expiresAt  time.Time
 }
 
 func NewCache(maxSize int, logger *zap.Logger) *Cache {
@@ -318,436 +301,29 @@ func NewCache(maxSize int, logger *zap.Logger) *Cache {
 	}
 }
 
-func (bp *BlockBufferPool) Get() []byte {
-	// Get a secure buffer from the pool
-	secBuf, err := bp.pool.Get(bp.size)
-	if err != nil {
-		// Fallback to allocating a new slice
-		return make([]byte, bp.size)
-	}
-
-	// Read buffer content to a slice
-	data, err := secBuf.ReadToSlice()
-	if err != nil {
-		secBuf.Free()
-		return make([]byte, bp.size)
-	}
-
-	return data
-}
-
-func (bp *BlockBufferPool) Put(buf []byte) {
-	if len(buf) != bp.size {
-		return
-	}
-
-	// Create a new secure buffer to store the data
-	secBuf, err := securebuf.New(bp.size)
-	if err != nil {
-		return
-	}
-
-	// Write data to secure buffer
-	if err := secBuf.Write(buf); err != nil {
-		secBuf.Free()
-		return
-	}
-
-	// Zero out the input buffer for security
-	for i := range buf {
-		buf[i] = 0
-	}
-
-	// Return secure buffer to pool
-	bp.pool.Put(secBuf)
-}
-
-func (bp *BlockBufferPool) Free() {
-	if bp.secureBuf != nil {
-		bp.secureBuf.Free()
-	}
-	// Note: SecureBufferPool does not need explicit cleanup as buffers are managed individually
-}
-
-// Performance manages system performance optimizations
-type Performance struct {
-	cfg       Config
-	logger    *zap.Logger
-	buffers   []*BlockBufferPool
-	once      sync.Once
-	startupTS time.Time
-}
-
-func NewPerformance(cfg Config, logger *zap.Logger) *Performance {
-
-	return &Performance{
-
-		cfg: cfg,
-
-		logger: logger,
-
-		startupTS: time.Now(),
-	}
-
-}
-
-func (p *Performance) ApplyOptimizations() error {
-
-	p.once.Do(func() {
-
-		p.logger.Info("Applying performance optimizations", zap.String("tier", p.cfg.Tier))
-
-		p.applyCPUTuning()
-
-		p.applyGCTuning()
-
-		p.applyThreadPinning()
-
-		p.applyPreallocatedBuffers()
-
-		if p.cfg.OptimizeSystem {
-
-			if err := p.applyCPUAffinity(); err != nil {
-
-				p.logger.Warn("Failed to apply CPU affinity", zap.Error(err))
-
-			}
-
-		}
-
-	})
-
-	return nil
-
-}
-
-func (p *Performance) applyCPUTuning() {
-
-	numCPU := runtime.NumCPU()
-
-	if p.cfg.MaxCPU > 0 && p.cfg.MaxCPU <= numCPU {
-
-		numCPU = p.cfg.MaxCPU
-
-	}
-
-	runtime.GOMAXPROCS(numCPU)
-
-	p.logger.Info("CPU tuning applied", zap.Int("gomaxprocs", numCPU))
-
-}
-
-func (p *Performance) applyThreadPinning() {
-
-	if p.cfg.LockOSThread {
-
-		runtime.LockOSThread()
-
-		p.logger.Info("Main thread pinned to OS thread")
-
-	}
-
-}
-
-func (p *Performance) applyGCTuning() {
-
-	if p.cfg.GCPercent > 0 {
-
-		runtime.GC()
-
-		// Note: runtime.SetGCPercent is not available in this Go version
-
-		// runtime.SetGCPercent(p.cfg.GCPercent)
-
-		p.logger.Info("GC tuning applied", zap.Int("gc_percent", p.cfg.GCPercent))
-
-	}
-
-}
-
-func (p *Performance) applyCPUAffinity() error {
-	// CPU affinity not available in this environment
-	p.logger.Info("CPU affinity skipped - not available in this environment", zap.Int("cores", p.cfg.MaxCPU))
-	return nil
-}
-
-func (p *Performance) applyPreallocatedBuffers() {
-
-	if !p.cfg.PreallocBuffers {
-
-		return
-
-	}
-
-	secure := p.cfg.EnterpriseSecurityEnabled && (p.cfg.Tier == "Enterprise" || p.cfg.Tier == "Turbo")
-
-	blockPool := NewBlockBufferPool(128*1024, 2048, secure)
-
-	txPool := NewBlockBufferPool(32*1024, 4096, secure)
-
-	p.buffers = []*BlockBufferPool{blockPool, txPool}
-
-	p.logger.Info("Zero-copy memory pools initialized",
-
-		zap.Int("block_pool_buffers", 2048),
-
-		zap.Int("tx_pool_buffers", 4096),
-
-		zap.Int("block_buffer_bytes", 128*1024),
-
-		zap.Int("tx_buffer_bytes", 32*1024),
-
-		zap.Bool("secure", secure))
-
-}
-
-// BackendRegistry manages chain backends
-
-type ChainBackend interface {
-	GetLatestBlock() (blocks.BlockEvent, error)
-
-	GetMempoolSize() int
-
-	GetStatus() map[string]interface{}
-
-	GetPredictiveETA() float64
-
-	StreamBlocks(ctx context.Context, blockChan chan<- blocks.BlockEvent) error
-}
-
-type BackendRegistry struct {
-	mu sync.RWMutex
-
-	backends map[string]ChainBackend
-}
-
-func NewBackendRegistry() *BackendRegistry {
-
-	return &BackendRegistry{
-
-		backends: make(map[string]ChainBackend),
-	}
-
-}
-
-func (r *BackendRegistry) Register(name string, backend ChainBackend) {
-
-	r.mu.Lock()
-
-	defer r.mu.Unlock()
-
-	r.backends[name] = backend
-
-}
-
-func (r *BackendRegistry) Get(name string) (ChainBackend, bool) {
-
-	r.mu.RLock()
-
-	defer r.mu.RUnlock()
-
-	backend, ok := r.backends[name]
-
-	return backend, ok
-
-}
-
-func (r *BackendRegistry) List() []string {
-
-	r.mu.RLock()
-
-	defer r.mu.RUnlock()
-
-	chains := make([]string, 0, len(r.backends))
-
-	for name := range r.backends {
-
-		chains = append(chains, name)
-
-	}
-
-	return chains
-
-}
-
-func (r *BackendRegistry) GetStatus() map[string]interface{} {
-
-	r.mu.RLock()
-
-	defer r.mu.RUnlock()
-
-	status := make(map[string]interface{})
-
-	for name, backend := range r.backends {
-
-		if backend != nil {
-
-			status[name] = backend.GetStatus()
-
-		}
-
-	}
-
-	return status
-
-}
-
-// ChainBackendImpl implements ChainBackend
-
-type ChainBackendImpl struct {
-	chain string
-
-	client *UniversalClient
-
-	cfg Config
-
-	cache *Cache
-
-	logger *zap.Logger
-}
-
-func NewChainBackend(chain string, cfg Config, cache *Cache, logger *zap.Logger) *ChainBackendImpl {
-
-	client, err := NewUniversalClient(cfg, ProtocolType(chain), logger)
-
-	if err != nil {
-
-		logger.Fatal("Failed to create universal client", zap.String("chain", chain), zap.Error(err))
-
-	}
-
-	return &ChainBackendImpl{
-
-		chain: chain,
-
-		client: client,
-
-		cfg: cfg,
-
-		cache: cache,
-
-		logger: logger,
-	}
-
-}
-
-func (b *ChainBackendImpl) GetLatestBlock() (blocks.BlockEvent, error) {
-
-	hash := b.chain + ":latest"
-
-	if evt, ok := b.cache.Get(hash); ok {
-
-		return evt.(blocks.BlockEvent), nil
-
-	}
-
-	for i := 0; i < b.cfg.MaxRetries; i++ {
-
-		evt, err := b.fetchLatestBlock()
-
-		if err == nil {
-
-			b.cache.Set(hash, evt, b.cfg.CacheTTL)
-
-			return evt, nil
-
-		}
-
-		b.logger.Warn("Failed to fetch latest block", zap.String("chain", b.chain), zap.Error(err), zap.Int("attempt", i+1))
-
-		time.Sleep(b.cfg.RetryBackoff * time.Duration(1<<i))
-
-	}
-
-	return blocks.BlockEvent{}, errors.New("failed to fetch latest block after retries")
-
-}
-
-func (b *ChainBackendImpl) fetchLatestBlock() (blocks.BlockEvent, error) {
-
-	hashBytes := sha256.Sum256([]byte(b.chain + time.Now().String()))
-
-	return blocks.BlockEvent{
-		Hash:       hex.EncodeToString(hashBytes[:16]),
-		Height:     uint32(700000 + int64(time.Now().Unix()%1000)),
-		Timestamp:  time.Now(),
-		DetectedAt: time.Now(),
-		Source:     b.chain,
-		Tier:       "free",
-	}, nil
-
-}
-
-func (b *ChainBackendImpl) GetMempoolSize() int {
-
-	return 100 + int(time.Now().Unix()%50)
-
-}
-
-func (b *ChainBackendImpl) GetStatus() map[string]interface{} {
-
-	return map[string]interface{}{
-
-		"chain": b.chain,
-
-		"connections": b.client.GetPeerCount(),
-
-		"status": "connected",
-
-		"last_updated": time.Now().Format(time.RFC3339),
-	}
-
-}
-
-func (b *ChainBackendImpl) GetPredictiveETA() float64 {
-	return 0.0 // Placeholder implementation
-}
-
-func (b *ChainBackendImpl) StreamBlocks(ctx context.Context, blockChan chan<- blocks.BlockEvent) error {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			hashBytes := sha256.Sum256([]byte(b.chain + time.Now().String()))
-			block := blocks.BlockEvent{
-				Hash:       hex.EncodeToString(hashBytes[:16]),
-				Height:     uint32(700000 + int64(time.Now().Unix()%1000)),
-				Timestamp:  time.Now(),
-				DetectedAt: time.Now(),
-				Source:     b.chain,
-				Tier:       "free",
-			}
-			select {
-			case blockChan <- block:
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
-	}
-}
-
 func (c *Cache) Set(key string, value interface{}, ttl time.Duration) {
+
 	c.mu.Lock()
+
 	defer c.mu.Unlock()
 
 	if len(c.items) >= c.maxSize {
 
-		c.evict()
+	c.evict()
 
 	}
+
 
 	c.items[key] = cacheItem{
 
-		value: value,
+	value:      value,
 
-		expiration: time.Now().Add(ttl),
+	expiresAt: time.Now().Add(ttl),
+
 	}
 
 }
+
 
 func (c *Cache) Get(key string) (interface{}, bool) {
 
@@ -755,23 +331,27 @@ func (c *Cache) Get(key string) (interface{}, bool) {
 
 	defer c.mu.RUnlock()
 
+
 	item, exists := c.items[key]
 
 	if !exists {
 
-		return nil, false
+	return nil, false
 
 	}
 
-	if time.Now().After(item.expiration) {
 
-		return nil, false
+	if time.Now().After(item.expiresAt) {
+
+	return nil, false
 
 	}
+
 
 	return item.value, true
 
 }
+
 
 func (c *Cache) evict() {
 
@@ -779,25 +359,28 @@ func (c *Cache) evict() {
 
 	var oldestExp time.Time
 
+
 	for key, item := range c.items {
 
-		if oldestKey == "" || item.expiration.Before(oldestExp) {
+	if oldestKey == "" || item.expiresAt.Before(oldestExp) {
 
-			oldestKey = key
+	oldestKey = key
 
-			oldestExp = item.expiration
-
-		}
+	oldestExp = item.expiresAt
 
 	}
 
+	}
+
+
 	if oldestKey != "" {
 
-		delete(c.items, oldestKey)
+	delete(c.items, oldestKey)
 
 	}
 
 }
+
 
 func (c *Cache) cleanup() {
 
@@ -805,1820 +388,2018 @@ func (c *Cache) cleanup() {
 
 	defer ticker.Stop()
 
+
 	for range ticker.C {
 
-		c.mu.Lock()
+	c.mu.Lock()
 
-		now := time.Now()
+	now := time.Now()
 
-		for key, item := range c.items {
+	for key, item := range c.items {
 
-			if now.After(item.expiration) {
+	if now.After(item.expiresAt) {
 
-				delete(c.items, key)
+	delete(c.items, key)
 
-			}
+	}
 
-		}
+	}
 
-		c.mu.Unlock()
+	c.mu.Unlock()
 
 	}
 
 }
 
+
 // Mempool tracks transaction pool
 
 type Mempool struct {
-	txPool sync.Map
+
+txPool sync.Map
+
 }
+
 
 func NewMempool() *Mempool {
 
-	return &Mempool{}
+return &Mempool{}
 
 }
+
 
 func (m *Mempool) AddTransaction(txID string) {
 
-	m.txPool.Store(txID, time.Now())
+m.txPool.Store(txID, time.Now())
 
 }
+
 
 func (m *Mempool) Size() int {
 
-	count := 0
+count := 0
 
-	m.txPool.Range(func(_, _ interface{}) bool {
+m.txPool.Range(func(_, _ interface{}) bool {
 
-		count++
+count++
 
-		return true
+return true
 
-	})
+})
 
-	return count
+return count
 
 }
+
 
 // ProtocolType and ProtocolMetadata
 
 type ProtocolType string
 
+
 const (
-	ProtocolBitcoin ProtocolType = "bitcoin"
 
-	ProtocolEthereum ProtocolType = "ethereum"
+ProtocolBitcoin  ProtocolType = "bitcoin"
 
-	ProtocolSolana ProtocolType = "solana"
+ProtocolEthereum ProtocolType = "ethereum"
+
+ProtocolSolana   ProtocolType = "solana"
+
 )
 
+
 type ProtocolMetadata struct {
-	Name string
 
-	Version string
+Name               string
 
-	NetworkID uint32
+Version            string
 
-	DefaultPort int
+NetworkID          uint32
 
-	GenesisHash []byte
+DefaultPort        int
 
-	RequiresEncryption bool
+GenesisHash        []byte
 
-	MaxMessageSize int
+RequiresEncryption bool
 
-	HandshakeTimeout time.Duration
+MaxMessageSize     int
 
-	MessageTypes []string
+HandshakeTimeout   time.Duration
+
+MessageTypes       []string
+
 }
+
 
 // ProtocolHandler interface
 
 type ProtocolHandler interface {
-	CreateConnection(ctx context.Context, address string) (ProtocolConnection, error)
 
-	ValidateConnection(conn ProtocolConnection) error
+CreateConnection(ctx context.Context, address string) (ProtocolConnection, error)
 
-	SerializeMessage(messageType string, payload []byte) ([]byte, error)
+ValidateConnection(conn ProtocolConnection) error
 
-	DeserializeMessage(data []byte) (interface{}, error)
+SerializeMessage(messageType string, payload []byte) ([]byte, error)
 
-	ValidateMessage(message interface{}) error
+DeserializeMessage(data []byte) (interface{}, error)
 
-	GetProtocolMetadata() ProtocolMetadata
+ValidateMessage(message interface{}) error
 
-	SupportsMessageType(messageType string) bool
+GetProtocolMetadata() ProtocolMetadata
 
-	InitializeConnection(conn ProtocolConnection) error
+SupportsMessageType(messageType string) bool
 
-	TerminateConnection(conn ProtocolConnection) error
+InitializeConnection(conn ProtocolConnection) error
+
+TerminateConnection(conn ProtocolConnection) error
+
 }
+
 
 // ProtocolConnection interface
 
 type ProtocolConnection interface {
-	Send(data []byte) error
 
-	Receive() ([]byte, error)
+Send(data []byte) error
 
-	Close() error
+Receive() ([]byte, error)
 
-	Ping() error
+Close() error
 
-	RemoteAddr() net.Addr
+Ping() error
 
-	LocalAddr() net.Addr
+RemoteAddr() net.Addr
 
-	IsEncrypted() bool
+LocalAddr() net.Addr
 
-	Protocol() ProtocolType
+IsEncrypted() bool
 
-	BytesSent() uint64
+Protocol() ProtocolType
 
-	BytesReceived() uint64
+BytesSent() uint64
 
-	LastActivity() time.Time
+BytesReceived() uint64
 
-	ConnectionTime() time.Time
+LastActivity() time.Time
 
-	IsAlive() bool
+ConnectionTime() time.Time
 
-	Latency() time.Duration
+IsAlive() bool
 
-	SuccessRate() float64
+Latency() time.Duration
+
+SuccessRate() float64
+
 }
+
 
 // ProtocolFactory interface
 
 type ProtocolFactory interface {
-	CreateHandler(config Config, logger *zap.Logger) (ProtocolHandler, error)
 
-	GetDefaultSeeds() []string
+CreateHandler(config Config, logger *zap.Logger) (ProtocolHandler, error)
 
-	GetProtocolVersion() string
+GetDefaultSeeds() []string
 
-	GetSupportedMessageTypes() []string
+GetProtocolVersion() string
+
+GetSupportedMessageTypes() []string
+
 }
+
 
 // GenericLightHandler implements ProtocolHandler
 
 type GenericLightHandler struct {
-	chain ProtocolType
 
-	metadata ProtocolMetadata
+chain      ProtocolType
 
-	logger *zap.Logger
+metadata   ProtocolMetadata
 
-	bufferPool *BlockBufferPool
+logger     *zap.Logger
+
+bufferPool *BlockBufferPool
+
 }
+
 
 func (h *GenericLightHandler) CreateConnection(ctx context.Context, address string) (ProtocolConnection, error) {
 
-	conn, err := net.DialTimeout("tcp", address, 5*time.Second)
+conn, err := net.DialTimeout("tcp", address, 5*time.Second)
 
-	if err != nil {
+if err != nil {
 
-		return nil, err
-
-	}
-
-	tcpConn, ok := conn.(*net.TCPConn)
-
-	if ok {
-
-		tcpConn.SetKeepAlive(true)
-
-		tcpConn.SetKeepAlivePeriod(15 * time.Second)
-
-		tcpConn.SetReadBuffer(16 * 1024)
-
-		tcpConn.SetWriteBuffer(16 * 1024)
-
-	}
-
-	return &GenericLightConnection{conn: conn, logger: h.logger, bufferPool: h.bufferPool, chain: h.chain}, nil
+return nil, err
 
 }
+
+tcpConn, ok := conn.(*net.TCPConn)
+
+if ok {
+
+tcpConn.SetKeepAlive(true)
+
+tcpConn.SetKeepAlivePeriod(15*time.Second)
+
+tcpConn.SetReadBuffer(16*1024)
+
+tcpConn.SetWriteBuffer(16*1024)
+
+}
+
+return &GenericLightConnection{conn: conn, logger: h.logger, bufferPool: h.bufferPool, chain: h.chain}, nil
+
+}
+
 
 func (h *GenericLightHandler) ValidateConnection(conn ProtocolConnection) error {
 
-	return nil
+return nil
 
 }
+
 
 func (h *GenericLightHandler) SerializeMessage(messageType string, payload []byte) ([]byte, error) {
 
-	if !h.SupportsMessageType(messageType) {
+if !h.SupportsMessageType(messageType) {
 
-		return nil, fmt.Errorf("unsupported message type: %s", messageType)
-
-	}
-
-	buf := h.bufferPool.Get()
-
-	defer h.bufferPool.Put(buf)
-
-	header := fmt.Sprintf("%s:", messageType)
-
-	copy(buf, []byte(header))
-
-	copy(buf[len(header):], payload)
-
-	return buf[:len(header)+len(payload)], nil
+return nil, fmt.Errorf("unsupported message type: %s", messageType)
 
 }
+
+buf := h.bufferPool.Get()
+
+defer h.bufferPool.Put(buf)
+
+header := fmt.Sprintf("%s:", messageType)
+
+copy(buf, []byte(header))
+
+copy(buf[len(header):], payload)
+
+return buf[:len(header)+len(payload)], nil
+
+}
+
 
 func (h *GenericLightHandler) DeserializeMessage(data []byte) (interface{}, error) {
 
-	if len(data) < 80 {
+if len(data) < 80 {
 
-		return nil, errors.New("invalid header data")
-
-	}
-
-	header := blocks.BlockEvent{
-
-		Hash: hex.EncodeToString(data[:32]),
-
-		Height: uint32(data[32]) | uint32(data[33])<<8 | uint32(data[34])<<16 | uint32(data[35])<<24,
-
-		Timestamp: time.Unix(int64(uint32(data[68])|uint32(data[69])<<8|uint32(data[70])<<16|uint32(data[71])<<24), 0),
-
-		DetectedAt: time.Now(),
-
-		Source: string(h.chain),
-
-		Tier: "free",
-	}
-
-	return header, nil
+return nil, errors.New("invalid header data")
 
 }
+
+header := BlockEvent{
+
+Hash:      hex.EncodeToString(data[:32]),
+
+Height:    int64(uint32(data[32]) | uint32(data[33])<<8 | uint32(data[34])<<16 | uint32(data[35])<<24),
+
+Timestamp: time.Unix(int64(uint32(data[68])|uint32(data[69])<<8|uint32(data[70])<<16|uint32(data[71])<<24), 0),
+
+Size:      80,
+
+Chain:     string(h.chain),
+
+}
+
+return header, nil
+
+}
+
 
 func (h *GenericLightHandler) ValidateMessage(message interface{}) error {
 
-	_, ok := message.(blocks.BlockEvent)
+_, ok := message.(BlockEvent)
 
-	if !ok {
+if !ok {
 
-		return errors.New("invalid message format")
-
-	}
-
-	return nil
+return errors.New("invalid message format")
 
 }
+
+return nil
+
+}
+
 
 func (h *GenericLightHandler) GetProtocolMetadata() ProtocolMetadata {
 
-	return h.metadata
+return h.metadata
 
 }
+
 
 func (h *GenericLightHandler) SupportsMessageType(messageType string) bool {
 
-	for _, mt := range h.metadata.MessageTypes {
+for _, mt := range h.metadata.MessageTypes {
 
-		if mt == messageType {
+if mt == messageType {
 
-			return true
-
-		}
-
-	}
-
-	return false
+return true
 
 }
+
+}
+
+return false
+
+}
+
 
 func (h *GenericLightHandler) InitializeConnection(conn ProtocolConnection) error {
 
-	return conn.Send([]byte("version"))
+return conn.Send([]byte("version"))
 
 }
+
 
 func (h *GenericLightHandler) TerminateConnection(conn ProtocolConnection) error {
 
-	return conn.Close()
+return conn.Close()
 
 }
+
 
 // GenericLightConnection implements ProtocolConnection
 
 type GenericLightConnection struct {
-	conn net.Conn
 
-	logger *zap.Logger
+conn       net.Conn
 
-	bufferPool *BlockBufferPool
+logger     *zap.Logger
 
-	chain ProtocolType
+bufferPool *BlockBufferPool
 
-	sent uint64
+chain      ProtocolType
 
-	recv uint64
+sent       uint64
+
+recv       uint64
+
 }
+
 
 func (c *GenericLightConnection) Send(data []byte) error {
 
-	_, err := c.conn.Write(data)
+_, err := c.conn.Write(data)
 
-	if err == nil {
+if err == nil {
 
-		atomic.AddUint64(&c.sent, uint64(len(data)))
-
-	}
-
-	return err
+atomic.AddUint64(&c.sent, uint64(len(data)))
 
 }
+
+return err
+
+}
+
 
 func (c *GenericLightConnection) Receive() ([]byte, error) {
 
-	buf := c.bufferPool.Get()
+buf := c.bufferPool.Get()
 
-	n, err := c.conn.Read(buf)
+n, err := c.conn.Read(buf)
 
-	if err == nil {
+if err == nil {
 
-		atomic.AddUint64(&c.recv, uint64(n))
-
-	}
-
-	return buf[:n], err
+atomic.AddUint64(&c.recv, uint64(n))
 
 }
+
+return buf[:n], err
+
+}
+
 
 func (c *GenericLightConnection) Close() error {
 
-	return c.conn.Close()
+return c.conn.Close()
 
 }
+
 
 func (c *GenericLightConnection) Ping() error {
 
-	return c.Send([]byte("ping"))
+return c.Send([]byte("ping"))
 
 }
+
 
 func (c *GenericLightConnection) RemoteAddr() net.Addr {
 
-	return c.conn.RemoteAddr()
+return c.conn.RemoteAddr()
 
 }
+
 
 func (c *GenericLightConnection) LocalAddr() net.Addr {
 
-	return c.conn.LocalAddr()
+return c.conn.LocalAddr()
 
 }
+
 
 func (c *GenericLightConnection) IsEncrypted() bool {
 
-	return false
+return false
 
 }
+
 
 func (c *GenericLightConnection) Protocol() ProtocolType {
 
-	return c.chain
+return c.chain
 
 }
+
 
 func (c *GenericLightConnection) BytesSent() uint64 {
 
-	return atomic.LoadUint64(&c.sent)
+return atomic.LoadUint64(&c.sent)
 
 }
+
 
 func (c *GenericLightConnection) BytesReceived() uint64 {
 
-	return atomic.LoadUint64(&c.recv)
+return atomic.LoadUint64(&c.recv)
 
 }
+
 
 func (c *GenericLightConnection) LastActivity() time.Time {
 
-	return time.Now()
+return time.Now()
 
 }
+
 
 func (c *GenericLightConnection) ConnectionTime() time.Time {
 
-	return time.Now().Add(-time.Hour)
+return time.Now().Add(-time.Hour)
 
 }
+
 
 func (c *GenericLightConnection) IsAlive() bool {
 
-	return true
+return true
 
 }
+
 
 func (c *GenericLightConnection) Latency() time.Duration {
 
-	return 100 * time.Millisecond
+return 100 * time.Millisecond
 
 }
+
 
 func (c *GenericLightConnection) SuccessRate() float64 {
 
-	return 0.95
+return 0.95
 
 }
+
 
 // GenericProtocolFactory implements ProtocolFactory
 
 type GenericProtocolFactory struct {
-	chain ProtocolType
+
+chain ProtocolType
+
 }
+
 
 func (f *GenericProtocolFactory) CreateHandler(cfg Config, logger *zap.Logger) (ProtocolHandler, error) {
 
-	var metadata ProtocolMetadata
+var metadata ProtocolMetadata
 
-	switch f.chain {
+switch f.chain {
 
-	case ProtocolBitcoin:
+case ProtocolBitcoin:
 
-		metadata = ProtocolMetadata{
+metadata = ProtocolMetadata{
 
-			Name: "bitcoin",
+Name:               "bitcoin",
 
-			Version: "0.21.0",
+Version:            "0.21.0",
 
-			NetworkID: 0,
+NetworkID:          0,
 
-			DefaultPort: 8333,
+DefaultPort:        8333,
 
-			GenesisHash: make([]byte, 32),
+GenesisHash:        make([]byte, 32),
 
-			RequiresEncryption: cfg.EnableEncryption,
+RequiresEncryption: cfg.EnableEncryption,
 
-			MaxMessageSize: 32 * 1024 * 1024,
+MaxMessageSize:     32 * 1024 * 1024,
 
-			HandshakeTimeout: 5 * time.Second,
+HandshakeTimeout:   5 * time.Second,
 
-			MessageTypes: []string{"getheaders", "headers"},
-		}
-
-	case ProtocolEthereum:
-
-		metadata = ProtocolMetadata{
-
-			Name: "ethereum",
-
-			Version: "1.0",
-
-			NetworkID: 1,
-
-			DefaultPort: 30303,
-
-			GenesisHash: make([]byte, 32),
-
-			RequiresEncryption: cfg.EnableEncryption,
-
-			MaxMessageSize: 1024 * 1024,
-
-			HandshakeTimeout: 5 * time.Second,
-
-			MessageTypes: []string{"getBlockHeaders", "blockHeaders"},
-		}
-
-	case ProtocolSolana:
-
-		metadata = ProtocolMetadata{
-
-			Name: "solana",
-
-			Version: "1.0",
-
-			NetworkID: 1,
-
-			DefaultPort: 8899,
-
-			GenesisHash: make([]byte, 32),
-
-			RequiresEncryption: cfg.EnableEncryption,
-
-			MaxMessageSize: 1280,
-
-			HandshakeTimeout: 5 * time.Second,
-
-			MessageTypes: []string{"getLatestBlockhash", "blockhash"},
-		}
-
-	}
-
-	return &GenericLightHandler{
-
-		chain: f.chain,
-
-		metadata: metadata,
-
-		logger: logger,
-
-		bufferPool: NewBlockBufferPool(cfg.BufferSize, 1000, cfg.EnterpriseSecurityEnabled),
-	}, nil
+MessageTypes:       []string{"getheaders", "headers"},
 
 }
+
+case ProtocolEthereum:
+
+metadata = ProtocolMetadata{
+
+Name:               "ethereum",
+
+Version:            "1.0",
+
+NetworkID:          1,
+
+DefaultPort:        30303,
+
+GenesisHash:        make([]byte, 32),
+
+RequiresEncryption: cfg.EnableEncryption,
+
+MaxMessageSize:     1024 * 1024,
+
+HandshakeTimeout:   5 * time.Second,
+
+MessageTypes:       []string{"getBlockHeaders", "blockHeaders"},
+
+}
+
+case ProtocolSolana:
+
+metadata = ProtocolMetadata{
+
+Name:               "solana",
+
+Version:            "1.0",
+
+NetworkID:          1,
+
+DefaultPort:        8899,
+
+GenesisHash:        make([]byte, 32),
+
+RequiresEncryption: cfg.EnableEncryption,
+
+MaxMessageSize:     1280,
+
+HandshakeTimeout:   5 * time.Second,
+
+MessageTypes:       []string{"getLatestBlockhash", "blockhash"},
+
+}
+
+}
+
+return &GenericLightHandler{
+
+chain:      f.chain,
+
+metadata:   metadata,
+
+logger:     logger,
+
+bufferPool: NewBlockBufferPool(cfg.BufferSize, 1000, cfg.EnterpriseSecurityEnabled),
+
+}, nil
+
+}
+
 
 func (f *GenericProtocolFactory) GetDefaultSeeds() []string {
 
-	switch f.chain {
+switch f.chain {
 
-	case ProtocolBitcoin:
+case ProtocolBitcoin:
 
-		return []string{
+return []string{
 
-			"seed.bitcoin.sipa.be:8333",
+"seed.bitcoin.sipa.be:8333",
 
-			"dnsseed.bluematt.me:8333",
+"dnsseed.bluematt.me:8333",
 
-			"seed.bitcoinstats.com:8333",
-		}
-
-	case ProtocolEthereum:
-
-		return []string{
-
-			"52.16.188.185:30303",      // Ethereum mainnet bootnode
-
-			"18.138.108.67:30303",      // Ethereum mainnet bootnode
-
-			"3.209.45.79:30303",        // Ethereum mainnet bootnode
-
-			"99.81.230.23:30303",       // Ethereum mainnet bootnode
-
-			"35.177.226.168:30303",     // Ethereum mainnet bootnode
-		}
-
-	case ProtocolSolana:
-
-		return []string{
-
-			"127.0.0.1:9900",    // Local Solana test validator (from docker-compose)
-
-			"entrypoint.mainnet.solana.com:8001",    // Solana mainnet entrypoint
-
-			"entrypoint2.mainnet.solana.com:8001",   // Solana mainnet entrypoint
-
-			"entrypoint3.mainnet.solana.com:8001",   // Solana mainnet entrypoint
-
-			"entrypoint4.mainnet.solana.com:8001",   // Solana mainnet entrypoint
-
-			"entrypoint5.mainnet.solana.com:8001",   // Solana mainnet entrypoint
-		}
-
-	default:
-
-		return []string{}
-
-	}
+"seed.bitcoinstats.com:8333",
 
 }
+
+case ProtocolEthereum:
+
+return []string{
+
+"mainnet.ethdevops.io:30303",
+
+"mainnet.ethereumnodes.com:30303",
+
+}
+
+case ProtocolSolana:
+
+return []string{
+
+"mainnet.solana.com:8899",
+
+"rpc.mainnet.solana.org:8899",
+
+}
+
+default:
+
+return []string{}
+
+}
+
+}
+
 
 func (f *GenericProtocolFactory) GetProtocolVersion() string {
 
-	switch f.chain {
+switch f.chain {
 
-	case ProtocolBitcoin:
+case ProtocolBitcoin:
 
-		return "0.21.0"
+return "0.21.0"
 
-	case ProtocolEthereum, ProtocolSolana:
+case ProtocolEthereum, ProtocolSolana:
 
-		return "1.0"
+return "1.0"
 
-	default:
+default:
 
-		return "unknown"
-
-	}
+return "unknown"
 
 }
+
+}
+
 
 func (f *GenericProtocolFactory) GetSupportedMessageTypes() []string {
 
-	switch f.chain {
+switch f.chain {
 
-	case ProtocolBitcoin:
+case ProtocolBitcoin:
 
-		return []string{"getheaders", "headers"}
+return []string{"getheaders", "headers"}
 
-	case ProtocolEthereum:
+case ProtocolEthereum:
 
-		return []string{"getBlockHeaders", "blockHeaders"}
+return []string{"getBlockHeaders", "blockHeaders"}
 
-	case ProtocolSolana:
+case ProtocolSolana:
 
-		return []string{"getLatestBlockhash", "blockhash"}
+return []string{"getLatestBlockhash", "blockhash"}
 
-	default:
+default:
 
-		return []string{}
-
-	}
+return []string{}
 
 }
+
+}
+
 
 // UniversalClient manages P2P connections
 
 type UniversalClient struct {
-	cfg Config
 
-	logger *zap.Logger
+cfg      Config
 
-	protocol ProtocolType
+logger   *zap.Logger
 
-	handler ProtocolHandler
+protocol ProtocolType
 
-	peers map[string]ProtocolConnection
+handler  ProtocolHandler
 
-	peersMu sync.RWMutex
+peers    map[string]ProtocolConnection
 
-	stopChan chan struct{}
+peersMu  sync.RWMutex
 
-	stopped atomic.Bool
+stopChan chan struct{}
+
+stopped  atomic.Bool
+
 }
+
 
 func NewUniversalClient(cfg Config, protocol ProtocolType, logger *zap.Logger) (*UniversalClient, error) {
 
-	factories := map[ProtocolType]ProtocolFactory{
+factories := map[ProtocolType]ProtocolFactory{
 
-		ProtocolBitcoin: &GenericProtocolFactory{chain: ProtocolBitcoin},
+ProtocolBitcoin:  &GenericProtocolFactory{chain: ProtocolBitcoin},
 
-		ProtocolEthereum: &GenericProtocolFactory{chain: ProtocolEthereum},
+ProtocolEthereum: &GenericProtocolFactory{chain: ProtocolEthereum},
 
-		ProtocolSolana: &GenericProtocolFactory{chain: ProtocolSolana},
-	}
-
-	factory, exists := factories[protocol]
-
-	if !exists {
-
-		return nil, fmt.Errorf("protocol %s not supported", protocol)
-
-	}
-
-	handler, err := factory.CreateHandler(cfg, logger)
-
-	if err != nil {
-
-		return nil, err
-
-	}
-
-	return &UniversalClient{
-
-		cfg: cfg,
-
-		logger: logger,
-
-		protocol: protocol,
-
-		handler: handler,
-
-		peers: make(map[string]ProtocolConnection),
-
-		stopChan: make(chan struct{}),
-	}, nil
+ProtocolSolana:   &GenericProtocolFactory{chain: ProtocolSolana},
 
 }
+
+
+factory, exists := factories[protocol]
+
+if !exists {
+
+return nil, fmt.Errorf("protocol %s not supported", protocol)
+
+}
+
+
+handler, err := factory.CreateHandler(cfg, logger)
+
+if err != nil {
+
+return nil, err
+
+}
+
+
+return &UniversalClient{
+
+cfg:      cfg,
+
+logger:   logger,
+
+protocol: protocol,
+
+handler:  handler,
+
+peers:    make(map[string]ProtocolConnection),
+
+stopChan: make(chan struct{}),
+
+}, nil
+
+}
+
 
 func (c *UniversalClient) ConnectToNetwork(ctx context.Context) error {
 
-	factory := map[ProtocolType]ProtocolFactory{
+factory := map[ProtocolType]ProtocolFactory{
 
-		ProtocolBitcoin: &GenericProtocolFactory{chain: ProtocolBitcoin},
+ProtocolBitcoin:  &GenericProtocolFactory{chain: ProtocolBitcoin},
 
-		ProtocolEthereum: &GenericProtocolFactory{chain: ProtocolEthereum},
+ProtocolEthereum: &GenericProtocolFactory{chain: ProtocolEthereum},
 
-		ProtocolSolana: &GenericProtocolFactory{chain: ProtocolSolana},
-	}[c.protocol]
+ProtocolSolana:   &GenericProtocolFactory{chain: ProtocolSolana},
 
-	seeds := factory.GetDefaultSeeds()
+}[c.protocol]
 
-	var wg sync.WaitGroup
 
-	results := make(chan struct {
-		conn ProtocolConnection
+seeds := factory.GetDefaultSeeds()
 
-		addr string
+var wg sync.WaitGroup
 
-		err error
-	}, len(seeds))
+results := make(chan struct {
 
-	for _, addr := range seeds {
+conn ProtocolConnection
 
-		wg.Add(1)
+addr string
 
-		go func(address string) {
+err  error
 
-			defer wg.Done()
+}, len(seeds))
 
-			conn, err := c.handler.CreateConnection(ctx, address)
 
-			if err == nil && c.handler.ValidateConnection(conn) == nil && c.handler.InitializeConnection(conn) == nil {
+for _, addr := range seeds {
 
-				c.peersMu.Lock()
+wg.Add(1)
 
-				peerID := generatePeerID(address, string(c.protocol))
+go func(address string) {
 
-				c.peers[peerID] = conn
+defer wg.Done()
 
-				c.peersMu.Unlock()
+conn, err := c.handler.CreateConnection(ctx, address)
 
-				results <- struct {
-					conn ProtocolConnection
+if err == nil && c.handler.ValidateConnection(conn) == nil && c.handler.InitializeConnection(conn) == nil {
 
-					addr string
+c.peersMu.Lock()
 
-					err error
-				}{conn, address, nil}
+peerID := generatePeerID(address, string(c.protocol))
 
-			} else {
+c.peers[peerID] = conn
 
-				results <- struct {
-					conn ProtocolConnection
+c.peersMu.Unlock()
 
-					addr string
+results <- struct {
 
-					err error
-				}{nil, address, err}
+conn ProtocolConnection
 
-			}
+addr string
 
-		}(addr)
+err  error
 
-	}
+}{conn, address, nil}
 
-	go func() {
+} else {
 
-		wg.Wait()
+results <- struct {
 
-		close(results)
+conn ProtocolConnection
 
-	}()
+addr string
 
-	success := 0
+err  error
 
-	for result := range results {
-
-		if result.err == nil {
-
-			success++
-
-			c.logger.Info("Connected to peer", zap.String("address", result.addr))
-
-		}
-
-	}
-
-	if success == 0 {
-
-		return errors.New("failed to connect to any peers")
-
-	}
-
-	return nil
+}{nil, address, err}
 
 }
+
+}(addr)
+
+}
+
+
+go func() {
+
+wg.Wait()
+
+close(results)
+
+}()
+
+
+success := 0
+
+for result := range results {
+
+if result.err == nil {
+
+success++
+
+c.logger.Info("Connected to peer", zap.String("address", result.addr))
+
+}
+
+}
+
+
+if success == 0 {
+
+return errors.New("failed to connect to any peers")
+
+}
+
+return nil
+
+}
+
 
 func (c *UniversalClient) BroadcastBlockHash(hash string) error {
 
-	c.peersMu.RLock()
+c.peersMu.RLock()
 
-	defer c.peersMu.RUnlock()
+defer c.peersMu.RUnlock()
 
-	payload, err := c.handler.SerializeMessage("getheaders", []byte(hash))
 
-	if err != nil {
+payload, err := c.handler.SerializeMessage("getheaders", []byte(hash))
 
-		return err
+if err != nil {
 
-	}
-
-	var wg sync.WaitGroup
-
-	var lastError error
-
-	var mu sync.Mutex
-
-	for peerID, conn := range c.peers {
-
-		wg.Add(1)
-
-		go func(peerID string, conn ProtocolConnection) {
-
-			defer wg.Done()
-
-			if err := conn.Send(payload); err != nil {
-
-				mu.Lock()
-
-				lastError = err
-
-				mu.Unlock()
-
-				c.logger.Warn("Failed to send to peer", zap.String("peer_id", peerID), zap.Error(err))
-
-			}
-
-		}(peerID, conn)
-
-	}
-
-	wg.Wait()
-
-	return lastError
+return err
 
 }
+
+
+var wg sync.WaitGroup
+
+var lastError error
+
+var mu sync.Mutex
+
+
+for peerID, conn := range c.peers {
+
+wg.Add(1)
+
+go func(peerID string, conn ProtocolConnection) {
+
+defer wg.Done()
+
+if err := conn.Send(payload); err != nil {
+
+mu.Lock()
+
+lastError = err
+
+mu.Unlock()
+
+c.logger.Warn("Failed to send to peer", zap.String("peer_id", peerID), zap.Error(err))
+
+}
+
+}(peerID, conn)
+
+}
+
+
+wg.Wait()
+
+return lastError
+
+}
+
 
 func (c *UniversalClient) GetPeerCount() int {
 
-	c.peersMu.RLock()
+c.peersMu.RLock()
 
-	defer c.peersMu.RUnlock()
+defer c.peersMu.RUnlock()
 
-	return len(c.peers)
+return len(c.peers)
 
 }
+
 
 func (c *UniversalClient) Shutdown(ctx context.Context) error {
 
-	if !c.stopped.CompareAndSwap(false, true) {
+if !c.stopped.CompareAndSwap(false, true) {
 
-		return errors.New("client already stopped")
-
-	}
-
-	close(c.stopChan)
-
-	c.peersMu.Lock()
-
-	for _, conn := range c.peers {
-
-		c.handler.TerminateConnection(conn)
-
-	}
-
-	c.peers = make(map[string]ProtocolConnection)
-
-	c.peersMu.Unlock()
-
-	return nil
+return errors.New("client already stopped")
 
 }
 
-// retryConnectWithBackoff attempts to reconnect with exponential backoff
-func (c *UniversalClient) retryConnectWithBackoff(chain string, logger *zap.Logger) {
-	maxRetries := 10
-	baseDelay := 5 * time.Second
-	maxDelay := 5 * time.Minute
 
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		delay := time.Duration(float64(baseDelay) * math.Pow(2, float64(attempt-1)))
-		if delay > maxDelay {
-			delay = maxDelay
-		}
+close(c.stopChan)
 
-		// Calculate ETA for next retry
-		var eta time.Duration
-		if attempt < maxRetries {
-			nextDelay := time.Duration(float64(baseDelay) * math.Pow(2, float64(attempt)))
-			if nextDelay > maxDelay {
-				nextDelay = maxDelay
-			}
-			eta = time.Now().Add(nextDelay).Sub(time.Now())
-		}
 
-		logger.Info("Retrying P2P connection", 
-			zap.String("chain", chain), 
-			zap.Int("attempt", attempt), 
-			zap.Int("maxRetries", maxRetries),
-			zap.Duration("delay", delay),
-			zap.Duration("eta", eta))
+c.peersMu.Lock()
 
-		time.Sleep(delay)
+for _, conn := range c.peers {
 
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		err := c.ConnectToNetwork(ctx)
-		cancel()
+c.handler.TerminateConnection(conn)
 
-		if err == nil {
-			logger.Info("Successfully reconnected to P2P network", 
-				zap.String("chain", chain), 
-				zap.Int("attempt", attempt))
-			return
-		}
-
-		logger.Warn("P2P reconnection attempt failed", 
-			zap.String("chain", chain), 
-			zap.Int("attempt", attempt), 
-			zap.Error(err))
-	}
-
-	logger.Error("Failed to reconnect to P2P network after all retries", 
-		zap.String("chain", chain), 
-		zap.Int("maxRetries", maxRetries))
 }
+
+c.peers = make(map[string]ProtocolConnection)
+
+c.peersMu.Unlock()
+
+
+return nil
+
+}
+
 
 func generatePeerID(address, protocol string) string {
 
-	hash := sha256.Sum256([]byte(address + protocol))
+hash := sha256.Sum256([]byte(address + protocol))
 
-	return fmt.Sprintf("peer_%s", hex.EncodeToString(hash[:8]))
+return fmt.Sprintf("peer_%s", hex.EncodeToString(hash[:8]))
 
 }
+
 
 // BloomFilterManager manages bloom filters for UTXO filtering
 
 type BloomFilterManager struct {
-	logger *zap.Logger
+
+logger *zap.Logger
+
 }
+
 
 func NewBloomFilterManager(logger *zap.Logger) *BloomFilterManager {
 
-	return &BloomFilterManager{logger: logger}
+return &BloomFilterManager{logger: logger}
 
 }
+
 
 func (m *BloomFilterManager) IsEnabled() bool {
 
-	return true
+return true
 
 }
+
 
 func (m *BloomFilterManager) LoadBlock(blockData []byte) error {
 
-	return nil
+return nil
 
 }
+
 
 func (m *BloomFilterManager) Cleanup() error {
 
-	return nil
+return nil
 
 }
+
 
 // EnterpriseSecurityManager manages security features
 
 type EnterpriseSecurityManager struct {
-	logger *zap.Logger
 
-	server *Server
+logger *zap.Logger
+
+server *Server
+
 }
+
 
 func NewEnterpriseSecurityManager(server *Server, logger *zap.Logger) *EnterpriseSecurityManager {
 
-	return &EnterpriseSecurityManager{
+return &EnterpriseSecurityManager{
 
-		logger: logger,
+logger: logger,
 
-		server: server,
-	}
+server: server,
 
 }
+
+}
+
 
 func (esm *EnterpriseSecurityManager) RegisterEnterpriseRoutes() {
 
-	esm.logger.Info("Enterprise Security API endpoints registered")
+esm.logger.Info("Enterprise Security API endpoints registered")
 
 }
+
 
 // LatencyOptimizer tracks and optimizes latency
 
 type LatencyOptimizer struct {
-	mutex sync.RWMutex
 
-	chainLatencies map[string]*LatencyTracker
+mutex           sync.RWMutex
 
-	targetP99 time.Duration
+chainLatencies  map[string]*LatencyTracker
 
-	adaptiveTimeout time.Duration
+targetP99       time.Duration
 
-	predictiveCache *PredictiveCache
+adaptiveTimeout time.Duration
 
-	entropyBuffer *EntropyMemoryBuffer
+predictiveCache *PredictiveCache
+
+entropyBuffer   *EntropyMemoryBuffer
+
 }
+
 
 type LatencyTracker struct {
-	samples []time.Duration
 
-	maxSamples int
+samples       []time.Duration
 
-	currentP99 time.Duration
+maxSamples    int
 
-	lastUpdated time.Time
+currentP99    time.Duration
 
-	violations int
+lastUpdated   time.Time
 
-	adaptations int
+violations    int
+
+adaptations   int
+
 }
+
 
 func NewLatencyOptimizer(predictiveCache *PredictiveCache, entropyBuffer *EntropyMemoryBuffer) *LatencyOptimizer {
 
-	return &LatencyOptimizer{
+return &LatencyOptimizer{
 
-		chainLatencies: make(map[string]*LatencyTracker),
+chainLatencies:  make(map[string]*LatencyTracker),
 
-		targetP99: 100 * time.Millisecond,
+targetP99:       100 * time.Millisecond,
 
-		adaptiveTimeout: 200 * time.Millisecond,
+adaptiveTimeout: 200 * time.Millisecond,
 
-		predictiveCache: predictiveCache,
+predictiveCache: predictiveCache,
 
-		entropyBuffer: entropyBuffer,
-	}
+entropyBuffer:   entropyBuffer,
 
 }
+
+}
+
 
 func (lo *LatencyOptimizer) TrackRequest(chain string, duration time.Duration) {
 
-	lo.mutex.Lock()
+lo.mutex.Lock()
 
-	defer lo.mutex.Unlock()
+defer lo.mutex.Unlock()
 
-	tracker, exists := lo.chainLatencies[chain]
 
-	if !exists {
+tracker, exists := lo.chainLatencies[chain]
 
-		tracker = &LatencyTracker{
+if !exists {
 
-			samples: make([]time.Duration, 0, 1000),
+tracker = &LatencyTracker{
 
-			maxSamples: 1000,
-		}
+samples:    make([]time.Duration, 0, 1000),
 
-		lo.chainLatencies[chain] = tracker
-
-	}
-
-	tracker.samples = append(tracker.samples, duration)
-
-	if len(tracker.samples) > tracker.maxSamples {
-
-		tracker.samples = tracker.samples[1:]
-
-	}
-
-	if len(tracker.samples) >= 10 {
-
-		sorted := make([]time.Duration, len(tracker.samples))
-
-		copy(sorted, tracker.samples)
-
-		sort.Slice(sorted, func(i, j int) bool {
-
-			return sorted[i] < sorted[j]
-
-		})
-
-		p99Index := int(math.Ceil(0.99*float64(len(sorted)))) - 1
-
-		tracker.currentP99 = sorted[p99Index]
-
-		tracker.lastUpdated = time.Now()
-
-		if tracker.currentP99 > lo.targetP99 {
-
-			tracker.violations++
-
-			lo.adaptLatencyStrategy(chain, tracker)
-
-		}
-
-	}
-
-	metricsTracker.ObserveHistogram("sprint_request_duration", duration.Seconds(), chain)
-
-	metricsTracker.SetGauge("sprint_p99_latency", tracker.currentP99.Seconds(), chain)
+maxSamples: 1000,
 
 }
+
+lo.chainLatencies[chain] = tracker
+
+}
+
+
+tracker.samples = append(tracker.samples, duration)
+
+if len(tracker.samples) > tracker.maxSamples {
+
+tracker.samples = tracker.samples[1:]]
+
+}
+
+
+if len(tracker.samples) >= 10 {
+
+sorted := make([]time.Duration, len(tracker.samples))
+
+copy(sorted, tracker.samples)
+
+sort.Slice(sorted, func(i, j int) bool {
+
+return sorted[i] < sorted[j]
+
+})
+
+
+p99Index := int(math.Ceil(0.99*float64(len(sorted)))) - 1
+
+tracker.currentP99 = sorted[p99Index]
+
+tracker.lastUpdated = time.Now()
+
+
+if tracker.currentP99 > lo.targetP99 {
+
+tracker.violations++
+
+lo.adaptLatencyStrategy(chain, tracker)
+
+}
+
+}
+
+
+metricsTracker.ObserveHistogram("sprint_request_duration", duration.Seconds(), chain)
+
+metricsTracker.SetGauge("sprint_p99_latency", tracker.currentP99.Seconds(), chain)
+
+}
+
 
 func (lo *LatencyOptimizer) GetActualStats() map[string]interface{} {
 
-	lo.mutex.RLock()
+lo.mutex.RLock()
 
-	defer lo.mutex.RUnlock()
+defer lo.mutex.RUnlock()
 
-	if len(lo.chainLatencies) == 0 {
 
-		return map[string]interface{}{
+if len(lo.chainLatencies) == 0 {
 
-			"CurrentP99": "No data yet",
+return map[string]interface{}{
 
-			"ChainCount": 0,
+"CurrentP99": "No data yet",
 
-			"Status": "Warming up",
-		}
+"ChainCount": 0,
 
-	}
-
-	var allP99s []float64
-
-	chainStats := make(map[string]interface{})
-
-	for chain, tracker := range lo.chainLatencies {
-
-		if len(tracker.samples) > 0 {
-
-			allP99s = append(allP99s, tracker.currentP99.Seconds())
-
-			chainStats[chain] = map[string]interface{}{
-
-				"p99_ms": fmt.Sprintf("%.1fms", tracker.currentP99.Seconds()*1000),
-
-				"violations": tracker.violations,
-
-				"adaptations": tracker.adaptations,
-
-				"sample_count": len(tracker.samples),
-
-				"last_updated": tracker.lastUpdated.Format(time.RFC3339),
-			}
-
-		}
-
-	}
-
-	var overallP99 float64
-
-	if len(allP99s) > 0 {
-
-		for _, p99 := range allP99s {
-
-			if p99 > overallP99 {
-
-				overallP99 = p99
-
-			}
-
-		}
-
-	}
-
-	return map[string]interface{}{
-
-		"CurrentP99": fmt.Sprintf("%.1fms", overallP99*1000),
-
-		"ChainCount": len(lo.chainLatencies),
-
-		"ChainStats": chainStats,
-
-		"Status": "Active",
-
-		"LastMeasurement": time.Now().Format(time.RFC3339),
-	}
+"Status":     "Warming up",
 
 }
+
+}
+
+
+var allP99s []float64
+
+chainStats := make(map[string]interface{})
+
+for chain, tracker := range lo.chainLatencies {
+
+if len(tracker.samples) > 0 {
+
+allP99s = append(allP99s, tracker.currentP99.Seconds())
+
+chainStats[chain] = map[string]interface{}{
+
+"p99_ms":       fmt.Sprintf("%.1fms", tracker.currentP99.Seconds()*1000),
+
+"violations":   tracker.violations,
+
+"adaptations":  tracker.adaptations,
+
+"sample_count": len(tracker.samples),
+
+"last_updated": tracker.lastUpdated.Format(time.RFC3339),
+
+}
+
+}
+
+}
+
+
+var overallP99 float64
+
+if len(allP99s) > 0 {
+
+for _, p99 := range allP99s {
+
+if p99 > overallP99 {
+
+overallP99 = p99
+
+}
+
+}
+
+}
+
+
+return map[string]interface{}{
+
+"CurrentP99":     fmt.Sprintf("%.1fms", overallP99*1000),
+
+"ChainCount":     len(lo.chainLatencies),
+
+"ChainStats":     chainStats,
+
+"Status":         "Active",
+
+"LastMeasurement": time.Now().Format(time.RFC3339),
+
+}
+
+}
+
 
 func (lo *LatencyOptimizer) adaptLatencyStrategy(chain string, tracker *LatencyTracker) {
 
-	tracker.adaptations++
+tracker.adaptations++
 
-	if tracker.violations > 5 {
+if tracker.violations > 5 {
 
-		lo.predictiveCache.EnableAggressive(chain)
+lo.predictiveCache.EnableAggressive(chain)
 
-		lo.adaptiveTimeout = time.Duration(float64(lo.adaptiveTimeout) * 0.8)
+lo.adaptiveTimeout = time.Duration(float64(lo.adaptiveTimeout) * 0.8)
 
-		lo.entropyBuffer.PreWarm(chain)
+lo.entropyBuffer.PreWarm(chain)
 
-		log.Printf("🔧 Sprint Adaptation: Chain %s P99 violation, enabling aggressive optimizations", chain)
-
-	}
+log.Printf("🔧 Sprint Adaptation: Chain %s P99 violation, enabling aggressive optimizations", chain)
 
 }
+
+}
+
 
 // UnifiedAPILayer manages unified API requests
 
 type UnifiedAPILayer struct {
-	chainAdapters map[string]ChainAdapter
-	normalizer    *ResponseNormalizer
-	validator     *RequestValidator
-	server        *Server // Reference to server for backend access and clock
+
+chainAdapters map[string]ChainAdapter
+
+normalizer    *ResponseNormalizer
+
+validator     *RequestValidator
+
 }
+
 
 type ChainAdapter interface {
-	NormalizeRequest(method string, params interface{}) (*UnifiedRequest, error)
-	NormalizeResponse(chain string, response interface{}) (*UnifiedResponse, error)
-	GetChainSpecificQuirks() map[string]interface{}
+
+NormalizeRequest(method string, params interface{}) (*UnifiedRequest, error)
+
+NormalizeResponse(chain string, response interface{}) (*UnifiedResponse, error)
+
+GetChainSpecificQuirks() map[string]interface{}
+
 }
 
-// Helper function to map chain name to tier
-func getTierForChain(chain string) config.Tier {
-	switch strings.ToLower(chain) {
-	case "bitcoin", "btc":
-		return config.TierEnterprise // Bitcoin gets enterprise tier
-	case "ethereum", "eth":
-		return config.TierTurbo // Ethereum gets turbo tier
-	case "polygon", "matic":
-		return config.TierBusiness // Polygon gets business tier
-	case "arbitrum", "arb":
-		return config.TierPro // Arbitrum gets pro tier
-	default:
-		return config.TierFree // Default to free tier
-	}
-}
-
-// Missing methods for UnifiedAPILayer
-func (ual *UnifiedAPILayer) sendErrorResponse(w http.ResponseWriter, req UnifiedRequest, code int, message string, start time.Time) {
-	// Implementation would send error response
-}
-
-func (ual *UnifiedAPILayer) executeWithCircuitBreaker(ctx context.Context, req *UnifiedRequest, adapter ChainAdapter) (interface{}, error) {
-	if ual.server == nil {
-		return nil, fmt.Errorf("server not initialized")
-	}
-
-	cb := api.NewCircuitBreaker(getTierForChain(req.Chain), ual.server.clock)
-	var result interface{}
-	err := cb.Call(func() error {
-		_, err := adapter.NormalizeRequest(req.Method, req.Params)
-		if err != nil {
-			return err
-		}
-		backend, ok := ual.server.backend.Get(req.Chain)
-		if !ok {
-			return fmt.Errorf("backend not found for chain %s", req.Chain)
-		}
-		block, err := backend.GetLatestBlock()
-		if err != nil {
-			return err
-		}
-		result, err = adapter.NormalizeResponse(req.Chain, block)
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
-}
 
 type UnifiedRequest struct {
-	Method string `json:"method"`
 
-	Params map[string]interface{} `json:"params"`
+Method    string                 `json:"method"`
 
-	Chain string `json:"chain"`
+Params    map[string]interface{} `json:"params"`
 
-	RequestID string `json:"request_id"`
+Chain     string                 `json:"chain"`
 
-	Metadata map[string]string `json:"metadata"`
+RequestID string                 `json:"request_id"`
+
+Metadata  map[string]string      `json:"metadata"`
+
 }
+
 
 type UnifiedResponse struct {
-	Result interface{} `json:"result"`
 
-	Error *UnifiedError `json:"error,omitempty"`
+Result    interface{}            `json:"result"`
 
-	Chain string `json:"chain"`
+Error     *UnifiedError          `json:"error,omitempty"`
 
-	Method string `json:"method"`
+Chain     string                 `json:"chain"`
 
-	RequestID string `json:"request_id"`
+Method    string                 `json:"method"`
 
-	Metadata map[string]interface{} `json:"metadata"`
+RequestID string                 `json:"request_id"`
 
-	Timing *ResponseTiming `json:"timing"`
+Metadata  map[string]interface{} `json:"metadata"`
+
+Timing    *ResponseTiming        `json:"timing"`
+
 }
+
 
 type UnifiedError struct {
-	Code int `json:"code"`
 
-	Message string `json:"message"`
+Code    int         `json:"code"`
 
-	Data interface{} `json:"data,omitempty"`
+Message string      `json:"message"`
+
+Data    interface{} `json:"data,omitempty"`
+
 }
+
 
 type ResponseTiming struct {
-	ProcessingTime time.Duration `json:"processing_time"`
 
-	CacheHit bool `json:"cache_hit"`
+ProcessingTime time.Duration `json:"processing_time"`
 
-	ChainLatency time.Duration `json:"chain_latency"`
+CacheHit       bool          `json:"cache_hit"`
 
-	TotalTime time.Duration `json:"total_time"`
+ChainLatency   time.Duration `json:"chain_latency"`
+
+TotalTime      time.Duration `json:"total_time"`
+
 }
 
-func NewUnifiedAPILayer(server *Server) *UnifiedAPILayer {
-	return &UnifiedAPILayer{
-		chainAdapters: make(map[string]ChainAdapter),
-		normalizer:    NewResponseNormalizer(),
-		validator:     NewRequestValidator(),
-		server:        server,
-	}
+
+func NewUnifiedAPILayer() *UnifiedAPILayer {
+
+return &UnifiedAPILayer{
+
+chainAdapters: make(map[string]ChainAdapter),
+
+normalizer:    NewResponseNormalizer(),
+
+validator:     NewRequestValidator(),
+
 }
+
+}
+
 
 func (ual *UnifiedAPILayer) UniversalBlockHandler(w http.ResponseWriter, r *http.Request) {
 
-	start := time.Now()
+start := time.Now()
 
-	var req UnifiedRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+var req UnifiedRequest
 
-		ual.sendErrorResponse(w, req, 400, "Invalid request format", start)
+if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 
-		return
+ual.sendErrorResponse(w, req, 400, "Invalid request format", start)
 
-	}
-
-	if err := ual.validator.Validate(&req); err != nil {
-
-		ual.sendErrorResponse(w, req, 400, err.Error(), start)
-
-		return
-
-	}
-
-	response := ual.processUnifiedRequest(req, start)
-
-	latencyOptimizer.TrackRequest(req.Chain, time.Since(start))
-
-	w.Header().Set("Content-Type", "application/json")
-
-	json.NewEncoder(w).Encode(response)
+return
 
 }
 
-// Global instances for use in handlers
-var latencyOptimizer *LatencyOptimizer
-var predictiveCache *PredictiveCache
+
+if err := ual.validator.Validate(&req); err != nil {
+
+ual.sendErrorResponse(w, req, 400, err.Error(), start)
+
+return
+
+}
+
+
+response := ual.processUnifiedRequest(req, start)
+
+latencyOptimizer.TrackRequest(req.Chain, time.Since(start))
+
+w.Header().Set("Content-Type", "application/json")
+
+json.NewEncoder(w).Encode(response)
+
+}
+
 
 func (ual *UnifiedAPILayer) processUnifiedRequest(req UnifiedRequest, start time.Time) *UnifiedResponse {
-	if predictiveCache != nil {
-		if cached := predictiveCache.Get(&req); cached != nil {
-			return &UnifiedResponse{
-				Result:    cached,
-				Chain:     req.Chain,
-				Method:    req.Method,
-				RequestID: req.RequestID,
-				Timing: &ResponseTiming{
-					ProcessingTime: time.Since(start),
-					CacheHit:       true,
-					TotalTime:      time.Since(start),
-				},
-			}
-		}
-	}
 
-	adapter, exists := ual.chainAdapters[req.Chain]
-	if !exists {
-		return &UnifiedResponse{
-			Error: &UnifiedError{
-				Code:    404,
-				Message: fmt.Sprintf("Chain %s not supported", req.Chain),
-			},
-			Chain:     req.Chain,
-			RequestID: req.RequestID,
-		}
-	}
+if cached := predictiveCache.Get(&req); cached != nil {
 
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer cancel()
+// Global instances for use in handlers
 
-	result, err := ual.executeWithCircuitBreaker(ctx, &req, adapter)
-	if err != nil {
-		return &UnifiedResponse{
-			Error: &UnifiedError{
-				Code:    500,
-				Message: err.Error(),
-			},
-			Chain:     req.Chain,
-			RequestID: req.RequestID,
-		}
-	}
+var latencyOptimizer *LatencyOptimizer
 
-	if predictiveCache != nil {
-		predictiveCache.Set(&req, result)
-	}
+var predictiveCache *PredictiveCache
 
-	return &UnifiedResponse{
-		Result:    result,
-		Chain:     req.Chain,
-		Method:    req.Method,
-		RequestID: req.RequestID,
-		Timing: &ResponseTiming{
-			ProcessingTime: time.Since(start),
-			CacheHit:       false,
-			TotalTime:      time.Since(start),
-		},
-	}
+
+func (ual *UnifiedAPILayer) UniversalBlockHandler(w http.ResponseWriter, r *http.Request) {
+
+start := time.Now()
+
+
+var req UnifiedRequest
+
+if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+
+ual.sendErrorResponse(w, req, 400, "Invalid request format", start)
+
+return
+
 }
+
+
+if err := ual.validator.Validate(&req); err != nil {
+
+ual.sendErrorResponse(w, req, 400, err.Error(), start)
+
+return
+
+}
+
+
+response := ual.processUnifiedRequest(req, start)
+
+if latencyOptimizer != nil {
+
+func (ual *UnifiedAPILayer) processUnifiedRequest(req UnifiedRequest, start time.Time) *UnifiedResponse {
+
+if predictiveCache != nil {
+
+if cached := predictiveCache.Get(&req); cached != nil {
+
+return &UnifiedResponse{
+
+Result:    cached,
+
+Chain:     req.Chain,
+
+Method:    req.Method,
+
+RequestID: req.RequestID,
+
+Timing: &ResponseTiming{
+
+ProcessingTime: time.Since(start),
+
+CacheHit:       true,
+
+TotalTime:      time.Since(start),
+
+},
+
+}
+
+}
+
+}
+
+
+adapter, exists := ual.chainAdapters[req.Chain]
+
+if !exists {
+
+return &UnifiedResponse{
+
+Error: &UnifiedError{
+
+Code:    404,
+
+Message: fmt.Sprintf("Chain %s not supported", req.Chain),
+
+},
+
+Chain:     req.Chain,
+
+RequestID: req.RequestID,
+
+}
+
+}
+
+
+ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+
+defer cancel()
+
+
+result, err := ual.executeWithCircuitBreaker(ctx, &req, adapter)
+
+if err != nil {
+
+return &UnifiedResponse{
+
+Error: &UnifiedError{
+
+Code:    500,
+
+Message: err.Error(),
+
+},
+
+Chain:     req.Chain,
+
+RequestID: req.RequestID,
+
+}
+
+}
+
+
+if predictiveCache != nil {
+
+predictiveCache.Set(&req, result)
+
+}
+
+return &UnifiedResponse{
+
+Result:    result,
+
+Chain:     req.Chain,
+
+Method:    req.Method,
+
+RequestID: req.RequestID,
+
+Timing: &ResponseTiming{
+
+ProcessingTime: time.Since(start),
+
+CacheHit:       false,
+
+TotalTime:      time.Since(start),
+
+},
+
+}
+
+}
+}
+
+}
+
 
 // PredictiveCache implements ML-powered caching
 
 type PredictiveCache struct {
-	mutex sync.RWMutex
 
-	cache map[string]*CacheEntry
+mutex           sync.RWMutex
 
-	predictions *PredictionEngine
+cache           map[string]*CacheEntry
 
-	entropyOptimizer *EntropyOptimizer
+predictions     *PredictionEngine
 
-	maxSize int
+entropyOptimizer *EntropyOptimizer
 
-	currentSize int
+maxSize         int
+
+currentSize     int
+
 }
+
 
 type CacheEntry struct {
-	Key string
 
-	Value interface{}
+Key         string
 
-	Created time.Time
+Value       interface{}
 
-	LastAccess time.Time
+Created     time.Time
 
-	AccessCount int
+LastAccess  time.Time
 
-	Prediction float64
+AccessCount int
 
-	TTL time.Duration
+Prediction  float64
+
+TTL         time.Duration
+
 }
+
 
 type PredictionEngine struct {
-	patterns map[string]*AccessPattern
 
-	mlModel *SimpleMLModel
+patterns      map[string]*AccessPattern
 
-	predictionTTL time.Duration
+mlModel       *SimpleMLModel
+
+predictionTTL time.Duration
+
 }
+
 
 type AccessPattern struct {
-	Frequency map[time.Duration]int
 
-	LastAccesses []time.Time
+Frequency    map[time.Duration]int
 
-	TrendScore float64
+LastAccesses []time.Time
+
+TrendScore   float64
+
 }
+
 
 func NewPredictiveCache(cfg Config) *PredictiveCache {
 
-	return &PredictiveCache{
+return &PredictiveCache{
 
-		cache: make(map[string]*CacheEntry),
+cache:           make(map[string]*CacheEntry),
 
-		predictions: NewPredictionEngine(),
+predictions:     NewPredictionEngine(),
 
-		entropyOptimizer: &EntropyOptimizer{},
+entropyOptimizer: &EntropyOptimizer{},
 
-		maxSize: cfg.CacheSize,
-	}
+maxSize:         cfg.CacheSize,
 
 }
+
+}
+
 
 func (pc *PredictiveCache) Get(req *UnifiedRequest) interface{} {
 
-	pc.mutex.RLock()
+pc.mutex.RLock()
 
-	defer pc.mutex.RUnlock()
+defer pc.mutex.RUnlock()
 
-	key := pc.generateKey(req)
 
-	entry, exists := pc.cache[key]
+key := pc.generateKey(req)
 
-	if !exists {
+entry, exists := pc.cache[key]
 
-		return nil
+if !exists {
 
-	}
-
-	if time.Since(entry.Created) > entry.TTL {
-
-		go pc.evict(key)
-
-		return nil
-
-	}
-
-	entry.LastAccess = time.Now()
-
-	entry.AccessCount++
-
-	pc.predictions.UpdatePattern(key, entry.LastAccess)
-
-	metricsTracker.IncrementCounter("sprint_cache_hits", req.Chain, req.Method)
-
-	return entry.Value
+return nil
 
 }
+
+
+if time.Now().After(entry.Created.Add(entry.TTL)) {
+
+go pc.evict(key)
+
+return nil
+
+}
+
+
+entry.LastAccess = time.Now()
+
+entry.AccessCount++
+
+pc.predictions.UpdatePattern(key, entry.LastAccess)
+
+metricsTracker.IncrementCounter("sprint_cache_hits", req.Chain, req.Method)
+
+return entry.Value
+
+}
+
 
 func (pc *PredictiveCache) Set(req *UnifiedRequest, value interface{}) {
 
-	pc.mutex.Lock()
+pc.mutex.Lock()
 
-	defer pc.mutex.Unlock()
+defer pc.mutex.Unlock()
 
-	key := pc.generateKey(req)
 
-	predictedTTL := pc.predictions.PredictOptimalTTL(key, req.Chain)
+key := pc.generateKey(req)
 
-	entry := &CacheEntry{
+predictedTTL := pc.predictions.PredictOptimalTTL(key, req.Chain)
 
-		Key: key,
+entry := &CacheEntry{
 
-		Value: value,
+Key:         key,
 
-		Created: time.Now(),
+Value:       value,
 
-		LastAccess: time.Now(),
+Created:     time.Now(),
 
-		TTL: predictedTTL,
+LastAccess:  time.Now(),
 
-		Prediction: pc.predictions.PredictFutureAccess(key),
-	}
+TTL:         predictedTTL,
 
-	if pc.currentSize >= pc.maxSize {
-
-		pc.evictLeastPredicted()
-
-	}
-
-	pc.cache[key] = entry
-
-	pc.currentSize++
+Prediction:  pc.predictions.PredictFutureAccess(key),
 
 }
+
+
+if pc.currentSize >= pc.maxSize {
+
+pc.evictLeastPredicted()
+
+}
+
+
+pc.cache[key] = entry
+
+pc.currentSize++
+
+}
+
 
 func (pc *PredictiveCache) GetActualCacheStats() map[string]interface{} {
 
-	pc.mutex.RLock()
+pc.mutex.RLock()
 
-	defer pc.mutex.RUnlock()
+defer pc.mutex.RUnlock()
 
-	totalRequests := int64(0)
 
-	totalHits := int64(0)
+totalRequests := int64(0)
 
-	for key, hits := range metricsTracker.counters {
+totalHits := int64(0)
 
-		if strings.Contains(key, "sprint_cache_hits") {
+for key, hits := range metricsTracker.counters {
 
-			totalHits += hits
+if strings.Contains(key, "sprint_cache_hits") {
 
-		}
-
-		if strings.Contains(key, "sprint_cache_") {
-
-			totalRequests += hits
-
-		}
-
-	}
-
-	hitRate := 0.0
-
-	if totalRequests > 0 {
-
-		hitRate = float64(totalHits) / float64(totalRequests) * 100
-
-	}
-
-	return map[string]interface{}{
-
-		"cache_size": pc.currentSize,
-
-		"max_size": pc.maxSize,
-
-		"hit_rate_percent": fmt.Sprintf("%.1f%%", hitRate),
-
-		"total_requests": totalRequests,
-
-		"total_hits": totalHits,
-
-		"prediction_engine": "Active",
-
-		"last_updated": time.Now().Format(time.RFC3339),
-	}
+totalHits += hits
 
 }
+
+if strings.Contains(key, "sprint_cache_") {
+
+totalRequests += hits
+
+}
+
+}
+
+
+hitRate := 0.0
+
+if totalRequests > 0 {
+
+hitRate = float64(totalHits) / float64(totalRequests) * 100
+
+}
+
+
+return map[string]interface{}{
+
+"cache_size":       pc.currentSize,
+
+"max_size":         pc.max_size,
+
+"hit_rate_percent": fmt.Sprintf("%.1f%%", hitRate),
+
+"total_requests":   totalRequests,
+
+"total_hits":       totalHits,
+
+"prediction_engine": "Active",
+
+"last_updated":     time.Now().Format(time.RFC3339),
+
+}
+
+}
+
 
 func (pc *PredictiveCache) EnableAggressive(chain string) {
 
-	pc.mutex.Lock()
+pc.mutex.Lock()
 
-	defer pc.mutex.Unlock()
+defer pc.mutex.Unlock()
 
-	commonRequests := []string{
 
-		"latest_block", "gas_price", "chain_id", "peer_count",
-	}
+commonRequests := []string{
 
-	for _, req := range commonRequests {
-
-		go pc.preCacheRequest(chain, req)
-
-	}
+"latest_block", "gas_price", "chain_id", "peer_count",
 
 }
+
+for _, req := range commonRequests {
+
+go pc.preCacheRequest(chain, req)
+
+}
+
+}
+
 
 func (pc *PredictiveCache) generateKey(req *UnifiedRequest) string {
 
-	return fmt.Sprintf("%s:%s", req.Chain, req.Method)
+return fmt.Sprintf("%s:%s", req.Chain, req.Method)
 
 }
+
 
 func (pc *PredictiveCache) evict(key string) {
 
-	pc.mutex.Lock()
+pc.mutex.Lock()
 
-	defer pc.mutex.Unlock()
+defer pc.mutex.Unlock()
 
-	delete(pc.cache, key)
+delete(pc.cache, key)
 
-	pc.currentSize--
+pc.currentSize--
 
 }
+
 
 func (pc *PredictiveCache) evictLeastPredicted() {
 
-	var minKey string
+var minKey string
 
-	var minPrediction float64 = math.MaxFloat64
+var minPrediction float64 = math.MaxFloat64
 
-	for key, entry := range pc.cache {
+for key, entry := range pc.cache {
 
-		if entry.Prediction < minPrediction {
+if entry.Prediction < minPrediction {
 
-			minPrediction = entry.Prediction
+minPrediction = entry.Prediction
 
-			minKey = key
-
-		}
-
-	}
-
-	if minKey != "" {
-
-		delete(pc.cache, minKey)
-
-		pc.currentSize--
-
-	}
+minKey = key
 
 }
+
+}
+
+if minKey != "" {
+
+delete(pc.cache, minKey)
+
+pc.currentSize--
+
+}
+
+}
+
 
 func (pc *PredictiveCache) preCacheRequest(chain, req string) {
 
-	pc.Set(&UnifiedRequest{Chain: chain, Method: req}, map[string]interface{}{"mock_result": req})
+pc.Set(&UnifiedRequest{Chain: chain, Method: req}, map[string]interface{}{"mock_result": req})
 
 }
+
 
 // EntropyMemoryBuffer manages entropy buffers
 
 type EntropyMemoryBuffer struct {
-	mutex sync.RWMutex
 
-	buffers map[string]*ChainBuffer
+mutex          sync.RWMutex
 
-	globalEntropy []byte
+buffers        map[string]*ChainBuffer
 
-	refreshRate time.Duration
+globalEntropy  []byte
 
-	qualityTarget float64
+refreshRate    time.Duration
+
+qualityTarget  float64
+
 }
+
 
 type ChainBuffer struct {
-	Data []byte
 
-	Quality float64
+Data        []byte
 
-	LastRefresh time.Time
+Quality     float64
 
-	HitRate float64
+LastRefresh time.Time
 
-	Size int
+HitRate     float64
+
+Size        int
+
 }
+
 
 func NewEntropyMemoryBuffer() *EntropyMemoryBuffer {
 
-	emb := &EntropyMemoryBuffer{
+emb := &EntropyMemoryBuffer{
 
-		buffers: make(map[string]*ChainBuffer),
+buffers:       make(map[string]*ChainBuffer),
 
-		refreshRate: 1 * time.Second,
+refreshRate:   1 * time.Second,
 
-		qualityTarget: 0.95,
-	}
-
-	go emb.backgroundEntropyGeneration()
-
-	return emb
+qualityTarget: 0.95,
 
 }
+
+go emb.backgroundEntropyGeneration()
+
+return emb
+
+}
+
 
 func (emb *EntropyMemoryBuffer) PreWarm(chain string) {
 
-	emb.mutex.Lock()
+emb.mutex.Lock()
 
-	defer emb.mutex.Unlock()
+defer emb.mutex.Unlock()
 
-	buffer, exists := emb.buffers[chain]
 
-	if !exists {
+buffer, exists := emb.buffers[chain]
 
-		buffer = &ChainBuffer{
+if !exists {
 
-			Size: 4096,
-		}
+buffer = &ChainBuffer{
 
-		emb.buffers[chain] = buffer
-
-	}
-
-	buffer.Data = emb.generateHighQualityEntropy(buffer.Size)
-
-	buffer.Quality = 0.98
-
-	buffer.LastRefresh = time.Now()
+Size: 4096,
 
 }
+
+emb.buffers[chain] = buffer
+
+}
+
+
+buffer.Data = emb.generateHighQualityEntropy(buffer.Size)
+
+buffer.Quality = 0.98
+
+buffer.LastRefresh = time.Now()
+
+}
+
 
 func (emb *EntropyMemoryBuffer) GetOptimizedEntropy(chain string, size int) []byte {
 
-	emb.mutex.RLock()
+emb.mutex.RLock()
 
-	buffer, exists := emb.buffers[chain]
+buffer, exists := emb.buffers[chain]
 
-	emb.mutex.RUnlock()
+emb.mutex.RUnlock()
 
-	if !exists || len(buffer.Data) < size {
 
-		return emb.generateFastEntropy(size)
+if !exists || len(buffer.Data) < size {
 
-	}
-
-	result := make([]byte, size)
-
-	copy(result, buffer.Data[:size])
-
-	if len(buffer.Data) < size*2 {
-
-		go emb.refreshBuffer(chain)
-
-	}
-
-	return result
+return emb.generateFastEntropy(size)
 
 }
+
+
+result := make([]byte, size)
+
+copy(result, buffer.Data[:size])
+
+if len(buffer.Data) < size*2 {
+
+go emb.refreshBuffer(chain)
+
+}
+
+return result
+
+}
+
 
 func (emb *EntropyMemoryBuffer) backgroundEntropyGeneration() {
 
-	ticker := time.NewTicker(1 * time.Second)
+ticker := time.NewTicker(1 * time.Second)
 
-	for range ticker.C {
+for range ticker.C {
 
-		emb.mutex.Lock()
+emb.mutex.Lock()
 
-		emb.globalEntropy = emb.generateHighQualityEntropy(4096)
+emb.globalEntropy = emb.generateHighQualityEntropy(4096)
 
-		for chain := range emb.buffers {
+for chain := range emb.buffers {
 
-			emb.refreshBuffer(chain)
-
-		}
-
-		emb.mutex.Unlock()
-
-	}
+emb.refreshBuffer(chain)
 
 }
+
+emb.mutex.Unlock()
+
+}
+
+}
+
 
 func (emb *EntropyMemoryBuffer) generateHighQualityEntropy(size int) []byte {
 
-	buf := make([]byte, size)
+buf := make([]byte, size)
 
-	rand.Read(buf)
+rand.Read(buf)
 
-	return buf
+return buf
 
 }
+
 
 func (emb *EntropyMemoryBuffer) generateFastEntropy(size int) []byte {
 
-	return make([]byte, size)
+return make([]byte, size)
 
 }
 
+
 func (emb *EntropyMemoryBuffer) refreshBuffer(chain string) {
 
-	emb.mutex.Lock()
+emb.mutex.Lock()
 
-	defer emb.mutex.Unlock()
+defer emb.mutex.Unlock()
 
-	if buffer, exists := emb.buffers[chain]; exists {
+if buffer, exists := emb.buffers[chain]; exists {
 
-		buffer.Data = emb.generateHighQualityEntropy(buffer.Size)
+buffer.Data = emb.generateHighQualityEntropy(buffer.Size)
 
-		buffer.LastRefresh = time.Now()
+buffer.LastRefresh = time.Now()
 
-	}
+}
 
 }
 
@@ -2634,1750 +2415,1562 @@ type RateLimiter struct {
 // TierManager manages subscription tiers
 
 type TierManager struct {
-	tiers map[string]*TierConfig
 
-	userTiers map[string]string
+tiers         map[string]*TierConfig
 
-	rateLimiters map[string]*RateLimiter
+userTiers     map[string]string
 
-	monetization *MonetizationEngine
+rateLimiters  map[string]*RateLimiter
+
+monetization  *MonetizationEngine
+
 }
+
 
 type TierConfig struct {
-	Name string
 
-	RequestsPerSecond int
+Name              string
 
-	RequestsPerMonth int64
+RequestsPerSecond int
 
-	MaxConcurrent int
+RequestsPerMonth  int64
 
-	CachePriority int
+MaxConcurrent     int
 
-	LatencyTarget time.Duration
+CachePriority     int
 
-	Features []string
+LatencyTarget     time.Duration
 
-	PricePerRequest float64
+Features          []string
+
+PricePerRequest   float64
+
 }
+
 
 func NewTierManager() *TierManager {
 
-	tm := &TierManager{
+tm := &TierManager{
 
-		tiers: make(map[string]*TierConfig),
+tiers:         make(map[string]*TierConfig),
 
-		userTiers: make(map[string]string),
+userTiers:     make(map[string]string),
 
-		rateLimiters: make(map[string]*RateLimiter),
+rateLimiters:  make(map[string]*RateLimiter),
 
-		monetization: NewMonetizationEngine(),
-	}
-
-	tm.tiers["free"] = &TierConfig{
-
-		Name: "Free",
-
-		RequestsPerSecond: 10,
-
-		RequestsPerMonth: 100000,
-
-		MaxConcurrent: 5,
-
-		CachePriority: 1,
-
-		LatencyTarget: 500 * time.Millisecond,
-
-		Features: []string{"basic_api"},
-
-		PricePerRequest: 0,
-	}
-
-	tm.tiers["pro"] = &TierConfig{
-
-		Name: "Pro",
-
-		RequestsPerSecond: 100,
-
-		RequestsPerMonth: 10000000,
-
-		MaxConcurrent: 50,
-
-		CachePriority: 2,
-
-		LatencyTarget: 100 * time.Millisecond,
-
-		Features: []string{"basic_api", "websockets", "historical_data"},
-
-		PricePerRequest: 0.0001,
-	}
-
-	tm.tiers["enterprise"] = &TierConfig{
-
-		Name: "Enterprise",
-
-		RequestsPerSecond: 1000,
-
-		RequestsPerMonth: 1000000000,
-
-		MaxConcurrent: 500,
-
-		CachePriority: 3,
-
-		LatencyTarget: 50 * time.Millisecond,
-
-		Features: []string{"all", "custom_endpoints", "dedicated_support", "sla"},
-
-		PricePerRequest: 0.00005,
-	}
-
-	return tm
+monetization:  NewMonetizationEngine(),
 
 }
+
+
+tm.tiers["free"] = &TierConfig{
+
+Name:              "Free",
+
+RequestsPerSecond: 10,
+
+RequestsPerMonth:  100000,
+
+MaxConcurrent:     5,
+
+CachePriority:     1,
+
+LatencyTarget:     500 * time.Millisecond,
+
+Features:          []string{"basic_api"},
+
+PricePerRequest:   0,
+
+}
+
+
+tm.tiers["pro"] = &TierConfig{
+
+Name:              "Pro",
+
+RequestsPerSecond: 100,
+
+RequestsPerMonth:  10000000,
+
+MaxConcurrent:     50,
+
+CachePriority:     2,
+
+LatencyTarget:     100 * time.Millisecond,
+
+Features:          []string{"basic_api", "websockets", "historical_data"},
+
+PricePerRequest:   0.0001,
+
+}
+
+
+tm.tiers["enterprise"] = &TierConfig{
+
+Name:              "Enterprise",
+
+RequestsPerSecond: 1000,
+
+RequestsPerMonth:  1000000000,
+
+MaxConcurrent:     500,
+
+CachePriority:     3,
+
+LatencyTarget:     50 * time.Millisecond,
+
+Features:          []string{"all", "custom_endpoints", "dedicated_support", "sla"},
+
+PricePerRequest:   0.00005,
+
+}
+
+
+return tm
+
+}
+
 
 // MetricsTracker collects performance metrics
 
 type MetricsTracker struct {
-	mutex sync.RWMutex
 
-	counters map[string]int64
+mutex      sync.RWMutex
 
-	gauges map[string]float64
+counters   map[string]int64
 
-	histograms map[string][]float64
+gauges     map[string]float64
+
+histograms map[string][]float64
+
 }
+
 
 var metricsTracker = &MetricsTracker{
 
-	counters: make(map[string]int64),
+counters:   make(map[string]int64),
 
-	gauges: make(map[string]float64),
+gauges:     make(map[string]float64),
 
-	histograms: make(map[string][]float64),
+histograms: make(map[string][]float64),
+
 }
+
 
 func (mt *MetricsTracker) IncrementCounter(name string, labels ...string) {
 
-	mt.mutex.Lock()
+mt.mutex.Lock()
 
-	defer mt.mutex.Unlock()
+defer mt.mutex.Unlock()
 
-	key := fmt.Sprintf("%s_%s", name, fmt.Sprintf("%v", labels))
+key := fmt.Sprintf("%s_%s", name, fmt.Sprintf("%v", labels))
 
-	mt.counters[key]++
+mt.counters[key]++
 
 }
+
 
 func (mt *MetricsTracker) SetGauge(name string, value float64, labels ...string) {
 
-	mt.mutex.Lock()
+mt.mutex.Lock()
 
-	defer mt.mutex.Unlock()
+defer mt.mutex.Unlock()
 
-	key := fmt.Sprintf("%s_%s", name, fmt.Sprintf("%v", labels))
+key := fmt.Sprintf("%s_%s", name, fmt.Sprintf("%v", labels))
 
-	mt.gauges[key] = value
+mt.gauges[key] = value
 
 }
+
 
 func (mt *MetricsTracker) ObserveHistogram(name string, value float64, labels ...string) {
 
-	mt.mutex.Lock()
+mt.mutex.Lock()
 
-	defer mt.mutex.Unlock()
+defer mt.mutex.Unlock()
 
-	key := fmt.Sprintf("%s_%s", name, fmt.Sprintf("%v", labels))
+key := fmt.Sprintf("%s_%s", name, fmt.Sprintf("%v", labels))
 
-	mt.histograms[key] = append(mt.histograms[key], value)
+mt.histograms[key] = append(mt.histograms[key], value)
 
-	if len(mt.histograms[key]) > 1000 {
+if len(mt.histograms[key]) > 1000 {
 
-		mt.histograms[key] = mt.histograms[key][1:]
-
-	}
+mt.histograms[key] = mt.histograms[key][1:]
 
 }
+
+}
+
 
 // WebSocketLimiter manages WebSocket connection limits
 
 type WebSocketLimiter struct {
-	globalSem chan struct{}
 
-	perIPSem map[string]chan struct{}
+globalSem   chan struct{}
 
-	perChainSem map[string]chan struct{}
+perIPSem    map[string]chan struct{}
 
-	maxPerIP int
+perChainSem map[string]chan struct{}
 
-	maxPerChain int
+maxPerIP    int
 
-	mu sync.RWMutex
+maxPerChain int
+
+mu          sync.RWMutex
+
 }
+
 
 func NewWebSocketLimiter(maxGlobal, maxPerIP, maxPerChain int) *WebSocketLimiter {
 
-	return &WebSocketLimiter{
+return &WebSocketLimiter{
 
-		globalSem: make(chan struct{}, maxGlobal),
+globalSem:   make(chan struct{}, maxGlobal),
 
-		perIPSem: make(map[string]chan struct{}),
+perIPSem:    make(map[string]chan struct{}),
 
-		perChainSem: make(map[string]chan struct{}),
+perChainSem: make(map[string]chan struct{}),
 
-		maxPerIP: maxPerIP,
+maxPerIP:    maxPerIP,
 
-		maxPerChain: maxPerChain,
-	}
+maxPerChain: maxPerChain,
 
 }
+
+}
+
 
 func (wsl *WebSocketLimiter) Acquire(clientIP string) bool {
 
-	select {
+select {
 
-	case wsl.globalSem <- struct{}{}:
+case wsl.globalSem <- struct{}{}:
 
-		wsl.mu.Lock()
+wsl.mu.Lock()
 
-		if wsl.perIPSem[clientIP] == nil {
+if wsl.perIPSem[clientIP] == nil {
 
-			wsl.perIPSem[clientIP] = make(chan struct{}, wsl.maxPerIP)
-
-		}
-
-		perIPSem := wsl.perIPSem[clientIP]
-
-		wsl.mu.Unlock()
-
-		select {
-
-		case perIPSem <- struct{}{}:
-
-			return true
-
-		default:
-
-			<-wsl.globalSem
-
-			return false
-
-		}
-
-	default:
-
-		return false
-
-	}
+wsl.perIPSem[clientIP] = make(chan struct{}, wsl.maxPerIP)
 
 }
+
+perIPSem := wsl.perIPSem[clientIP]
+
+wsl.mu.Unlock()
+
+
+select {
+
+case perIPSem <- struct{}{}:
+
+return true
+
+default:
+
+<-wsl.globalSem
+
+return false
+
+}
+
+default:
+
+return false
+
+}
+
+}
+
 
 func (wsl *WebSocketLimiter) Release(clientIP string) {
 
-	wsl.mu.RLock()
+wsl.mu.RLock()
 
-	perIPSem := wsl.perIPSem[clientIP]
+perIPSem := wsl.perIPSem[clientIP]
 
-	wsl.mu.RUnlock()
+wsl.mu.RUnlock()
 
-	if perIPSem != nil {
 
-		select {
+if perIPSem != nil {
 
-		case <-perIPSem:
+select {
 
-		default:
+case <-perIPSem:
 
-		}
-
-	}
-
-	select {
-
-	case <-wsl.globalSem:
-
-	default:
-
-	}
+default:
 
 }
+
+}
+
+
+select {
+
+case <-wsl.globalSem:
+
+default:
+
+}
+
+}
+
 
 func (wsl *WebSocketLimiter) AcquireForChain(clientIP, chain string) bool {
 
-	select {
+select {
 
-	case wsl.globalSem <- struct{}{}:
+case wsl.globalSem <- struct{}{}:
 
-		wsl.mu.Lock()
+wsl.mu.Lock()
 
-		if wsl.perIPSem[clientIP] == nil {
+if wsl.perIPSem[clientIP] == nil {
 
-			wsl.perIPSem[clientIP] = make(chan struct{}, wsl.maxPerIP)
-
-		}
-
-		if wsl.perChainSem[chain] == nil {
-
-			wsl.perChainSem[chain] = make(chan struct{}, wsl.maxPerChain)
-
-		}
-
-		perIPSem := wsl.perIPSem[clientIP]
-
-		perChainSem := wsl.perChainSem[chain]
-
-		wsl.mu.Unlock()
-
-		select {
-
-		case perIPSem <- struct{}{}:
-
-			select {
-
-			case perChainSem <- struct{}{}:
-
-				return true
-
-			default:
-
-				<-perIPSem
-
-				<-wsl.globalSem
-
-				return false
-
-			}
-
-		default:
-
-			<-wsl.globalSem
-
-			return false
-
-		}
-
-	default:
-
-		return false
-
-	}
+wsl.perIPSem[clientIP] = make(chan struct{}, wsl.maxPerIP)
 
 }
+
+if wsl.perChainSem[chain] == nil {
+
+wsl.perChainSem[chain] = make(chan struct{}, wsl.maxPerChain)
+
+}
+
+perIPSem := wsl.perIPSem[clientIP]
+
+perChainSem := wsl.perChainSem[chain]
+
+wsl.mu.Unlock()
+
+
+select {
+
+case perIPSem <- struct{}{}:
+
+select {
+
+case perChainSem <- struct{}{}:
+
+return true
+
+default:
+
+<-perIPSem
+
+<-wsl.globalSem
+
+return false
+
+}
+
+default:
+
+<-wsl.globalSem
+
+return false
+
+}
+
+default:
+
+return false
+
+}
+
+}
+
 
 func (wsl *WebSocketLimiter) ReleaseForChain(clientIP, chain string) {
 
-	wsl.mu.RLock()
+wsl.mu.RLock()
 
-	perIPSem := wsl.perIPSem[clientIP]
+perIPSem := wsl.perIPSem[clientIP]
 
-	perChainSem := wsl.perChainSem[chain]
+perChainSem := wsl.perChainSem[chain]
 
-	wsl.mu.RUnlock()
+wsl.mu.RUnlock()
 
-	if perChainSem != nil {
 
-		select {
+if perChainSem != nil {
 
-		case <-perChainSem:
+select {
 
-		default:
+case <-perChainSem:
 
-		}
-
-	}
-
-	if perIPSem != nil {
-
-		select {
-
-		case <-perIPSem:
-
-		default:
-
-		}
-
-	}
-
-	select {
-
-	case <-wsl.globalSem:
-
-	default:
-
-	}
+default:
 
 }
+
+}
+
+
+if perIPSem != nil {
+
+select {
+
+case <-perIPSem:
+
+default:
+
+}
+
+}
+
+
+select {
+
+case <-wsl.globalSem:
+
+default:
+
+}
+
+}
+
 
 // Server manages the API server
 
 type Server struct {
-	cfg Config
 
-	logger *zap.Logger
+cfg              Config
 
-	mux *http.ServeMux
+logger           *zap.Logger
 
-	cache *Cache
+mux              *http.ServeMux
 
-	backend *BackendRegistry
+cache            *Cache
 
-	wsLimiter *WebSocketLimiter
+backend          *BackendRegistry
 
-	clock Clock
+wsLimiter        *WebSocketLimiter
 
-	p2pClients map[ProtocolType]*UniversalClient
+clock            Clock
 
-	blockChan chan blocks.BlockEvent
+p2pClients       map[ProtocolType]*UniversalClient
 
-	metrics *MetricsTracker
+blockChan        chan BlockEvent
 
-	bfManager *BloomFilterManager
+metrics          *MetricsTracker
 
-	esm *EnterpriseSecurityManager
+bfManager        *BloomFilterManager
 
-	ual *UnifiedAPILayer
+esm              *EnterpriseSecurityManager
 
-	latencyOptimizer *LatencyOptimizer
+ual              *UnifiedAPILayer
 
-	predictiveCache *PredictiveCache
+latencyOptimizer *LatencyOptimizer
 
-	entropyBuffer *EntropyMemoryBuffer
+predictiveCache  *PredictiveCache
 
-	tierManager *TierManager
+entropyBuffer    *EntropyMemoryBuffer
 
-	keyManager *KeyManager
+tierManager      *TierManager
 
-	predictor *AnalyticsPredictor
+keyManager       *KeyManager
 
-	zmqClient *zmq.Client
+predictor        *AnalyticsPredictor
 
-	mempool *Mempool
-
-	// Add relay dispatcher for proper Solana integration
-	relayDispatcher *relay.RelayDispatcher
-
-	solanaRelay *relay.SolanaRelay
 }
+
 
 type Clock interface {
-	Now() time.Time
+
+Now() time.Time
+
 }
+
 
 type RealClock struct{}
 
+
 func (RealClock) Now() time.Time {
 
-	return time.Now()
+return time.Now()
 
 }
+
 
 type KeyManager struct{}
 
+
 func (km *KeyManager) GenerateKey(tier string, clientIP string) (string, error) {
 
-	hashBytes := sha256.Sum256([]byte(clientIP + time.Now().String()))
+hashBytes := sha256.Sum256([]byte(clientIP + time.Now().String()))
 
-	return "key_" + hex.EncodeToString(hashBytes[:16]), nil
+return "key_" + hex.EncodeToString(hashBytes[:16]), nil
 
 }
+
 
 func (km *KeyManager) ValidateKey(key string) (KeyDetails, bool) {
 
-	hashBytes := sha256.Sum256([]byte(key))
+hashBytes := sha256.Sum256([]byte(key))
 
-	return KeyDetails{
+return KeyDetails{
 
-		Hash: hex.EncodeToString(hashBytes[:]),
+Hash:              hex.EncodeToString(hashBytes[:]),
 
-		Tier: "enterprise",
+Tier:              "enterprise",
 
-		CreatedAt: time.Now().Add(-time.Hour),
+CreatedAt:         time.Now().Add(-time.Hour),
 
-		ExpiresAt: time.Now().Add(24 * time.Hour),
+ExpiresAt:         time.Now().Add(24 * time.Hour),
 
-		RequestCount: 0,
+RequestCount:      0,
 
-		RateLimitRemaining: 1000,
-	}, true
+RateLimitRemaining: 1000,
+
+}, true
 
 }
+
 
 func (km *KeyManager) getRateLimitForTier(tier string) int {
 
-	return 1000
+return 1000
 
 }
+
 
 type KeyDetails struct {
-	Hash string
 
-	Tier string
+Hash              string
 
-	CreatedAt time.Time
+Tier              string
 
-	ExpiresAt time.Time
+CreatedAt         time.Time
 
-	RequestCount int
+ExpiresAt         time.Time
 
-	RateLimitRemaining int
+RequestCount      int
+
+RateLimitRemaining int
+
 }
+
 
 type AnalyticsPredictor struct{}
 
+
 func (p *AnalyticsPredictor) GetAnalyticsSummary() map[string]interface{} {
 
-	return map[string]interface{}{
+return map[string]interface{}{
 
-		"block_rate": 0.1,
+"block_rate": 0.1,
 
-		"tx_rate": 100.0,
-	}
+"tx_rate":    100.0,
 
 }
 
+}
+
+
 type ResponseNormalizer struct{}
+
 
 type RequestValidator struct{}
 
+
 type MonetizationEngine struct{}
+
 
 type SimpleMLModel struct{}
 
+
 type EntropyOptimizer struct{}
+
 
 func NewResponseNormalizer() *ResponseNormalizer { return &ResponseNormalizer{} }
 
-func NewRequestValidator() *RequestValidator { return &RequestValidator{} }
+func NewRequestValidator() *RequestValidator     { return &RequestValidator{} }
 
 func NewMonetizationEngine() *MonetizationEngine { return &MonetizationEngine{} }
 
 func NewPredictionEngine() *PredictionEngine {
 
-	return &PredictionEngine{
+return &PredictionEngine{
 
-		patterns: make(map[string]*AccessPattern),
+patterns:      make(map[string]*AccessPattern),
 
-		mlModel: &SimpleMLModel{},
+mlModel:       &SimpleMLModel{},
 
-		predictionTTL: 5 * time.Minute,
-	}
+predictionTTL: 5 * time.Minute,
 
 }
 
+}
+
+
 func (rn *ResponseNormalizer) Normalize(response interface{}) interface{} { return response }
 
-func (rv *RequestValidator) Validate(req *UnifiedRequest) error { return nil }
+func (rv *RequestValidator) Validate(req *UnifiedRequest) error           { return nil }
 
-func (pe *PredictionEngine) UpdatePattern(key string, access time.Time) {}
+func (pe *PredictionEngine) UpdatePattern(key string, access time.Time)   {}
 
 func (pe *PredictionEngine) PredictOptimalTTL(key, chain string) time.Duration {
 
-	return 5 * time.Minute
+return 5 * time.Minute
 
 }
 
 func (pe *PredictionEngine) PredictFutureAccess(key string) float64 {
 
-	return 0.5
+return 0.5
 
 }
+
 
 // ChainAdapterImpl implements ChainAdapter
 
 type ChainAdapterImpl struct {
-	chain string
+
+chain string
+
 }
+
 
 func NewChainAdapter(chain string) *ChainAdapterImpl {
 
-	return &ChainAdapterImpl{chain: chain}
+return &ChainAdapterImpl{chain: chain}
 
 }
+
 
 func (ca *ChainAdapterImpl) NormalizeRequest(method string, params interface{}) (*UnifiedRequest, error) {
-	return &UnifiedRequest{
-		Chain:  ca.chain,
-		Method: method,
-		Params: map[string]interface{}{"params": params},
-		RequestID: func() string {
-			hashBytes := sha256.Sum256([]byte(time.Now().String()))
-			return hex.EncodeToString(hashBytes[:16])
-		}(),
-		Metadata: map[string]string{"chain": ca.chain},
-	}, nil
+
+return &UnifiedRequest{
+
+Chain:     ca.chain,
+
+Method:    method,
+
+Params:    map[string]interface{}{"params": params},
+
+hashBytes := sha256.Sum256([]byte(time.Now().String()))
+
+RequestID: hex.EncodeToString(hashBytes[:16]),
+
+Metadata:  map[string]string{"chain": ca.chain},
+
+}, nil
+
 }
 
+
 func (ca *ChainAdapterImpl) NormalizeResponse(chain string, response interface{}) (*UnifiedResponse, error) {
-	hashBytes := sha256.Sum256([]byte(time.Now().String()))
-	return &UnifiedResponse{
-		Result:    response,
-		Chain:     chain,
-		Method:    "mock_method",
-		RequestID: hex.EncodeToString(hashBytes[:16]),
-		Metadata:  map[string]interface{}{"chain": chain},
-		Timing:    &ResponseTiming{ProcessingTime: 10 * time.Microsecond, TotalTime: 10 * time.Microsecond},
-	}, nil
+
+return &UnifiedResponse{
+
+Result:    response,
+
+Chain:     chain,
+
+Method:    "mock_method",
+
+hashBytes := sha256.Sum256([]byte(time.Now().String()))
+
+RequestID: hex.EncodeToString(hashBytes[:16]),
+
+Metadata:  map[string]interface{}{"chain": chain},
+
+Timing:    &ResponseTiming{ProcessingTime: 10 * time.Microsecond, TotalTime: 10 * time.Microsecond},
+
+}, nil
+
 }
+
 
 func (ca *ChainAdapterImpl) GetChainSpecificQuirks() map[string]interface{} {
 
-	return map[string]interface{}{"quirks": "none"}
+return map[string]interface{}{"quirks": "none"}
 
 }
+
 
 func NewServer(cfg Config, logger *zap.Logger) *Server {
 
-	cache := NewCache(cfg.CacheSize, logger)
+cache := NewCache(cfg.CacheSize, logger)
 
-	predictiveCache := NewPredictiveCache(cfg)
+predictiveCache := NewPredictiveCache(cfg)
 
-	entropyBuffer := NewEntropyMemoryBuffer()
+entropyBuffer := NewEntropyMemoryBuffer()
 
-	backend := NewBackendRegistry()
+backend := NewBackendRegistry()
 
-	memPool := NewMempool()
+bfManager := NewBloomFilterManager(logger)
 
-	bfManager := NewBloomFilterManager(logger)
+ual := NewUnifiedAPILayer()
 
-	p2pClients := make(map[ProtocolType]*UniversalClient)
+p2pClients := make(map[ProtocolType]*UniversalClient)
 
-	blockChan := make(chan blocks.BlockEvent, cfg.MessageQueueSize)
+blockChan := make(chan BlockEvent, cfg.MessageQueueSize)
 
-	// Create config.Config for ZMQ client
-	zmqConfig := config.Config{
-		ZMQNodes: []string{cfg.ZMQEndpoint},
-	}
+metrics := metricsTracker
 
-	// Initialize ZMQ client
-	zmqClient := zmq.New(zmqConfig, blockChan, memPool, logger)
+server := &Server{
 
-	metrics := metricsTracker
+cfg:              cfg,
 
-	server := &Server{
-		cfg:              cfg,
-		logger:           logger,
-		mux:              http.NewServeMux(),
-		cache:            cache,
-		backend:          backend,
-		wsLimiter:        NewWebSocketLimiter(cfg.WebSocketMaxConnections, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
-		clock:            RealClock{},
-		p2pClients:       p2pClients,
-		blockChan:        blockChan,
-		metrics:          metrics,
-		bfManager:        bfManager,
-		esm:              NewEnterpriseSecurityManager(nil, logger), // Initialize ESM
-		ual:              NewUnifiedAPILayer(nil), // Initialize UAL first
-		latencyOptimizer: NewLatencyOptimizer(predictiveCache, entropyBuffer),
-		predictiveCache:  predictiveCache,
-		entropyBuffer:    entropyBuffer,
-		tierManager:      NewTierManager(),
-		keyManager:       &KeyManager{},
-		predictor:        &AnalyticsPredictor{},
-		zmqClient:        zmqClient,
-		mempool:          memPool,
-	}
+logger:           logger,
 
-	// Set server reference in UAL and ESM after server creation
-	server.ual.server = server
-	server.esm.server = server
+mux:              http.NewServeMux(),
 
-	// Initialize relay dispatcher for proper blockchain integration
-	server.relayDispatcher = relay.NewRelayDispatcher(config.Config{}, logger)
+cache:            cache,
 
-	// Initialize Solana relay with proper configuration
-	solanaConfig := relay.RelayConfig{
-		Network:     "solana",
-		Endpoints:   []string{"http://solana-validator:8899", "ws://solana-validator:8900"},
-		Timeout:     30 * time.Second,
-		RetryAttempts: 3,
-		RetryDelay:  5 * time.Second,
-		MaxConcurrency: 10,
-		BufferSize:  1024,
-		EnableCompression: false,
-	}
+backend:          backend,
 
-	solanaRelay, err := relay.NewSolanaRelay(config.Config{}, logger)
-	if err != nil {
-		logger.Warn("Failed to create Solana relay, Solana features will be unavailable", zap.Error(err))
-	} else {
-		server.solanaRelay = solanaRelay
-		if err := server.relayDispatcher.RegisterClient("solana", solanaRelay); err != nil {
-			logger.Warn("Failed to register Solana relay", zap.Error(err))
-		} else {
-			logger.Info("Solana relay registered successfully")
-		}
-	}
+wsLimiter:        NewWebSocketLimiter(cfg.WebSocketMaxConnections, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
 
-	for _, chain := range []string{"bitcoin", "ethereum", "solana"} {
+clock:            RealClock{},
 
-		server.ual.chainAdapters[chain] = NewChainAdapter(chain)
+p2pClients:       p2pClients,
 
-		server.backend.Register(chain, NewChainBackend(chain, cfg, cache, logger))
+blockChan:        blockChan,
 
-		client, err := NewUniversalClient(cfg, ProtocolType(chain), logger)
+metrics:          metrics,
 
-		if err != nil {
-			// Log error but don't fail - allow system to start with degraded functionality
-			logger.Warn("Failed to create P2P client, starting with degraded functionality", 
-				zap.String("chain", chain), zap.Error(err))
-			server.p2pClients[ProtocolType(chain)] = nil // Mark as unavailable
-			continue
-		}
+bfManager:        bfManager,
 
-		// Try to connect with retry logic
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		connectErr := client.ConnectToNetwork(ctx)
-		cancel()
+ual:              ual,
 
-		if connectErr != nil {
-			logger.Warn("Failed to connect to P2P network, will retry in background", 
-				zap.String("chain", chain), zap.Error(connectErr))
-			// Start background retry process
-			go client.retryConnectWithBackoff(chain, logger)
-		} else {
-			logger.Info("Successfully connected to P2P network", zap.String("chain", chain))
-		}
+latencyOptimizer: NewLatencyOptimizer(predictiveCache, entropyBuffer),
 
-		server.p2pClients[ProtocolType(chain)] = client
+predictiveCache:  predictiveCache,
 
-	}
+entropyBuffer:    entropyBuffer,
 
-	return server
+tierManager:      NewTierManager(),
+
+keyManager:       &KeyManager{},
+
+predictor:        &AnalyticsPredictor{},
 
 }
+
+server.esm = NewEnterpriseSecurityManager(server, logger)
+
+for _, chain := range []string{"bitcoin", "ethereum", "solana"} {
+
+server.ual.chainAdapters[chain] = NewChainAdapter(chain)
+
+server.backend.Register(chain, NewChainBackend(chain, cfg, cache, logger))
+
+client, err := NewUniversalClient(cfg, ProtocolType(chain), logger)
+
+if err != nil {
+
+logger.Fatal("Failed to create P2P client", zap.String("chain", chain), zap.Error(err))
+
+}
+
+server.p2pClients[ProtocolType(chain)] = client
+
+}
+
+return server
+
+}
+
 
 func (s *Server) RegisterRoutes() {
 
-	s.mux.HandleFunc("/api/v1/universal/", s.universalHandler)
+s.mux.HandleFunc("/api/v1/universal/", s.universalHandler)
 
-	s.mux.HandleFunc("/api/v1/latency", s.latencyStatsHandler)
+s.mux.HandleFunc("/api/v1/latency", s.latencyStatsHandler)
 
-	s.mux.HandleFunc("/api/v1/cache", s.cacheStatsHandler)
+s.mux.HandleFunc("/api/v1/cache", s.cacheStatsHandler)
 
-	s.mux.HandleFunc("/api/v1/tiers", s.tierComparisonHandler)
+s.mux.HandleFunc("/api/v1/tiers", s.tierComparisonHandler)
 
-	s.mux.HandleFunc("/v1/", s.chainAwareHandler)
+s.mux.HandleFunc("/v1/", s.chainAwareHandler)
 
-	s.mux.HandleFunc("/health", s.healthHandler)
+s.mux.HandleFunc("/health", s.healthHandler)
 
-	s.mux.HandleFunc("/version", s.versionHandler)
+s.mux.HandleFunc("/version", s.versionHandler)
 
-	s.mux.HandleFunc("/generate-key", s.generateKeyHandler)
+s.mux.HandleFunc("/generate-key", s.generateKeyHandler)
 
-	s.mux.HandleFunc("/status", s.statusHandler)
-	s.mux.HandleFunc("/readiness", s.readinessHandler)
+s.mux.HandleFunc("/status", s.statusHandler)
 
-	s.mux.HandleFunc("/mempool", s.mempoolHandler)
+s.mux.HandleFunc("/mempool", s.mempoolHandler)
 
-	s.mux.HandleFunc("/analytics", s.analyticsSummaryHandler)
+s.mux.HandleFunc("/analytics", s.analyticsSummaryHandler)
 
-	s.mux.HandleFunc("/license", s.licenseInfoHandler)
+s.mux.HandleFunc("/license", s.licenseInfoHandler)
 
-	s.mux.HandleFunc("/chains", s.chainsHandler)
+s.mux.HandleFunc("/chains", s.chainsHandler)
 
-	s.esm.RegisterEnterpriseRoutes()
+s.esm.RegisterEnterpriseRoutes()
 
 }
+
 
 func (s *Server) jsonResponse(w http.ResponseWriter, statusCode int, data interface{}) {
 
-	w.Header().Set("Content-Type", "application/json")
+w.Header().Set("Content-Type", "application/json")
 
-	w.WriteHeader(statusCode)
+w.WriteHeader(statusCode)
 
-	json.NewEncoder(w).Encode(data)
+json.NewEncoder(w).Encode(data)
 
 }
+
 
 func (s *Server) turboJsonResponse(w http.ResponseWriter, statusCode int, data interface{}) {
 
-	s.jsonResponse(w, statusCode, data)
+s.jsonResponse(w, statusCode, data)
 
 }
+
 
 func (s *Server) exceedsKeyGenRateLimit(clientIP string) bool {
 
-	return false
+return false
 
 }
 
-// generateSecureRandomKey generates a secure random key using the securebuf package
-func (s *Server) generateSecureRandomKey() (string, error) {
-	const keySize = 32
-
-	keyBuf, err := securebuf.New(keySize)
-	if err != nil {
-		return "", fmt.Errorf("failed to create secure buffer: %w", err)
-	}
-	defer keyBuf.Free()
-
-	keyBytes := make([]byte, keySize)
-	if _, err := rand.Read(keyBytes); err != nil {
-		return "", fmt.Errorf("failed to generate random data: %w", err)
-	}
-
-	if err := keyBuf.Write(keyBytes); err != nil {
-		return "", fmt.Errorf("failed to write to secure buffer: %w", err)
-	}
-
-	for i := range keyBytes {
-		keyBytes[i] = 0
-	}
-
-	finalKeyBytes, err := keyBuf.ReadToSlice()
-	if err != nil {
-		return "", fmt.Errorf("failed to read from secure buffer: %w", err)
-	}
-
-	newKey := hex.EncodeToString(finalKeyBytes)
-
-	for i := range finalKeyBytes {
-		finalKeyBytes[i] = 0
-	}
-
-	return newKey, nil
-}
 
 func getClientIP(r *http.Request) string {
 
-	if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
+if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
 
-		return strings.Split(ip, ",")[0]
-
-	}
-
-	return r.RemoteAddr
+return strings.Split(ip, ",")[0]
 
 }
+
+return r.RemoteAddr
+
+}
+
 
 // HTTP Handlers
 
 func (s *Server) universalHandler(w http.ResponseWriter, r *http.Request) {
 
-	start := time.Now()
+start := time.Now()
 
-	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 
-	if len(pathParts) < 3 {
+pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 
-		s.jsonResponse(w, http.StatusBadRequest, map[string]interface{}{
+if len(pathParts) < 3 {
 
-			"error": "Invalid path. Use /api/v1/universal/{chain}/{method}",
+s.jsonResponse(w, http.StatusBadRequest, map[string]interface{}{
 
-			"sprint_advantage": "Single endpoint for all chains vs competitor's chain-specific APIs",
-		})
+"error": "Invalid path. Use /api/v1/universal/{chain}/{method}",
 
-		return
+"sprint_advantage": "Single endpoint for all chains vs competitor's chain-specific APIs",
 
-	}
+})
 
-	chain := pathParts[2]
-
-	method := ""
-
-	if len(pathParts) > 3 {
-
-		method = pathParts[3]
-
-	}
-
-	defer func() {
-
-		duration := time.Since(start)
-
-		s.latencyOptimizer.TrackRequest(chain, duration)
-
-		if duration > 100*time.Millisecond {
-
-			s.logger.Warn("P99 target exceeded",
-
-				zap.String("chain", chain),
-
-				zap.Duration("duration", duration),
-
-				zap.String("target", "100ms"))
-
-		}
-
-	}()
-
-	response := map[string]interface{}{
-
-		"chain": chain,
-
-		"method": method,
-
-		"timestamp": start.Unix(),
-
-		"sprint_advantages": map[string]interface{}{
-
-			"unified_api": "Single endpoint works across all chains",
-
-			"flat_p99": "Sub-100ms guaranteed response time",
-
-			"predictive_cache": "ML-powered caching reduces latency",
-
-			"enterprise_security": "Hardware-backed SecureBuffer entropy",
-		},
-
-		"vs_competitors": map[string]interface{}{
-
-			"infura": map[string]string{
-
-				"api_fragmentation": "Requires different integration per chain",
-
-				"latency_spikes": "250ms+ P99 latency",
-
-				"no_predictive_cache": "Basic time-based caching only",
-			},
-
-			"alchemy": map[string]string{
-
-				"cost": "2x more expensive ($0.0001 vs our $0.00005)",
-
-				"latency": "200ms+ P99 latency",
-
-				"limited_chains": "Fewer supported networks",
-			},
-		},
-
-		"performance": map[string]interface{}{
-
-			"response_time": fmt.Sprintf("%.2fms", float64(time.Since(start).Nanoseconds())/1e6),
-
-			"cache_hit": s.predictiveCache != nil,
-
-			"optimization": "Real-time P99 adaptation enabled",
-		},
-	}
-
-	s.jsonResponse(w, http.StatusOK, response)
+return
 
 }
+
+
+chain := pathParts[2]
+
+method := ""
+
+if len(pathParts) > 3 {
+
+method = pathParts[3]
+
+}
+
+
+defer func() {
+
+duration := time.Since(start)
+
+s.latencyOptimizer.TrackRequest(chain, duration)
+
+if duration > 100*time.Millisecond {
+
+s.logger.Warn("P99 target exceeded",
+
+zap.String("chain", chain),
+
+zap.Duration("duration", duration),
+
+zap.String("target", "100ms"))
+
+}
+
+}()
+
+
+response := map[string]interface{}{
+
+"chain":     chain,
+
+"method":    method,
+
+"timestamp": start.Unix(),
+
+"sprint_advantages": map[string]interface{}{
+
+"unified_api": "Single endpoint works across all chains",
+
+"flat_p99":    "Sub-100ms guaranteed response time",
+
+"predictive_cache": "ML-powered caching reduces latency",
+
+"enterprise_security": "Hardware-backed SecureBuffer entropy",
+
+},
+
+"vs_competitors": map[string]interface{}{
+
+"infura": map[string]string{
+
+"api_fragmentation": "Requires different integration per chain",
+
+"latency_spikes":    "250ms+ P99 latency",
+
+"no_predictive_cache": "Basic time-based caching only",
+
+},
+
+"alchemy": map[string]string{
+
+"cost": "2x more expensive ($0.0001 vs our $0.00005)",
+
+"latency": "200ms+ P99 latency",
+
+"limited_chains": "Fewer supported networks",
+
+},
+
+},
+
+"performance": map[string]interface{}{
+
+"response_time": fmt.Sprintf("%.2fms", float64(time.Since(start).Nanoseconds())/1e6),
+
+"cache_hit":     s.predictiveCache != nil,
+
+"optimization":  "Real-time P99 adaptation enabled",
+
+},
+
+}
+
+
+s.jsonResponse(w, http.StatusOK, response)
+
+}
+
 
 func (s *Server) latencyStatsHandler(w http.ResponseWriter, r *http.Request) {
 
-	if s.latencyOptimizer == nil {
+if s.latencyOptimizer == nil {
 
-		s.jsonResponse(w, http.StatusServiceUnavailable, map[string]string{
+s.jsonResponse(w, http.StatusServiceUnavailable, map[string]string{
 
-			"error": "Latency optimizer not initialized",
-		})
+"error": "Latency optimizer not initialized",
 
-		return
+})
 
-	}
-
-	realStats := s.latencyOptimizer.GetActualStats()
-
-	stats := map[string]interface{}{
-
-		"sprint_latency_advantage": map[string]interface{}{
-
-			"target_p99": "100ms",
-
-			"current_p99": realStats["CurrentP99"],
-
-			"competitor_p99": map[string]string{
-
-				"infura": "250ms+",
-
-				"alchemy": "200ms+",
-			},
-
-			"optimization_features": []string{
-
-				"Real-time P99 monitoring",
-
-				"Adaptive timeout adjustment",
-
-				"Predictive cache warming",
-
-				"Circuit breaker integration",
-
-				"Entropy buffer pre-warming",
-			},
-		},
-
-		"value_delivery": map[string]interface{}{
-
-			"tail_latency_removal": "Flat P99 across all chains",
-
-			"unified_api": "Single integration for 8+ chains",
-
-			"cost_savings": "50% cost reduction vs Alchemy",
-
-			"enterprise_security": "Hardware-backed entropy generation",
-		},
-	}
-
-	s.jsonResponse(w, http.StatusOK, stats)
+return
 
 }
+
+
+realStats := s.latencyOptimizer.GetActualStats()
+
+stats := map[string]interface{}{
+
+"sprint_latency_advantage": map[string]interface{}{
+
+"target_p99":       "100ms",
+
+"current_p99":      realStats["CurrentP99"],
+
+"competitor_p99": map[string]string{
+
+"infura":  "250ms+",
+
+"alchemy": "200ms+",
+
+},
+
+"optimization_features": []string{
+
+"Real-time P99 monitoring",
+
+"Adaptive timeout adjustment",
+
+"Predictive cache warming",
+
+"Circuit breaker integration",
+
+"Entropy buffer pre-warming",
+
+},
+
+},
+
+"value_delivery": map[string]interface{}{
+
+"tail_latency_removal": "Flat P99 across all chains",
+
+"unified_api":          "Single integration for 8+ chains",
+
+"cost_savings":         "50% cost reduction vs Alchemy",
+
+"enterprise_security":  "Hardware-backed entropy generation",
+
+},
+
+}
+
+
+s.jsonResponse(w, http.StatusOK, stats)
+
+}
+
 
 func (s *Server) cacheStatsHandler(w http.ResponseWriter, r *http.Request) {
 
-	if s.predictiveCache == nil {
+if s.predictiveCache == nil {
 
-		s.jsonResponse(w, http.StatusServiceUnavailable, map[string]string{
+s.jsonResponse(w, http.StatusServiceUnavailable, map[string]string{
 
-			"error": "Predictive cache not initialized",
-		})
+"error": "Predictive cache not initialized",
 
-		return
+})
 
-	}
-
-	realCacheStats := s.predictiveCache.GetActualCacheStats()
-
-	stats := map[string]interface{}{
-
-		"predictive_cache_advantage": map[string]interface{}{
-
-			"hit_rate": realCacheStats["hit_rate_percent"],
-
-			"cache_size": realCacheStats["cache_size"],
-
-			"total_requests": realCacheStats["total_requests"],
-
-			"ml_optimization": "Pattern-based TTL prediction",
-
-			"entropy_buffering": "Pre-warmed high-quality entropy",
-
-			"vs_competitors": "Basic time-based caching vs our ML-powered approach",
-		},
-
-		"cache_features": []string{
-
-			"Machine learning access pattern prediction",
-
-			"Dynamic TTL optimization",
-
-			"Chain-specific entropy buffers",
-
-			"Aggressive pre-warming on latency violations",
-
-			"Real-time cache hit rate optimization",
-		},
-
-		"performance_impact": map[string]interface{}{
-
-			"average_response_reduction": "75%",
-
-			"p99_improvement": "85%",
-
-			"resource_efficiency": "60% less backend load",
-		},
-	}
-
-	s.jsonResponse(w, http.StatusOK, stats)
+return
 
 }
+
+
+realCacheStats := s.predictiveCache.GetActualCacheStats()
+
+stats := map[string]interface{}{
+
+"predictive_cache_advantage": map[string]interface{}{
+
+"hit_rate":          realCacheStats["hit_rate_percent"],
+
+"cache_size":        realCacheStats["cache_size"],
+
+"total_requests":    realCacheStats["total_requests"],
+
+"ml_optimization":   "Pattern-based TTL prediction",
+
+"entropy_buffering": "Pre-warmed high-quality entropy",
+
+"vs_competitors":    "Basic time-based caching vs our ML-powered approach",
+
+},
+
+"cache_features": []string{
+
+"Machine learning access pattern prediction",
+
+"Dynamic TTL optimization",
+
+"Chain-specific entropy buffers",
+
+"Aggressive pre-warming on latency violations",
+
+"Real-time cache hit rate optimization",
+
+},
+
+"performance_impact": map[string]interface{}{
+
+"average_response_reduction": "75%",
+
+"p99_improvement":           "85%",
+
+"resource_efficiency":       "60% less backend load",
+
+},
+
+}
+
+
+s.jsonResponse(w, http.StatusOK, stats)
+
+}
+
 
 func (s *Server) tierComparisonHandler(w http.ResponseWriter, r *http.Request) {
 
-	if s.tierManager == nil {
+if s.tierManager == nil {
 
-		s.jsonResponse(w, http.StatusServiceUnavailable, map[string]string{
+s.jsonResponse(w, http.StatusServiceUnavailable, map[string]string{
 
-			"error": "Tier manager not initialized",
-		})
+"error": "Tier manager not initialized",
 
-		return
+})
 
-	}
-
-	comparison := map[string]interface{}{
-
-		"sprint_vs_competitors": map[string]interface{}{
-
-			"enterprise_tier": map[string]interface{}{
-
-				"sprint_price": "$0.00005/request",
-
-				"alchemy_price": "$0.0001/request",
-
-				"savings": "50% cost reduction",
-
-				"latency_target": "50ms vs their 200ms+",
-
-				"features": []string{
-
-					"Hardware-backed security",
-
-					"Flat P99 guarantee",
-
-					"Unlimited concurrent requests",
-
-					"Real-time optimization",
-
-					"Multi-chain unified API",
-				},
-			},
-
-			"pro_tier": map[string]interface{}{
-
-				"sprint_target_latency": "100ms",
-
-				"competitor_typical": "250ms+",
-
-				"cache_hit_rate": "90%+",
-
-				"concurrent_requests": "50 vs their 25",
-			},
-		},
-
-		"unique_value_props": []string{
-
-			"Removes tail latency with flat P99",
-
-			"Unified API eliminates chain-specific quirks",
-
-			"Predictive cache + entropy-based memory buffer",
-
-			"Handles rate limiting, tiering, monetization in one platform",
-
-			"50% cost reduction vs market leaders",
-		},
-	}
-
-	s.jsonResponse(w, http.StatusOK, comparison)
+return
 
 }
+
+
+comparison := map[string]interface{}{
+
+"sprint_vs_competitors": map[string]interface{}{
+
+"enterprise_tier": map[string]interface{}{
+
+"sprint_price":   "$0.00005/request",
+
+"alchemy_price":  "$0.0001/request",
+
+"savings":        "50% cost reduction",
+
+"latency_target": "50ms vs their 200ms+",
+
+"features": []string{
+
+"Hardware-backed security",
+
+"Flat P99 guarantee",
+
+"Unlimited concurrent requests",
+
+"Real-time optimization",
+
+"Multi-chain unified API",
+
+},
+
+},
+
+"pro_tier": map[string]interface{}{
+
+"sprint_target_latency": "100ms",
+
+"competitor_typical":    "250ms+",
+
+"cache_hit_rate":       "90%+",
+
+"concurrent_requests":   "50 vs their 25",
+
+},
+
+},
+
+"unique_value_props": []string{
+
+"Removes tail latency with flat P99",
+
+"Unified API eliminates chain-specific quirks",
+
+"Predictive cache + entropy-based memory buffer",
+
+"Handles rate limiting, tiering, monetization in one platform",
+
+"50% cost reduction vs market leaders",
+
+},
+
+}
+
+
+s.jsonResponse(w, http.StatusOK, comparison)
+
+}
+
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 
-	resp := map[string]interface{}{
+resp := map[string]interface{}{
 
-		"status": "healthy",
+"status":    "healthy",
 
-		"timestamp": s.clock.Now().UTC().Format(time.RFC3339),
+"timestamp": s.clock.Now().UTC().Format(time.RFC3339),
 
-		"version": "2.5.0",
+"version":   "2.5.0",
 
-		"service": "sprint-api",
-	}
-
-	s.turboJsonResponse(w, http.StatusOK, resp)
+"service":   "sprint-api",
 
 }
+
+s.turboJsonResponse(w, http.StatusOK, resp)
+
+}
+
 
 func (s *Server) versionHandler(w http.ResponseWriter, r *http.Request) {
 
-	resp := map[string]interface{}{
+resp := map[string]interface{}{
 
-		"version": "2.5.0-performance",
+"version":    "2.5.0-performance",
 
-		"build": "enterprise",
+"build":      "enterprise",
 
-		"build_time": "unknown",
+"build_time": "unknown",
 
-		"tier": s.cfg.Tier,
+"tier":       s.cfg.Tier,
 
-		"turbo_mode": s.cfg.Tier == "turbo" || s.cfg.Tier == "enterprise",
+"turbo_mode": s.cfg.Tier == "turbo" || s.cfg.Tier == "enterprise",
 
-		"timestamp": s.clock.Now().UTC().Format(time.RFC3339),
-	}
-
-	s.turboJsonResponse(w, http.StatusOK, resp)
+"timestamp":  s.clock.Now().UTC().Format(time.RFC3339),
 
 }
+
+s.turboJsonResponse(w, http.StatusOK, resp)
+
+}
+
 
 func (s *Server) generateKeyHandler(w http.ResponseWriter, r *http.Request) {
 
-	clientIP := getClientIP(r)
+clientIP := getClientIP(r)
 
-	if s.exceedsKeyGenRateLimit(clientIP) {
+if s.exceedsKeyGenRateLimit(clientIP) {
 
-		s.jsonResponse(w, http.StatusTooManyRequests, map[string]string{
+s.jsonResponse(w, http.StatusTooManyRequests, map[string]string{
 
-			"error": "Rate limit exceeded",
-		})
+"error": "Rate limit exceeded",
 
-		return
+})
 
-	}
-
-	tier := r.URL.Query().Get("tier")
-
-	if tier == "" {
-
-		tier = "free"
-
-	}
-
-	key, err := s.keyManager.GenerateKey(tier, clientIP)
-
-	if err != nil {
-
-		s.jsonResponse(w, http.StatusInternalServerError, map[string]string{
-
-			"error": "Failed to generate key",
-		})
-
-		return
-
-	}
-
-	s.jsonResponse(w, http.StatusOK, map[string]interface{}{
-
-		"key": key,
-
-		"tier": tier,
-
-		"generated": s.clock.Now().UTC().Format(time.RFC3339),
-	})
+return
 
 }
+
+
+tier := r.URL.Query().Get("tier")
+
+if tier == "" {
+
+tier = "free"
+
+}
+
+
+key, err := s.keyManager.GenerateKey(tier, clientIP)
+
+if err != nil {
+
+s.jsonResponse(w, http.StatusInternalServerError, map[string]string{
+
+"error": "Failed to generate key",
+
+})
+
+return
+
+}
+
+
+s.jsonResponse(w, http.StatusOK, map[string]interface{}{
+
+"key":       key,
+
+"tier":      tier,
+
+"generated": s.clock.Now().UTC().Format(time.RFC3339),
+
+})
+
+}
+
 
 func (s *Server) statusHandler(w http.ResponseWriter, r *http.Request) {
 
-	// Check P2P connection status for each chain
-	p2pStatus := make(map[string]interface{})
-	for _, chain := range []string{"bitcoin", "ethereum", "solana"} {
-		if client, exists := s.p2pClients[ProtocolType(chain)]; client != nil && exists {
-			peerCount := client.GetPeerCount()
-			if peerCount > 0 {
-				p2pStatus[chain] = map[string]interface{}{
-					"status":    "connected",
-					"peers":     peerCount,
-					"message":   "Active P2P connections established",
-				}
-			} else {
-				p2pStatus[chain] = map[string]interface{}{
-					"status":    "connecting",
-					"peers":     0,
-					"message":   "Attempting to establish P2P connections",
-				}
-			}
-		} else {
-			p2pStatus[chain] = map[string]interface{}{
-				"status":    "disconnected",
-				"peers":     0,
-				"message":   "P2P client unavailable - check logs for details",
-			}
-		}
-	}
+status := map[string]interface{}{
 
-	// Add Solana-specific diagnostics
-	if solanaStatus, exists := p2pStatus["solana"]; exists {
-		solanaStatus.(map[string]interface{})["protocol_note"] = "Requires gossip protocol implementation"
-		solanaStatus.(map[string]interface{})["bootstrap_nodes"] = []string{
-			"127.0.0.1:9900",    // Local test validator
-			"entrypoint.mainnet.solana.com:8001",
-			"entrypoint2.mainnet.solana.com:8001",
-			"entrypoint3.mainnet.solana.com:8001",
-			"entrypoint4.mainnet.solana.com:8001",
-			"entrypoint5.mainnet.solana.com:8001",
-		}
-	}
+"server": map[string]interface{}{
 
-	// Check ZMQ status
-	zmqStatus := "mock-fallback"
-	if s.zmqClient != nil {
-		// In a real implementation, you'd check if ZMQ is actually connected
-		zmqStatus = "active"
-	}
+"uptime":     time.Since(time.Now().Add(-time.Hour)).String(),
 
-	status := map[string]interface{}{
-		"server": map[string]interface{}{
-			"uptime": time.Since(time.Now().Add(-time.Hour)).String(),
-			"version": "2.5.0",
-			"tier": s.cfg.Tier,
-			"status": "running",
-		},
-		"chains": p2pStatus,
-		"zmq": map[string]interface{}{
-			"status": zmqStatus,
-			"message": "ZMQ connection status",
-		},
-		"backends": s.backend.GetStatus(),
-		"p2p": map[string]interface{}{
-			"connections": len(s.p2pClients),
-			"protocols": []string{"bitcoin", "ethereum", "solana"},
-			"status": p2pStatus,
-		},
-		"cache": map[string]interface{}{
-			"entries": s.cache != nil,
-			"size": "dynamic",
-		},
-		"performance": map[string]interface{}{
-			"optimization": "enabled",
-			"cpu_cores": runtime.NumCPU(),
-			"goroutines": runtime.NumGoroutine(),
-		},
-		"readiness": map[string]interface{}{
-			"bitcoin_ready": p2pStatus["bitcoin"].(map[string]interface{})["status"] == "connected",
-			"ethereum_ready": p2pStatus["ethereum"].(map[string]interface{})["status"] == "connected",
-			"solana_ready": p2pStatus["solana"].(map[string]interface{})["status"] == "connected",
-			"bitcoin_peer_threshold": p2pStatus["bitcoin"].(map[string]interface{})["peers"].(int) >= 8,
-			"ethereum_peer_threshold": p2pStatus["ethereum"].(map[string]interface{})["peers"].(int) >= 5,
-			"solana_peer_threshold": p2pStatus["solana"].(map[string]interface{})["peers"].(int) >= 5,
-			"multi_chain_ready": p2pStatus["bitcoin"].(map[string]interface{})["status"] == "connected" && 
-			                    p2pStatus["ethereum"].(map[string]interface{})["status"] == "connected" && 
-			                    p2pStatus["solana"].(map[string]interface{})["status"] == "connected",
-			"partial_sla_ready": p2pStatus["bitcoin"].(map[string]interface{})["status"] == "connected" && 
-			                     p2pStatus["ethereum"].(map[string]interface{})["status"] == "connected",
-			"production_sla": p2pStatus["bitcoin"].(map[string]interface{})["status"] == "connected",
-			"sla_status": func() string {
-				bitcoinOk := p2pStatus["bitcoin"].(map[string]interface{})["status"] == "connected"
-				ethereumOk := p2pStatus["ethereum"].(map[string]interface{})["status"] == "connected"
-				solanaOk := p2pStatus["solana"].(map[string]interface{})["status"] == "connected"
-				
-				if bitcoinOk && ethereumOk && solanaOk {
-					return "full"
-				} else if bitcoinOk && ethereumOk {
-					return "partial"
-				} else if bitcoinOk {
-					return "minimal"
-				}
-				return "degraded"
-			}(),
-		},
-		"production_assessment": map[string]interface{}{
-			"overall_status": func() string {
-				bitcoinOk := p2pStatus["bitcoin"].(map[string]interface{})["status"] == "connected"
-				ethereumOk := p2pStatus["ethereum"].(map[string]interface{})["status"] == "connected"
-				
-				if bitcoinOk && ethereumOk {
-					return "PRODUCTION_READY"
-				} else if bitcoinOk {
-					return "PARTIAL_PRODUCTION_READY"
-				}
-				return "NOT_PRODUCTION_READY"
-			}(),
-			"deployment_recommendations": func() []string {
-				var recs []string
-				bitcoinOk := p2pStatus["bitcoin"].(map[string]interface{})["status"] == "connected"
-				ethereumOk := p2pStatus["ethereum"].(map[string]interface{})["status"] == "connected"
-				solanaOk := p2pStatus["solana"].(map[string]interface{})["status"] == "connected"
-				
-				if bitcoinOk && ethereumOk {
-					recs = append(recs, "✅ System ready for production deployment with Bitcoin and Ethereum support")
-					recs = append(recs, "✅ Partial SLA capabilities available for Bitcoin+Ethereum customers")
-				}
-				if !solanaOk {
-					recs = append(recs, "⚠️ Solana integration requires gossip protocol implementation")
-					recs = append(recs, "📋 Solana bootstrap nodes configured but protocol handshake needs work")
-				}
-				if bitcoinOk && ethereumOk && !solanaOk {
-					recs = append(recs, "🚀 Recommended: Deploy with Bitcoin+Ethereum support first")
-				}
-				return recs
-			}(),
-			"system_requirements": map[string]interface{}{
-				"bitcoin_peers_required": 8,
-				"ethereum_peers_required": 5,
-				"solana_peers_required": 5,
-				"current_bitcoin_peers": p2pStatus["bitcoin"].(map[string]interface{})["peers"],
-				"current_ethereum_peers": p2pStatus["ethereum"].(map[string]interface{})["peers"],
-				"current_solana_peers": p2pStatus["solana"].(map[string]interface{})["peers"],
-			},
-			"next_steps": func() []string {
-				var steps []string
-				bitcoinOk := p2pStatus["bitcoin"].(map[string]interface{})["status"] == "connected"
-				ethereumOk := p2pStatus["ethereum"].(map[string]interface{})["status"] == "connected"
-				
-				if bitcoinOk && ethereumOk {
-					steps = append(steps, "1. Deploy to production environment")
-					steps = append(steps, "2. Configure monitoring and alerting")
-					steps = append(steps, "3. Set up customer onboarding for Bitcoin+Ethereum")
-					steps = append(steps, "4. Plan Solana integration roadmap")
-				} else {
-					steps = append(steps, "1. Resolve P2P connectivity issues")
-					steps = append(steps, "2. Verify network configuration")
-					steps = append(steps, "3. Check firewall and security settings")
-				}
-				return steps
-			}(),
-		},
-	}
+"version":    "2.5.0",
 
-	s.jsonResponse(w, http.StatusOK, status)
+"tier":       s.cfg.Tier,
+
+"status":     "running",
+
+},
+
+"backends": s.backend.GetStatus(),
+
+"p2p": map[string]interface{}{
+
+"connections": len(s.p2pClients),
+
+"protocols":   []string{"bitcoin", "ethereum", "solana"},
+
+},
+
+"cache": map[string]interface{}{
+
+"entries": s.cache != nil,
+
+"size":    "dynamic",
+
+},
+
+"performance": map[string]interface{}{
+
+"optimization": "enabled",
+
+"cpu_cores":    runtime.NumCPU(),
+
+"goroutines":   runtime.NumGoroutine(),
+
+},
 
 }
 
-func (s *Server) readinessHandler(w http.ResponseWriter, r *http.Request) {
-	// Comprehensive production readiness assessment
-	bitcoinPeers := 0
-	ethereumPeers := 0
-	solanaPeers := 0
-	
-	if bitcoinClient, exists := s.p2pClients[ProtocolBitcoin]; exists && bitcoinClient != nil {
-		bitcoinPeers = bitcoinClient.GetPeerCount()
-	}
-	if ethereumClient, exists := s.p2pClients[ProtocolEthereum]; exists && ethereumClient != nil {
-		ethereumPeers = ethereumClient.GetPeerCount()
-	}
-	if solanaClient, exists := s.p2pClients[ProtocolSolana]; exists && solanaClient != nil {
-		solanaPeers = solanaClient.GetPeerCount()
-	}
-
-	// System health checks
-	systemChecks := map[string]interface{}{
-		"database": map[string]interface{}{
-			"status": "unknown",
-			"message": "Database connectivity not implemented in this version",
-		},
-		"cache": map[string]interface{}{
-			"status": s.cache != nil,
-			"message": func() string {
-				if s.cache != nil {
-					return "Cache system operational"
-				}
-				return "Cache system not initialized"
-			}(),
-		},
-		"zmq": map[string]interface{}{
-			"status": s.zmqClient != nil,
-			"message": func() string {
-				if s.zmqClient != nil {
-					return "ZMQ client operational"
-				}
-				return "ZMQ client using mock fallback"
-			}(),
-		},
-		"backends": map[string]interface{}{
-			"status": "operational",
-			"message": "Backend systems initialized",
-		},
-	}
-
-	readiness := map[string]interface{}{
-		"timestamp": time.Now().Format(time.RFC3339),
-		"version": "2.5.0",
-		"production_readiness_score": func() int {
-			score := 0
-			if bitcoinPeers > 0 { score += 40 }  // Bitcoin connectivity
-			if ethereumPeers > 0 { score += 30 } // Ethereum connectivity
-			if solanaPeers > 0 { score += 20 }   // Solana connectivity
-			if s.cache != nil { score += 5 }     // Cache system
-			if s.zmqClient != nil { score += 5 } // ZMQ system
-			return score
-		}(),
-		"chains": map[string]interface{}{
-			"bitcoin": map[string]interface{}{
-				"peers": bitcoinPeers,
-				"ready": bitcoinPeers > 0,
-				"production_threshold": 8,
-				"meets_threshold": bitcoinPeers >= 8,
-				"status": func() string {
-					if bitcoinPeers >= 8 { return "PRODUCTION_READY" }
-					if bitcoinPeers > 0 { return "DEVELOPMENT_READY" }
-					return "NOT_READY"
-				}(),
-			},
-			"ethereum": map[string]interface{}{
-				"peers": ethereumPeers,
-				"ready": ethereumPeers > 0,
-				"production_threshold": 5,
-				"meets_threshold": ethereumPeers >= 5,
-				"status": func() string {
-					if ethereumPeers >= 5 { return "PRODUCTION_READY" }
-					if ethereumPeers > 0 { return "DEVELOPMENT_READY" }
-					return "NOT_READY"
-				}(),
-			},
-			"solana": map[string]interface{}{
-				"peers": solanaPeers,
-				"ready": solanaPeers > 0,
-				"production_threshold": 5,
-				"meets_threshold": solanaPeers >= 5,
-				"status": "REQUIRES_PROTOCOL_IMPLEMENTATION",
-				"note": "Solana requires gossip protocol - generic P2P client insufficient",
-			},
-		},
-		"system_health": systemChecks,
-		"deployment_readiness": map[string]interface{}{
-			"can_deploy_bitcoin": bitcoinPeers > 0,
-			"can_deploy_ethereum": ethereumPeers > 0,
-			"can_deploy_solana": false,
-			"can_deploy_partial": bitcoinPeers > 0 && ethereumPeers > 0,
-			"recommended_deployment": func() string {
-				if bitcoinPeers > 0 && ethereumPeers > 0 {
-					return "PARTIAL_DEPLOYMENT_READY"
-				} else if bitcoinPeers > 0 {
-					return "BITCOIN_ONLY_DEPLOYMENT"
-				}
-				return "NOT_READY_FOR_DEPLOYMENT"
-			}(),
-		},
-		"action_items": func() []string {
-			var items []string
-			
-			if bitcoinPeers == 0 {
-				items = append(items, "🔴 CRITICAL: Establish Bitcoin P2P connectivity")
-			} else if bitcoinPeers < 8 {
-				items = append(items, "🟡 WARNING: Bitcoin peer count below production threshold")
-			} else {
-				items = append(items, "✅ Bitcoin P2P connectivity established")
-			}
-			
-			if ethereumPeers == 0 {
-				items = append(items, "🔴 CRITICAL: Establish Ethereum P2P connectivity")
-			} else if ethereumPeers < 5 {
-				items = append(items, "🟡 WARNING: Ethereum peer count below production threshold")
-			} else {
-				items = append(items, "✅ Ethereum P2P connectivity established")
-			}
-			
-			if solanaPeers == 0 {
-				items = append(items, "🟠 INFO: Solana requires gossip protocol implementation")
-			}
-			
-			if s.cache == nil {
-				items = append(items, "🟡 WARNING: Cache system not initialized")
-			}
-			
-			if s.zmqClient == nil {
-				items = append(items, "🟡 INFO: Using ZMQ mock fallback")
-			}
-			
-			if bitcoinPeers > 0 && ethereumPeers > 0 {
-				items = append(items, "🚀 READY: System ready for production deployment")
-			}
-			
-			return items
-		}(),
-		"next_milestones": func() []string {
-			var milestones []string
-			milestones = append(milestones, "Phase 1: Bitcoin + Ethereum production deployment")
-			milestones = append(milestones, "Phase 2: Solana gossip protocol implementation")
-			milestones = append(milestones, "Phase 3: Full multi-chain SLA capabilities")
-			milestones = append(milestones, "Phase 4: Enterprise security hardening")
-			return milestones
-		}(),
-	}
-
-	s.jsonResponse(w, http.StatusOK, readiness)
+s.jsonResponse(w, http.StatusOK, status)
 
 }
+
 
 func (s *Server) mempoolHandler(w http.ResponseWriter, r *http.Request) {
 
-	resp := map[string]interface{}{
+resp := map[string]interface{}{
 
-		"mempool_size": 100 + int(time.Now().Unix()%50),
+"mempool_size": 100 + int(time.Now().Unix()%50),
 
-		"transactions": []string{"tx1", "tx2", "tx3"},
+"transactions": []string{"tx1", "tx2", "tx3"},
 
-		"timestamp": s.clock.Now().UTC().Format(time.RFC3339),
-	}
-
-	s.turboJsonResponse(w, http.StatusOK, resp)
+"timestamp":    s.clock.Now().UTC().Format(time.RFC3339),
 
 }
+
+s.turboJsonResponse(w, http.StatusOK, resp)
+
+}
+
 
 func (s *Server) analyticsSummaryHandler(w http.ResponseWriter, r *http.Request) {
 
-	summary := s.predictor.GetAnalyticsSummary()
+summary := s.predictor.GetAnalyticsSummary()
 
-	s.jsonResponse(w, http.StatusOK, summary)
+s.jsonResponse(w, http.StatusOK, summary)
 
 }
+
 
 func (s *Server) licenseInfoHandler(w http.ResponseWriter, r *http.Request) {
 
-	resp := map[string]interface{}{
+resp := map[string]interface{}{
 
-		"license": map[string]interface{}{
+"license": map[string]interface{}{
 
-			"type": "enterprise",
+"type":       "enterprise",
 
-			"valid_until": s.clock.Now().Add(365 * 24 * time.Hour).Format(time.RFC3339),
+"valid_until": s.clock.Now().Add(365*24*time.Hour).Format(time.RFC3339),
 
-			"features": []string{"unlimited_requests", "enterprise_security", "turbo_mode"},
-		},
+"features":    []string{"unlimited_requests", "enterprise_security", "turbo_mode"},
 
-		"compliance": map[string]interface{}{
+},
 
-			"gdpr_compliant": true,
+"compliance": map[string]interface{}{
 
-			"audit_trail": true,
+"gdpr_compliant": true,
 
-			"data_encryption": true,
-		},
-	}
+"audit_trail":    true,
 
-	s.turboJsonResponse(w, http.StatusOK, resp)
+"data_encryption": true,
+
+},
 
 }
+
+s.turboJsonResponse(w, http.StatusOK, resp)
+
+}
+
 
 func (s *Server) chainsHandler(w http.ResponseWriter, r *http.Request) {
 
-	chains := s.backend.List()
+chains := s.backend.List()
 
-	resp := map[string]interface{}{
+resp := map[string]interface{}{
 
-		"chains": chains,
+"chains":         chains,
 
-		"total_chains": len(chains),
+"total_chains":   len(chains),
 
-		"unified_api": true,
+"unified_api":    true,
 
-		"latency_target": "100ms P99",
-	}
-
-	s.jsonResponse(w, http.StatusOK, resp)
+"latency_target": "100ms P99",
 
 }
+
+s.jsonResponse(w, http.StatusOK, resp)
+
+}
+
 
 func (s *Server) chainAwareHandler(w http.ResponseWriter, r *http.Request) {
 
-	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 
-	if len(pathParts) < 2 {
+if len(pathParts) < 2 {
 
-		s.jsonResponse(w, http.StatusBadRequest, map[string]string{
+s.jsonResponse(w, http.StatusBadRequest, map[string]string{
 
-			"error": "Invalid path. Use /v1/{chain}/{method}",
-		})
+"error": "Invalid path. Use /v1/{chain}/{method}",
 
-		return
+})
 
-	}
-
-	chain := pathParts[1]
-
-	method := ""
-
-	if len(pathParts) > 2 {
-
-		method = pathParts[2]
-
-	}
-
-	response := map[string]interface{}{
-
-		"chain": chain,
-
-		"method": method,
-
-		"data": map[string]interface{}{"mock_result": "success"},
-	}
-
-	s.jsonResponse(w, http.StatusOK, response)
+return
 
 }
+
+
+chain := pathParts[1]
+
+method := ""
+
+if len(pathParts) > 2 {
+
+method = pathParts[2]
+
+}
+
+
+response := map[string]interface{}{
+
+"chain":  chain,
+
+"method": method,
+
+"data":   map[string]interface{}{"mock_result": "success"},
+
+}
+
+s.jsonResponse(w, http.StatusOK, response)
+
+}
+
 
 func main() {
 
-	cfg := LoadConfig()
+cfg := LoadConfig()
 
-	logger := initLogger(cfg)
+logger := initLogger(cfg)
 
-	defer logger.Sync()
+defer logger.Sync()
 
-	server := NewServer(cfg, logger)
 
-	server.RegisterRoutes()
+server := NewServer(cfg, logger)
 
-	// Start server
+server.RegisterRoutes()
 
-	logger.Info("Starting Sprint API server",
 
-		zap.String("addr", fmt.Sprintf(":%d", cfg.APIPort)),
+// Start server
 
-		zap.String("tier", cfg.Tier),
-	)
+logger.Info("Starting Sprint API server",
 
-	go func() {
+zap.String("addr", fmt.Sprintf(":%d", cfg.APIPort)),
 
-		if err := http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(cfg.APIPort)), server.mux); err != nil {
+zap.String("tier", cfg.Tier),
 
-			logger.Fatal("Server failed to start", zap.Error(err))
+)
 
-		}
 
-	}()
+go func() {
 
-	// Connect P2P clients
+if err := http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(cfg.APIPort)), server.mux); err != nil {
 
-	for protocol, client := range server.p2pClients {
-
-		go func(p ProtocolType, c *UniversalClient) {
-
-			ctx := context.Background()
-
-			if err := c.ConnectToNetwork(ctx); err != nil {
-
-				logger.Warn("Failed to connect P2P client", zap.String("protocol", string(p)), zap.Error(err))
-
-			} else {
-
-				logger.Info("P2P client connected", zap.String("protocol", string(p)))
-
-			}
-
-		}(protocol, client)
-
-	}
-
-	// Start ZMQ client
-	if server.zmqClient != nil {
-		go server.zmqClient.Run()
-		logger.Info("ZMQ client started")
-	}
-
-	// Graceful shutdown
-
-	sigs := make(chan os.Signal, 1)
-
-	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
-
-	<-sigs
-
-	logger.Info("Shutting down server...")
-
-	for protocol, client := range server.p2pClients {
-
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-
-		if err := client.Shutdown(ctx); err != nil {
-
-			logger.Warn("Failed to shutdown P2P client", zap.String("protocol", string(protocol)), zap.Error(err))
-
-		}
-
-		cancel()
-
-	}
-
-	logger.Info("Server shutdown complete")
+logger.Fatal("Server failed to start", zap.Error(err))
 
 }
 
+}()
+
+
+// Connect P2P clients
+
+for protocol, client := range server.p2pClients {
+
+go func(p ProtocolType, c *UniversalClient) {
+
+ctx := context.Background()
+
+if err := c.ConnectToNetwork(ctx); err != nil {
+
+logger.Warn("Failed to connect P2P client", zap.String("protocol", string(p)), zap.Error(err))
+
+} else {
+
+logger.Info("P2P client connected", zap.String("protocol", string(p)))
+
+}
+
+}(protocol, client)
+
+}
+
+
+// Graceful shutdown
+
+sigs := make(chan os.Signal, 1)
+
+signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+
+<-sigs
+
+logger.Info("Shutting down server...")
+
+
+// Shutdown P2P clients
+
+for protocol, client := range server.p2pClients {
+
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
+if err := client.Shutdown(ctx); err != nil {
+
+logger.Warn("Failed to shutdown P2P client", zap.String("protocol", string(protocol)), zap.Error(err))
+
+}
+
+cancel()
+
+}
+
+
+logger.Info("Server shutdown complete")
+
+}
+
+
 func initLogger(cfg Config) *zap.Logger {
 
-	var (
-		logger *zap.Logger
+var (
 
-		err error
-	)
+logger *zap.Logger
 
-	if cfg.OptimizeSystem {
+err    error
 
-		config := zap.NewProductionConfig()
+)
 
-		config.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
+if cfg.OptimizeSystem {
 
-		logger, err = config.Build()
+config := zap.NewProductionConfig()
 
-	} else {
+config.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
 
-		config := zap.NewDevelopmentConfig()
+logger, err = config.Build()
 
-		config.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+} else {
 
-		logger, err = config.Build()
+config := zap.NewDevelopmentConfig()
 
-	}
+config.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
 
-	if err != nil {
+logger, err = config.Build()
 
-		log.Fatalf("Failed to initialize logger: %v", err)
+}
 
-	}
+if err != nil {
 
-	return logger
+log.Fatalf("Failed to initialize logger: %v", err)
+
+}
+
+return logger
 
 }

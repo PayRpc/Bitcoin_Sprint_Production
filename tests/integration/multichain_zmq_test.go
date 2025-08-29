@@ -31,7 +31,7 @@ func main() {
 	// Load config
 	cfg := config.Load()
 	cfg.MockFastBlocks = true // Enable fast block simulation
-	
+
 	// Set up for Bitcoin as primary chain
 	logger.Info("Setting up Multi-Chain Sprint with Bitcoin primary chain")
 
@@ -79,7 +79,7 @@ func main() {
 	fmt.Println("")
 	fmt.Println("💡 This test demonstrates:")
 	fmt.Println("   • ZMQ mock with realistic Bitcoin block timing")
-	fmt.Println("   • Multi-chain API structure") 
+	fmt.Println("   • Multi-chain API structure")
 	fmt.Println("   • Performance metrics collection")
 	fmt.Println("   • Tier-based response optimization")
 	fmt.Println("")
@@ -92,22 +92,22 @@ func main() {
 
 func (api *MultiChainAPI) handleSprintValue(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	
+
 	value := map[string]interface{}{
-		"platform": "Multi-Chain Sprint",
-		"version": "2.1.0",
+		"platform":         "Multi-Chain Sprint",
+		"version":          "2.1.0",
 		"supported_chains": []string{"bitcoin", "ethereum", "solana", "cosmos", "polkadot"},
 		"competitive_advantages": map[string]interface{}{
 			"flat_p99_latency": map[string]interface{}{
 				"description": "Consistent sub-100ms P99 across all chains",
-				"vs_infura": "Infura: 250ms+ P99 with spikes to 2000ms",
-				"vs_alchemy": "Alchemy: 200ms+ P99 with variable performance",
-				"mechanism": "Real-time optimization + predictive cache + ZMQ mock",
+				"vs_infura":   "Infura: 250ms+ P99 with spikes to 2000ms",
+				"vs_alchemy":  "Alchemy: 200ms+ P99 with variable performance",
+				"mechanism":   "Real-time optimization + predictive cache + ZMQ mock",
 			},
 			"unified_api": map[string]interface{}{
-				"description": "Single API integration for all blockchain networks",
+				"description":      "Single API integration for all blockchain networks",
 				"endpoint_pattern": "/api/v1/universal/{chain}/{method}",
-				"vs_competitors": "Competitors require chain-specific integrations",
+				"vs_competitors":   "Competitors require chain-specific integrations",
 				"chains_supported": 8,
 			},
 			"enhanced_zmq": map[string]interface{}{
@@ -121,36 +121,36 @@ func (api *MultiChainAPI) handleSprintValue(w http.ResponseWriter, r *http.Reque
 			},
 		},
 		"performance_metrics": map[string]interface{}{
-			"blocks_detected": len(api.blockEvents),
+			"blocks_detected":  len(api.blockEvents),
 			"response_time_ms": time.Since(start).Seconds() * 1000,
-			"zmq_source": "enhanced_mock",
+			"zmq_source":       "enhanced_mock",
 		},
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(value)
-	
+
 	api.logger.Info("Sprint value API called",
 		zap.Float64("response_time_ms", time.Since(start).Seconds()*1000))
 }
 
 func (api *MultiChainAPI) handleLatestBlock(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	
+
 	var latestBlock *blocks.BlockEvent
 	if len(api.blockEvents) > 0 {
 		latestBlock = &api.blockEvents[len(api.blockEvents)-1]
 	}
 
 	response := map[string]interface{}{
-		"chain": "bitcoin",
-		"endpoint": "/api/v1/universal/bitcoin/latest",
-		"latest_block": latestBlock,
+		"chain":                 "bitcoin",
+		"endpoint":              "/api/v1/universal/bitcoin/latest",
+		"latest_block":          latestBlock,
 		"total_blocks_detected": len(api.blockEvents),
-		"mock_mode": true,
-		"response_time_ms": time.Since(start).Seconds() * 1000,
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"mock_mode":             true,
+		"response_time_ms":      time.Since(start).Seconds() * 1000,
+		"timestamp":             time.Now().UTC().Format(time.RFC3339),
 	}
 
 	if latestBlock == nil {
@@ -177,7 +177,7 @@ func (api *MultiChainAPI) handleStats(w http.ResponseWriter, r *http.Request) {
 	if len(api.blockEvents) > 0 {
 		minRelay = api.blockEvents[0].RelayTimeMs
 		maxRelay = api.blockEvents[0].RelayTimeMs
-		
+
 		for _, event := range api.blockEvents {
 			totalRelayTime += event.RelayTimeMs
 			if event.RelayTimeMs < minRelay {
@@ -195,23 +195,23 @@ func (api *MultiChainAPI) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stats := map[string]interface{}{
-		"chain": "bitcoin",
+		"chain":    "bitcoin",
 		"endpoint": "/api/v1/universal/bitcoin/stats",
 		"block_detection_stats": map[string]interface{}{
-			"total_blocks": len(api.blockEvents),
+			"total_blocks":      len(api.blockEvents),
 			"avg_relay_time_ms": avgRelayTime,
 			"min_relay_time_ms": minRelay,
 			"max_relay_time_ms": maxRelay,
 		},
 		"zmq_mock_info": map[string]interface{}{
-			"mode": "enhanced_mock",
-			"block_interval": "30 seconds (fast mode)",
+			"mode":                "enhanced_mock",
+			"block_interval":      "30 seconds (fast mode)",
 			"production_interval": "~10 minutes",
-			"realistic_timing": true,
+			"realistic_timing":    true,
 		},
 		"sla_performance": map[string]interface{}{
 			"target_latency_ms": 20, // Enterprise tier
-			"current_avg_ms": avgRelayTime,
+			"current_avg_ms":    avgRelayTime,
 			"compliance": func() string {
 				if avgRelayTime <= 20 {
 					return "PASSING"
@@ -220,7 +220,7 @@ func (api *MultiChainAPI) handleStats(w http.ResponseWriter, r *http.Request) {
 			}(),
 		},
 		"response_time_ms": time.Since(start).Seconds() * 1000,
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"timestamp":        time.Now().UTC().Format(time.RFC3339),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -234,12 +234,12 @@ func (api *MultiChainAPI) handleStats(w http.ResponseWriter, r *http.Request) {
 
 func (api *MultiChainAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
 	health := map[string]interface{}{
-		"status": "healthy",
-		"platform": "Multi-Chain Sprint",
-		"version": "2.1.0",
-		"zmq_mock": "active",
+		"status":          "healthy",
+		"platform":        "Multi-Chain Sprint",
+		"version":         "2.1.0",
+		"zmq_mock":        "active",
 		"blocks_detected": len(api.blockEvents),
-		"uptime": time.Now().UTC().Format(time.RFC3339),
+		"uptime":          time.Now().UTC().Format(time.RFC3339),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
