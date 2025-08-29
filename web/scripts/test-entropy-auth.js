@@ -5,7 +5,7 @@
  * Run this to verify the entropy bridge and admin auth system is working
  */
 
-import { getEntropyBridge, generateAdminSecret } from '../lib/rust-entropy-bridge.js'
+import { getEntropyBridge, generateAdminSecret } from '../lib/rust-entropy-bridge.ts'
 
 async function testEntropyBridge() {
   console.log('🔐 Testing Dynamic Admin Authentication System\n')

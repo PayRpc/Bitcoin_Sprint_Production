@@ -5,15 +5,19 @@ import { fileURLToPath } from 'url';
 // Dynamic import for FFI (ESM compatible)
 let ffi: any = null;
 let ref: any = null;
+let ffiAvailable = false;
 
 try {
-  // Dynamic imports for ESM compatibility
+  // Try to load FFI modules dynamically
   const ffiModule = await import('ffi-napi');
   const refModule = await import('ref-napi');
   ffi = ffiModule.default;
   ref = refModule.default;
+  ffiAvailable = true;
 } catch (error) {
-  console.warn('FFI modules not available, using fallback mode');
+  console.warn('FFI modules not available, using Node.js crypto fallback');
+  console.warn('To enable Rust entropy: npm install ffi-napi ref-napi ref-struct-di');
+  ffiAvailable = false;
 }
 
 /**
@@ -25,12 +29,18 @@ export class RustEntropyBridge {
   private isInitialized = false;
 
   constructor() {
-    this.initialize();
+    // Initialize immediately since FFI check is done at module level
+    this.isInitialized = ffiAvailable;
+    if (ffiAvailable) {
+      this.initializeFFI();
+    } else {
+      console.log('✅ Rust entropy bridge initialized with Node.js crypto fallback');
+    }
   }
 
-  private async initialize() {
+  private initializeFFI() {
     if (!ffi || !ref) {
-      console.warn('FFI not available, using fallback entropy generation');
+      console.warn('FFI not available during initialization');
       this.isInitialized = false;
       return;
     }
@@ -56,9 +66,10 @@ export class RustEntropyBridge {
       // Load the library
       this.lib = ffi.Library(libPath, libDefinition);
       this.isInitialized = true;
-      console.log('✅ Rust entropy bridge initialized successfully');
+      console.log('✅ Rust entropy bridge initialized successfully with FFI');
     } catch (error) {
-      console.warn('Failed to initialize Rust entropy bridge:', error);
+      console.warn('Failed to initialize Rust entropy bridge FFI:', error);
+      console.warn('Falling back to Node.js crypto');
       this.isInitialized = false;
     }
   }
@@ -151,7 +162,8 @@ export class RustEntropyBridge {
    * Fallback entropy generation when Rust is not available
    */
   private fallbackGenerateSecret(encoding: 'raw' | 'base64' | 'hex'): string {
-    const crypto = await import('crypto');
+    // Use Node.js crypto for fallback
+    const crypto = require('crypto');
 
     // Generate 32 bytes of entropy
     const entropy = crypto.randomBytes(32);
@@ -181,8 +193,8 @@ export class RustEntropyBridge {
   getStatus(): { available: boolean; rustAvailable: boolean; fallbackMode: boolean } {
     return {
       available: true,
-      rustAvailable: this.isInitialized,
-      fallbackMode: !this.isInitialized,
+      rustAvailable: this.isInitialized && ffiAvailable,
+      fallbackMode: !this.isInitialized || !ffiAvailable,
     };
   }
 }
