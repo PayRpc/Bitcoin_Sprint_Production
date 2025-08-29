@@ -60,6 +60,21 @@ scrape_configs:
     scrape_interval: 30s
     scrape_timeout: 10s
 
+  # Additional Solana Validators
+  - job_name: 'solana-validator-2'
+    static_configs:
+      - targets: ['solana-validator-2:9091']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  - job_name: 'solana-validator-3'
+    static_configs:
+      - targets: ['solana-validator-3:9091']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
   # Cosmos Hub monitoring
   - job_name: 'cosmos-hub'
     static_configs:
