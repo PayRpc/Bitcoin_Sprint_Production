@@ -1,5 +1,5 @@
 // Multi-Chain Infrastructure Test - Direct ZMQ Mock Validation
-package main
+package integration
 
 import (
 	"encoding/json"

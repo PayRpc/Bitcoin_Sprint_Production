@@ -1,5 +1,5 @@
 // Simple Multi-Chain Test Server
-package main
+package integration
 
 import (
 	"encoding/json"

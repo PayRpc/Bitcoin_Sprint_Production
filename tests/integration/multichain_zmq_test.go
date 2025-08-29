@@ -1,5 +1,5 @@
 // Simple Multi-Chain Sprint Test using ZMQ Mock
-package main
+package integration
 
 import (
 	"encoding/json"
