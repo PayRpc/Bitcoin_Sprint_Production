@@ -11,7 +11,7 @@ $env:API_HOST = "127.0.0.1"
 $env:API_KEY = "bitcoin-sprint-secure-key"
 
 # Launch the backend process in a way that it won't terminate with the console
-Start-Process -FilePath ".\bitcoin-sprint-backend.exe" -NoNewWindow -PassThru
+Start-Process -FilePath ".\sprintd.exe" -NoNewWindow -PassThru
 
 Write-Host "✅ Backend started successfully on port 9090" -ForegroundColor Green
 Write-Host "API endpoints available at: http://localhost:9090/" -ForegroundColor Cyan
@@ -20,4 +20,4 @@ Write-Host "To stop the backend, find and kill the process" -ForegroundColor Dar
 
 # Display process info
 Write-Host "`nRunning Bitcoin Sprint Backend processes:" -ForegroundColor Magenta
-Get-Process -Name "bitcoin-sprint-backend" | Select-Object Id, ProcessName, StartTime | Format-Table
+Get-Process -Name "sprintd" | Select-Object Id, ProcessName, StartTime | Format-Table

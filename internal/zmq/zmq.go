@@ -5,6 +5,7 @@ package zmq
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
@@ -36,7 +37,13 @@ func (c *Client) Run() {
 	// Try to use real ZMQ if available, fallback to mock if not
 	var endpoint string
 	if len(c.cfg.ZMQNodes) > 0 {
-		endpoint = fmt.Sprintf("tcp://%s", c.cfg.ZMQNodes[0])
+		node := c.cfg.ZMQNodes[0]
+		// Handle endpoints that already have tcp:// prefix
+		if strings.HasPrefix(node, "tcp://") {
+			endpoint = node
+		} else {
+			endpoint = fmt.Sprintf("tcp://%s", node)
+		}
 	} else {
 		endpoint = "tcp://127.0.0.1:28332"
 	}
