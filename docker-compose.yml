@@ -60,7 +60,7 @@ services:
 
   # ===== BITCOIN INFRASTRUCTURE =====
   bitcoin-core:
-    image: bitcoin/bitcoin:26.0
+    image: bitcoin/bitcoin:latest
     container_name: bitcoin-core
     ports:
       - "8332:8332"     # RPC
@@ -69,12 +69,13 @@ services:
       - "28333:28333"   # ZMQ tx notifications
     volumes:
       - bitcoin-data:/home/bitcoin/.bitcoin
-      - ./bitcoin.conf:/home/bitcoin/.bitcoin/bitcoin.conf:ro
     command: |
       bitcoind
       -printtoconsole
+      -server=1
       -rpcallowip=0.0.0.0/0
       -rpcbind=0.0.0.0
+      -rpcauth=sprint:wfvHJIrAqjj82ruW$$0e266d3e61c9389801115ff5cf9f0839d641ba10db9062aaca9983aeec8cdafa
       -zmqpubhashblock=tcp://0.0.0.0:28332
       -zmqpubrawtx=tcp://0.0.0.0:28333
       -txindex=1
@@ -122,8 +123,11 @@ services:
       - "8899:8899"     # RPC
       - "8900:8900"     # WebSocket
       - "9900:9900"     # Gossip
+      - "9092:9091"     # Metrics (Prometheus) - Changed from 9091 to avoid conflict
     volumes:
       - solana-data:/root/.config/solana
+    environment:
+      - SOLANA_METRICS_CONFIG=host=http://0.0.0.0:9091
     command: |
       solana-test-validator
       --rpc-bind-address=0.0.0.0
@@ -132,6 +136,34 @@ services:
       --gossip-port=9900
       --ledger=/root/.config/solana/test-ledger
       --reset
+      --log
+      --accounts-db-cache-size-mb=1024
+      --enable-rpc-transaction-history
+      --rpc-pubsub-enable-block-subscription
+      --rpc-pubsub-enable-account-subscription
+    networks:
+      - sprint-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8899/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===== SOLANA METRICS EXPORTER =====
+  solana-exporter:
+    build:
+      context: .
+      dockerfile: Dockerfile.solana-exporter
+    container_name: solana-exporter
+    ports:
+      - "8082:8080"     # Metrics exporter
+    environment:
+      - SOLANA_RPC_URL=http://solana-validator:8899
+      - METRICS_PORT=8080
+      - UPDATE_INTERVAL=30s
+    depends_on:
+      - solana-validator
     networks:
       - sprint-network
     restart: unless-stopped

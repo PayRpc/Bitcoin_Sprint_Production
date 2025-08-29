@@ -1,0 +1,238 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Bitcoin Sprint - Solana Network Monitoring (Updated)",
+    "tags": ["bitcoin-sprint", "blockchain", "monitoring", "solana", "turbo"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Solana Slot Height (Live)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "solana_slot_height",
+            "legendFormat": "Current Slot"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "Solana Block Height",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "solana_block_height",
+            "legendFormat": "Block Height"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "Transaction Count (Total)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "solana_transaction_count",
+            "legendFormat": "Total Transactions"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 4,
+        "title": "Transactions Per Second (TPS)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "solana_tps",
+            "legendFormat": "TPS"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      },
+      {
+        "id": 5,
+        "title": "Network Latency (ms)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "solana_network_latency_ms",
+            "legendFormat": "Network Latency"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 16
+        }
+      },
+      {
+        "id": 6,
+        "title": "Confirmation Time (ms)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "solana_confirmation_time_ms",
+            "legendFormat": "Confirmation Time"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        }
+      },
+      {
+        "id": 7,
+        "title": "Active Validators",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "solana_validator_count",
+            "legendFormat": "Validators"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 24
+        }
+      },
+      {
+        "id": 8,
+        "title": "System Status - TURBO MODE",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "solana_slot_height > 0",
+            "legendFormat": "Turbo Mode Status"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "options": {
+                  "0": {
+                    "text": "OFFLINE",
+                    "color": "red"
+                  },
+                  "1": {
+                    "text": "TURBO MODE ACTIVE",
+                    "color": "green"
+                  }
+                },
+                "type": "value"
+              }
+            ]
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 24
+        }
+      },
+      {
+        "id": 9,
+        "title": "Slot Height Over Time",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "solana_slot_height",
+            "legendFormat": "Slot Height"
+          }
+        ],
+        "gridPos": {
+          "h": 12,
+          "w": 24,
+          "x": 0,
+          "y": 32
+        }
+      },
+      {
+        "id": 10,
+        "title": "Transaction Rate (TPS)",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(solana_transaction_count[1m])",
+            "legendFormat": "TPS Rate"
+          }
+        ],
+        "gridPos": {
+          "h": 12,
+          "w": 24,
+          "x": 0,
+          "y": 44
+        }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    },
+    "refresh": "5s",
+    "schemaVersion": 37,
+    "version": 0,
+    "links": []
+  }
+}

@@ -4,7 +4,7 @@ datasources:
   - name: Prometheus
     type: prometheus
     access: proxy
-    url: http://host.docker.internal:9091
+    url: http://prometheus:9090
     isDefault: true
     editable: true
     jsonData:
@@ -26,15 +26,12 @@ datasources:
       maxIdleConns: 2
       connMaxLifetime: 14400
       
-  - name: JSON API
-    type: marcusolsson-json-datasource
+  - name: Elasticsearch
+    type: elasticsearch
     access: proxy
-    url: http://host.docker.internal:8080
-    isDefault: false
-    editable: true
+    url: http://elasticsearch:9200
+    database: "[logstash-]YYYY.MM.DD"
     jsonData:
-      cache: "300"
-      tlsSkipVerify: true
-    secureJsonData:
-      # API key will be configured in Grafana UI for security
-      # Authorization header will be set to: Bearer <api_key>
+      interval: Daily
+      timeField: "@timestamp"
+      esVersion: 8

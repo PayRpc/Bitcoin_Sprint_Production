@@ -81,91 +81,6 @@ const cacheMissesTotal = new client.Counter({
   registers: [register],
 });
 
-// Entropy Bridge Metrics
-const entropyBridgeAvailable = new client.Gauge({
-  name: 'bitcoin_sprint_entropy_bridge_available',
-  help: 'Entropy bridge availability status (1 = available, 0 = unavailable)',
-  registers: [register],
-});
-
-const entropyBridgeRustAvailable = new client.Gauge({
-  name: 'bitcoin_sprint_entropy_bridge_rust_available',
-  help: 'Rust entropy bridge availability (1 = available, 0 = unavailable)',
-  registers: [register],
-});
-
-const entropyBridgeFallbackMode = new client.Gauge({
-  name: 'bitcoin_sprint_entropy_bridge_fallback_mode',
-  help: 'Entropy bridge fallback mode status (1 = fallback active, 0 = primary active)',
-  registers: [register],
-});
-
-const entropyBridgeSecretGenerationTotal = new client.Counter({
-  name: 'bitcoin_sprint_entropy_bridge_secret_generation_total',
-  help: 'Total number of admin secrets generated',
-  labelNames: ['source', 'encoding'],
-  registers: [register],
-});
-
-const entropyBridgeSecretGenerationDuration = new client.Histogram({
-  name: 'bitcoin_sprint_entropy_bridge_secret_generation_duration_seconds',
-  help: 'Duration of admin secret generation in seconds',
-  labelNames: ['source', 'encoding'],
-  buckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5],
-  registers: [register],
-});
-
-const entropyBridgeLastSecretGenerated = new client.Gauge({
-  name: 'bitcoin_sprint_entropy_bridge_last_secret_generated_timestamp',
-  help: 'Timestamp of last admin secret generation',
-  registers: [register],
-});
-
-// Entropy Bridge Metrics Update Function
-export async function updateEntropyBridgeMetrics(): Promise<void> {
-  try {
-    // Dynamically import the entropy bridge to avoid circular dependencies
-    let entropyBridge: any = null;
-
-    try {
-      const eb = await import('./rust-entropy-bridge');
-      if (eb && typeof eb.getEntropyBridge === 'function') {
-        entropyBridge = eb.getEntropyBridge();
-      }
-    } catch (err) {
-      console.debug('Could not import entropy bridge for metrics:', err);
-    }
-
-    if (entropyBridge) {
-      const status = entropyBridge.getStatus();
-
-      // Update availability metrics
-      entropyBridgeAvailable.set(status.available ? 1 : 0);
-      entropyBridgeRustAvailable.set(status.rustAvailable ? 1 : 0);
-      entropyBridgeFallbackMode.set(status.fallbackMode ? 1 : 0);
-
-      // Update last secret generation timestamp if available
-      // This would be set when secrets are actually generated
-      if ((global as any).secretLastGenerated) {
-        entropyBridgeLastSecretGenerated.set((global as any).secretLastGenerated / 1000);
-      }
-    } else {
-      // If entropy bridge is not available, set all metrics to 0
-      entropyBridgeAvailable.set(0);
-      entropyBridgeRustAvailable.set(0);
-      entropyBridgeFallbackMode.set(1); // Fallback mode active
-      entropyBridgeLastSecretGenerated.set(0);
-    }
-
-  } catch (error) {
-    console.error('Failed to update entropy bridge metrics:', error);
-    // Set error state
-    entropyBridgeAvailable.set(0);
-    entropyBridgeRustAvailable.set(0);
-    entropyBridgeFallbackMode.set(1);
-  }
-}
-
 // Update metrics function
 export async function updateMaintenanceMetrics(): Promise<void> {
   try {
@@ -222,9 +137,6 @@ export async function updateMaintenanceMetrics(): Promise<void> {
       lastUpdateTimestamp.set(new Date(updateState.last_updated).getTime() / 1000);
     }
 
-    // Update entropy bridge metrics
-    await updateEntropyBridgeMetrics();
-
   } catch (error) {
     console.error('Failed to update maintenance metrics:', error);
   }
@@ -242,13 +154,6 @@ export function recordCacheHit(cacheType: string): void {
 
 export function recordCacheMiss(cacheType: string): void {
   cacheMissesTotal.labels(cacheType).inc();
-}
-
-// Entropy Bridge Metrics Functions
-export function recordEntropySecretGeneration(source: 'rust' | 'nodejs' | 'env', encoding: 'base64' | 'hex' | 'raw', duration: number): void {
-  entropyBridgeSecretGenerationTotal.labels(source, encoding).inc();
-  entropyBridgeSecretGenerationDuration.labels(source, encoding).observe(duration);
-  entropyBridgeLastSecretGenerated.set(Date.now() / 1000);
 }
 
 // Initialize metrics update interval
@@ -289,13 +194,6 @@ export const metrics = {
   apiRequestDuration,
   cacheHitsTotal,
   cacheMissesTotal,
-  // Entropy Bridge Metrics
-  entropyBridgeAvailable,
-  entropyBridgeRustAvailable,
-  entropyBridgeFallbackMode,
-  entropyBridgeSecretGenerationTotal,
-  entropyBridgeSecretGenerationDuration,
-  entropyBridgeLastSecretGenerated,
 };
 
 // Auto-start metrics collection when module is imported

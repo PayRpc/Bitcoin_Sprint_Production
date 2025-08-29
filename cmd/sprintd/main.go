@@ -48,10 +48,9 @@ import (
 	"github.com/PayRpc/Bitcoin-Sprint/internal/api"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/relay"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/securebuf"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/zmq"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Config represents the application configuration
@@ -2799,62 +2798,6 @@ func (mt *MetricsTracker) ObserveHistogram(name string, value float64, labels ..
 
 }
 
-// Prometheus metrics
-var (
-	// Chain metrics
-	sprintChainBlockHeight = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "sprint_chain_block_height",
-			Help: "Current block height for each chain",
-		},
-		[]string{"chain"},
-	)
-
-	sprintChainPeerCount = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "sprint_chain_peer_count",
-			Help: "Number of peers connected for each chain",
-		},
-		[]string{"chain"},
-	)
-
-	sprintChainHealthScore = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "sprint_chain_health_score",
-			Help: "Health score for each chain (0-10)",
-		},
-		[]string{"chain"},
-	)
-
-	// API request duration histogram
-	sprintAPIRequestDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "sprint_api_request_duration_seconds",
-			Help:    "API request duration in seconds",
-			Buckets: prometheus.DefBuckets,
-		},
-		[]string{"chain", "method"},
-	)
-
-	// API requests counter
-	sprintAPIRequestsTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "sprint_api_requests_total",
-			Help: "Total number of API requests",
-		},
-		[]string{"chain", "method"},
-	)
-)
-
-func init() {
-	// Register Prometheus metrics
-	prometheus.MustRegister(sprintChainBlockHeight)
-	prometheus.MustRegister(sprintChainPeerCount)
-	prometheus.MustRegister(sprintChainHealthScore)
-	prometheus.MustRegister(sprintAPIRequestDuration)
-	prometheus.MustRegister(sprintAPIRequestsTotal)
-}
-
 // WebSocketLimiter manages WebSocket connection limits
 
 type WebSocketLimiter struct {
@@ -3108,6 +3051,11 @@ type Server struct {
 	zmqClient *zmq.Client
 
 	mempool *Mempool
+
+	// Add relay dispatcher for proper Solana integration
+	relayDispatcher *relay.RelayDispatcher
+
+	solanaRelay *relay.SolanaRelay
 }
 
 type Clock interface {
@@ -3332,6 +3280,33 @@ func NewServer(cfg Config, logger *zap.Logger) *Server {
 	server.ual.server = server
 	server.esm.server = server
 
+	// Initialize relay dispatcher for proper blockchain integration
+	server.relayDispatcher = relay.NewRelayDispatcher(config.Config{}, logger)
+
+	// Initialize Solana relay with proper configuration
+	solanaConfig := relay.RelayConfig{
+		Network:     "solana",
+		Endpoints:   []string{"http://solana-validator:8899", "ws://solana-validator:8900"},
+		Timeout:     30 * time.Second,
+		RetryAttempts: 3,
+		RetryDelay:  5 * time.Second,
+		MaxConcurrency: 10,
+		BufferSize:  1024,
+		EnableCompression: false,
+	}
+
+	solanaRelay, err := relay.NewSolanaRelay(config.Config{}, logger)
+	if err != nil {
+		logger.Warn("Failed to create Solana relay, Solana features will be unavailable", zap.Error(err))
+	} else {
+		server.solanaRelay = solanaRelay
+		if err := server.relayDispatcher.RegisterClient("solana", solanaRelay); err != nil {
+			logger.Warn("Failed to register Solana relay", zap.Error(err))
+		} else {
+			logger.Info("Solana relay registered successfully")
+		}
+	}
+
 	for _, chain := range []string{"bitcoin", "ethereum", "solana"} {
 
 		server.ual.chainAdapters[chain] = NewChainAdapter(chain)
@@ -3510,10 +3485,6 @@ func (s *Server) universalHandler(w http.ResponseWriter, r *http.Request) {
 		duration := time.Since(start)
 
 		s.latencyOptimizer.TrackRequest(chain, duration)
-
-		// Track Prometheus metrics
-		sprintAPIRequestsTotal.WithLabelValues(chain, method).Inc()
-		sprintAPIRequestDuration.WithLabelValues(chain, method).Observe(duration.Seconds())
 
 		if duration > 100*time.Millisecond {
 
@@ -3809,36 +3780,6 @@ func (s *Server) versionHandler(w http.ResponseWriter, r *http.Request) {
 
 	s.turboJsonResponse(w, http.StatusOK, resp)
 
-}
-
-func (s *Server) metricsHandler(w http.ResponseWriter, r *http.Request) {
-	// Update Prometheus metrics with current data
-	s.updatePrometheusMetrics()
-
-	// Use Prometheus HTTP handler
-	promhttp.Handler().ServeHTTP(w, r)
-}
-
-func (s *Server) updatePrometheusMetrics() {
-	// Update chain metrics for Ethereum
-	// These would typically come from actual blockchain data
-	// For now, we'll simulate realistic values
-
-	// Ethereum block height (simulated)
-	sprintChainBlockHeight.WithLabelValues("ethereum").Set(18500000 + float64(time.Now().Unix()%1000))
-
-	// Ethereum peer count (simulated)
-	sprintChainPeerCount.WithLabelValues("ethereum").Set(45 + float64(time.Now().Unix()%20))
-
-	// Ethereum health score (simulated)
-	sprintChainHealthScore.WithLabelValues("ethereum").Set(8.5 + float64(time.Now().Unix()%2))
-
-	// Update metrics from the existing MetricsTracker
-	s.metrics.mutex.RLock()
-	defer s.metrics.mutex.RUnlock()
-
-	// This would be enhanced to properly map existing metrics to Prometheus
-	// For now, we'll focus on the core chain metrics that Grafana needs
 }
 
 func (s *Server) generateKeyHandler(w http.ResponseWriter, r *http.Request) {

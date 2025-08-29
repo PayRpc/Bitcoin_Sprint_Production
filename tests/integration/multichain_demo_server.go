@@ -1,5 +1,5 @@
 // Test ZMQ Mock Functionality
-package integration
+package main
 
 import (
 	"fmt"

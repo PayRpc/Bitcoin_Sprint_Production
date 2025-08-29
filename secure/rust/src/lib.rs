@@ -951,12 +951,12 @@ pub unsafe extern "C" fn hybrid_entropy_with_fingerprint_c(
     }
 
     let mut header_vec = Vec::new();
-
+    
     if !headers.is_null() && !header_lengths.is_null() && header_count > 0 {
         for i in 0..header_count {
             let header_ptr = *headers.add(i);
             let header_len = *header_lengths.add(i);
-
+            
             if !header_ptr.is_null() && header_len > 0 {
                 let header_slice = std::slice::from_raw_parts(header_ptr, header_len);
                 header_vec.push(header_slice.to_vec());
@@ -966,138 +966,5 @@ pub unsafe extern "C" fn hybrid_entropy_with_fingerprint_c(
 
     let entropy_data = entropy::hybrid_entropy_with_fingerprint(&header_vec);
     std::ptr::copy_nonoverlapping(entropy_data.as_ptr(), output, 32);
-    0 // Success
-}
-
-// ============================================================================
-// === ADMIN SECRET FFI EXPORTS ==============================================
-// ============================================================================
-
-/// Generate admin secret using enterprise entropy (64 bytes for high security)
-#[no_mangle]
-pub unsafe extern "C" fn generate_admin_secret_c(
-    output: *mut u8,
-    output_len: usize,
-) -> c_int {
-    if output.is_null() || output_len == 0 {
-        return -1; // Null pointer or invalid length
-    }
-
-    // Generate multiple entropy sources for admin secret
-    let mut entropy_sources = Vec::new();
-
-    // 1. Fast entropy (32 bytes)
-    entropy_sources.extend_from_slice(&entropy::fast_entropy());
-
-    // 2. System fingerprint (32 bytes)
-    if let Ok(fingerprint) = entropy::system_fingerprint() {
-        entropy_sources.extend_from_slice(&fingerprint);
-    } else {
-        // Fallback: add timestamp-based entropy
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
-        entropy_sources.extend_from_slice(&timestamp.to_le_bytes());
-    }
-
-    // 3. Additional system entropy (process ID, thread ID, etc.)
-    let pid = std::process::id();
-    entropy_sources.extend_from_slice(&pid.to_le_bytes());
-
-    // Hash all entropy sources together for final secret
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
-    let mut hasher = DefaultHasher::new();
-    entropy_sources.hash(&mut hasher);
-    let hash_result = hasher.finish();
-
-    // Convert hash to bytes and copy to output
-    let hash_bytes = hash_result.to_le_bytes();
-    let copy_len = std::cmp::min(output_len, hash_bytes.len());
-
-    std::ptr::copy_nonoverlapping(hash_bytes.as_ptr(), output, copy_len);
-
-    // If output is larger than hash, fill remaining with additional entropy
-    if output_len > hash_bytes.len() {
-        let additional_entropy = entropy::fast_entropy();
-        let remaining = output_len - hash_bytes.len();
-        let additional_copy = std::cmp::min(remaining, additional_entropy.len());
-        std::ptr::copy_nonoverlapping(
-            additional_entropy.as_ptr(),
-            output.add(hash_bytes.len()),
-            additional_copy
-        );
-    }
-
-    0 // Success
-}
-
-/// Generate admin secret as Base64 string (safer for transport)
-#[no_mangle]
-pub unsafe extern "C" fn generate_admin_secret_base64_c(
-    output: *mut c_char,
-    output_max_len: usize,
-) -> c_int {
-    if output.is_null() || output_max_len < 45 { // Minimum for 32 bytes base64 + null
-        return -1; // Null pointer or buffer too small
-    }
-
-    // Generate raw entropy
-    let mut raw_secret = [0u8; 32];
-    let result = generate_admin_secret_c(raw_secret.as_mut_ptr(), 32);
-    if result != 0 {
-        return result;
-    }
-
-    // Encode as base64
-    let base64_string = base64::encode(&raw_secret);
-
-    // Copy to output buffer (ensure null termination)
-    let copy_len = std::cmp::min(output_max_len - 1, base64_string.len());
-    let c_string = std::ffi::CString::new(base64_string).unwrap_or_default();
-    let bytes = c_string.as_bytes_with_nul();
-
-    if bytes.len() > output_max_len {
-        return -2; // Buffer too small
-    }
-
-    std::ptr::copy_nonoverlapping(bytes.as_ptr(), output as *mut u8, bytes.len());
-
-    0 // Success
-}
-
-/// Generate admin secret as hex string (alternative encoding)
-#[no_mangle]
-pub unsafe extern "C" fn generate_admin_secret_hex_c(
-    output: *mut c_char,
-    output_max_len: usize,
-) -> c_int {
-    if output.is_null() || output_max_len < 65 { // 32 bytes * 2 + null
-        return -1; // Null pointer or buffer too small
-    }
-
-    // Generate raw entropy
-    let mut raw_secret = [0u8; 32];
-    let result = generate_admin_secret_c(raw_secret.as_mut_ptr(), 32);
-    if result != 0 {
-        return result;
-    }
-
-    // Encode as hex
-    let hex_string = hex::encode(&raw_secret);
-
-    // Copy to output buffer (ensure null termination)
-    let copy_len = std::cmp::min(output_max_len - 1, hex_string.len());
-    let c_string = std::ffi::CString::new(hex_string).unwrap_or_default();
-    let bytes = c_string.as_bytes_with_nul();
-
-    if bytes.len() > output_max_len {
-        return -2; // Buffer too small
-    }
-
-    std::ptr::copy_nonoverlapping(bytes.as_ptr(), output as *mut u8, bytes.len());
-
     0 // Success
 }

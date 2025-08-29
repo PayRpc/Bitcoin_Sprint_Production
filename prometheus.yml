@@ -42,20 +42,23 @@ scrape_configs:
     metrics_path: '/debug/metrics/prometheus'
     scrape_interval: 30s
 
-  # Sprint Metrics Server (Ethereum chain data)
-  - job_name: 'sprint-metrics-server'
-    static_configs:
-      - targets: ['172.25.176.1:8081']
-    metrics_path: '/metrics'
-    scrape_interval: 15s
-    scrape_timeout: 5s
-
   # Solana validator monitoring
   - job_name: 'solana-validator'
+    static_configs:
+      - targets: ['solana-exporter:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    params:
+      format: ['prometheus']
+
+  # Solana RPC monitoring
+  - job_name: 'solana-rpc'
     static_configs:
       - targets: ['solana-validator:8899']
     metrics_path: '/metrics'
     scrape_interval: 30s
+    scrape_timeout: 10s
 
   # Cosmos Hub monitoring
   - job_name: 'cosmos-hub'

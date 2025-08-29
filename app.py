@@ -34,14 +34,8 @@ API_KEYS = {
     "enterprise": ["demo-key-enterprise"]
 }
 
-# Rate limiting - make Redis optional
-try:
-    limiter = Limiter(key_func=get_remote_address, storage_uri=REDIS_URL)
-    redis_available = True
-except Exception as e:
-    print(f"Redis not available, using in-memory rate limiting: {e}")
-    limiter = Limiter(key_func=get_remote_address)
-    redis_available = False
+# Rate limiting
+limiter = Limiter(key_func=get_remote_address, storage_uri=REDIS_URL)
 
 # FastAPI app
 app = FastAPI(
@@ -62,29 +56,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Add rate limiting middleware (disabled for now to fix startup issues)
-# app.state.limiter = limiter
-# app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-# app.add_middleware(SlowAPIMiddleware)
+# Add rate limiting middleware
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # HTTP client for Go backend
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    try:
-        app.state.http_client = httpx.AsyncClient(timeout=30.0)
-        setup_prometheus(app)
-        print("FastAPI startup complete")
-    except Exception as e:
-        print(f"Startup error: {e}")
-        # Continue without failing
+    app.state.http_client = httpx.AsyncClient(timeout=30.0)
+    setup_prometheus(app)
     yield
     # Shutdown
-    try:
-        await app.state.http_client.aclose()
-        print("FastAPI shutdown complete")
-    except Exception as e:
-        print(f"Shutdown error: {e}")
+    await app.state.http_client.aclose()
 
 # Add lifespan to existing app
 app.router.lifespan_context = lifespan
@@ -106,21 +91,25 @@ async def check_rate_limit(request: Request, api_key: str = Depends(get_api_key)
     if not tier:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    # For now, just return the API key - rate limiting is handled by decorators
-    # In production, you might want more sophisticated rate limiting logic
+    limits = get_tier_limits(tier)
+
+    # Apply rate limiting based on tier
+    if tier == "free":
+        limiter.limit("20/minute")(request)
+    elif tier == "pro":
+        limiter.limit("1000/minute")(request)
+    # Enterprise has no rate limiting
+
     return api_key
+
+@app.get("/test")
+async def test_endpoint():
+    """Simple test endpoint without authentication"""
+    return {"message": "Test endpoint works!", "timestamp": datetime.utcnow().isoformat()}
 
 @app.post("/generate-key")
 async def generate_api_key(request: Request):
-    """Generate a new API key for testing purposes (development/demo only)"""
-    # In production, this should require admin authentication
-    # For now, allow in development but log the request
-    client_ip = request.client.host if request.client else "unknown"
-    user_agent = request.headers.get("user-agent", "unknown")
-
-    # Log key generation attempt
-    print(f"Key generation attempt from {client_ip} - {user_agent}")
-
+    """Generate a new API key for testing purposes (no auth required for demo)"""
     try:
         body = await request.json()
         tier = body.get("tier", "free")
@@ -140,32 +129,16 @@ async def generate_api_key(request: Request):
             "api_key": demo_keys[tier],
             "tier": tier,
             "limits": get_tier_limits(tier),
-            "note": "This is a demo key. Use Authorization: Bearer <key> header for requests",
-            "warning": "This endpoint is for development/testing only"
+            "note": "This is a demo key. Use Authorization: Bearer <key> header for requests"
         }
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid request: {str(e)}")
 
-@app.get("/test")
-async def test_endpoint():
-    """Simple test endpoint that doesn't require authentication"""
-    return {
-        "message": "FastAPI Gateway is working!",
-        "timestamp": datetime.utcnow().isoformat(),
-        "version": "2.5.0",
-        "status": "operational"
-    }
-
 @app.get("/health")
 async def health_check():
     """Basic health check endpoint"""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
-        "gateway": "FastAPI",
-        "version": "2.5.0"
-    }
+    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
 @app.get("/status", response_model=StatusResponse)
 @limiter.limit("60/minute")
@@ -175,9 +148,9 @@ async def get_status(request: Request, api_key: str = Depends(check_rate_limit))
 
     try:
         # Get status from Go backend
-        client = app.state.http_client
-        response = await client.get(f"{GO_BACKEND_URL}/status")
-        go_status = response.json()
+        async with app.state.http_client as client:
+            response = await client.get(f"{GO_BACKEND_URL}/status")
+            go_status = response.json()
 
         # Enhance with FastAPI-specific data
         enhanced_status = SystemStatus(
@@ -210,9 +183,9 @@ async def get_readiness(request: Request, api_key: str = Depends(check_rate_limi
 
     try:
         # Get readiness from Go backend
-        client = app.state.http_client
-        response = await client.get(f"{GO_BACKEND_URL}/readiness")
-        go_readiness = response.json()
+        async with app.state.http_client as client:
+            response = await client.get(f"{GO_BACKEND_URL}/readiness")
+            go_readiness = response.json()
 
         return ReadinessResponse(
             success=True,
@@ -245,7 +218,7 @@ async def list_api_keys(api_key: str = Depends(get_api_key)):
         "note": "Use these keys in Authorization header: Bearer <key>"
     }
 
-# Proxy other endpoints to Go backend (must be last)
+# Proxy other endpoints to Go backend
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 @limiter.limit("100/minute")
 async def proxy_to_backend(
@@ -263,23 +236,19 @@ async def proxy_to_backend(
         # Get request body if any
         body = await request.body()
 
-        # Filter headers - don't forward Authorization to backend
-        safe_headers = {k: v for k, v in request.headers.items()
-                       if k.lower() not in ["authorization", "host"]}
-
         # Forward request to Go backend
-        client = app.state.http_client
-        response = await client.request(
-            method=request.method,
-            url=target_url,
-            content=body,
-            headers=safe_headers
-        )
+        async with app.state.http_client as client:
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                content=body,
+                headers=dict(request.headers)
+            )
 
-        return JSONResponse(
-            content=response.json(),
-            status_code=response.status_code
-        )
+            return JSONResponse(
+                content=response.json(),
+                status_code=response.status_code
+            )
 
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Backend error: {str(e)}")
