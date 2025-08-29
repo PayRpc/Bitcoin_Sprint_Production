@@ -1,0 +1,244 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Sprint Turbo Validation Dashboard",
+    "tags": ["sprint", "turbo", "validation", "performance"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Turbo Validation Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sprint_turbo_validation_passed",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "options": {
+                  "0": {
+                    "text": "FAILED ❌",
+                    "color": "red"
+                  },
+                  "1": {
+                    "text": "PASSED ✅",
+                    "color": "green"
+                  }
+                },
+                "type": "value"
+              }
+            ]
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "Average Latency (ns)",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "sprint_turbo_avg_latency_ns",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 20000000,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 20000000
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "Throughput (ops/sec)",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "sprint_turbo_throughput_ops",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 10000000,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "orange",
+                  "value": 1000000
+                },
+                {
+                  "color": "red",
+                  "value": 100000
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 4,
+        "title": "Safety Factor (x)",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "sprint_turbo_safety_factor",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 200,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "orange",
+                  "value": 10
+                },
+                {
+                  "color": "green",
+                  "value": 50
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 18,
+          "y": 0
+        }
+      },
+      {
+        "id": 5,
+        "title": "Latency Over Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sprint_turbo_avg_latency_ns",
+            "refId": "A",
+            "legendFormat": "Avg Latency (ns)"
+          }
+        ],
+        "yAxes": [
+          {
+            "format": "ns",
+            "min": 0,
+            "max": 20000000
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 6,
+        "title": "Throughput Over Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sprint_turbo_throughput_ops",
+            "refId": "A",
+            "legendFormat": "Throughput (ops/sec)"
+          }
+        ],
+        "yAxes": [
+          {
+            "format": "ops/sec",
+            "min": 0
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      },
+      {
+        "id": 7,
+        "title": "Validation History",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "sprint_turbo_validation_passed",
+            "refId": "A",
+            "legendFormat": "Validation Status"
+          }
+        ],
+        "gridPos": {
+          "h": 6,
+          "w": 24,
+          "x": 0,
+          "y": 16
+        }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    },
+    "refresh": "30s",
+    "schemaVersion": 27,
+    "version": 0,
+    "links": []
+  }
+}
