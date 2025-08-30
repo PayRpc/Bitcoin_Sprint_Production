@@ -68,11 +68,30 @@ services:
       - "28333:28333"   # ZMQ tx notifications
     volumes:
       - bitcoin-data:/home/bitcoin/.bitcoin
-      - ./bitcoin.conf:/home/bitcoin/.bitcoin/bitcoin.conf:ro
+      - ./bitcoin.conf:/home/bitcoin/.bitcoin/bitcoin.conf
     command: |
       bitcoind
       -printtoconsole
       -conf=/home/bitcoin/.bitcoin/bitcoin.conf
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  # ===== BITCOIN METRICS EXPORTER =====
+  bitcoin-exporter:
+    build:
+      context: .
+      dockerfile: Dockerfile.bitcoin-exporter
+    container_name: bitcoin-exporter
+    ports:
+      - "8080:8080"     # Metrics exporter
+    environment:
+      - RPC_HOST=bitcoin-core
+      - RPC_PORT=8332
+      - RPC_USER=sprint
+      - RPC_PASSWORD=sprint_password_2025
+    depends_on:
+      - bitcoin-core
     networks:
       - sprint-network
     restart: unless-stopped

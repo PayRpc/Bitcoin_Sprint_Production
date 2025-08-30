@@ -64,14 +64,100 @@
       "pluginVersion": "8.5.0",
       "targets": [
         {
-          "expr": "up{job=\"solana-validator\"}",
+          "expr": "up{job=\"solana-exporter\"}",
           "interval": "",
-          "legendFormat": "Solana Validator",
+          "legendFormat": "Solana Exporter",
           "refId": "A"
         }
       ],
-      "title": "Solana Validator Health",
+      "title": "Solana Exporter Health",
       "type": "gauge"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "solana_slot_height",
+          "interval": "",
+          "legendFormat": "Slot Height",
+          "refId": "A"
+        },
+        {
+          "expr": "solana_block_height",
+          "interval": "",
+          "legendFormat": "Block Height",
+          "refId": "B"
+        }
+      ],
+      "title": "Solana Slot & Block Height",
+      "type": "timeseries"
     },
     {
       "datasource": "Prometheus",
@@ -129,87 +215,6 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 0
-      },
-      "id": 2,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "targets": [
-        {
-          "expr": "rate(solana_transactions_processed_total[5m])",
-          "interval": "",
-          "legendFormat": "Transactions/sec",
-          "refId": "A"
-        }
-      ],
-      "title": "Solana Transaction Throughput",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "vis": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
         "x": 0,
         "y": 8
       },
@@ -226,19 +231,19 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, rate(solana_transaction_confirmation_time_bucket[5m]))",
+          "expr": "solana_transaction_count",
           "interval": "",
-          "legendFormat": "P95 Confirmation Time",
+          "legendFormat": "Transaction Count",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.99, rate(solana_transaction_confirmation_time_bucket[5m]))",
+          "expr": "solana_tps",
           "interval": "",
-          "legendFormat": "P99 Confirmation Time",
+          "legendFormat": "TPS",
           "refId": "B"
         }
       ],
-      "title": "Solana Transaction Confirmation Latency",
+      "title": "Solana Transactions",
       "type": "timeseries"
     },
     {
@@ -289,8 +294,7 @@
                 "value": 80
               }
             ]
-          },
-          "unit": "blocks/s"
+          }
         },
         "overrides": []
       },
@@ -313,19 +317,13 @@
       },
       "targets": [
         {
-          "expr": "rate(solana_blocks_produced_total[5m])",
+          "expr": "solana_validator_count",
           "interval": "",
-          "legendFormat": "Blocks Produced/sec",
+          "legendFormat": "Validator Count",
           "refId": "A"
-        },
-        {
-          "expr": "rate(solana_blocks_finalized_total[5m])",
-          "interval": "",
-          "legendFormat": "Blocks Finalized/sec",
-          "refId": "B"
         }
       ],
-      "title": "Solana Block Production Rate",
+      "title": "Solana Network Validators",
       "type": "timeseries"
     },
     {
@@ -377,7 +375,7 @@
               }
             ]
           },
-          "unit": "percent"
+          "unit": "ms"
         },
         "overrides": []
       },
@@ -400,19 +398,19 @@
       },
       "targets": [
         {
-          "expr": "solana_validator_uptime_ratio * 100",
+          "expr": "solana_network_latency_ms",
           "interval": "",
-          "legendFormat": "Validator Uptime %",
+          "legendFormat": "Network Latency",
           "refId": "A"
         },
         {
-          "expr": "solana_network_participation_ratio * 100",
+          "expr": "solana_confirmation_time_ms",
           "interval": "",
-          "legendFormat": "Network Participation %",
+          "legendFormat": "Confirmation Time",
           "refId": "B"
         }
       ],
-      "title": "Solana Validator Performance",
+      "title": "Solana Network Performance",
       "type": "timeseries"
     },
     {
@@ -505,194 +503,14 @@
           "refId": "C"
         }
       ],
-      "title": "Solana Storage Metrics",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "vis": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "reqps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 24
-      },
-      "id": 7,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "targets": [
-        {
-          "expr": "rate(solana_gossip_messages_received_total[5m])",
-          "interval": "",
-          "legendFormat": "Gossip Messages Received",
-          "refId": "A"
-        },
-        {
-          "expr": "rate(solana_gossip_messages_sent_total[5m])",
-          "interval": "",
-          "legendFormat": "Gossip Messages Sent",
-          "refId": "B"
-        }
-      ],
-      "title": "Solana Network Gossip Activity",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "vis": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 24
-      },
-      "id": 8,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "targets": [
-        {
-          "expr": "solana_cpu_usage_percent",
-          "interval": "",
-          "legendFormat": "CPU Usage %",
-          "refId": "A"
-        },
-        {
-          "expr": "solana_memory_usage_percent",
-          "interval": "",
-          "legendFormat": "Memory Usage %",
-          "refId": "B"
-        },
-        {
-          "expr": "solana_disk_usage_percent",
-          "interval": "",
-          "legendFormat": "Disk Usage %",
-          "refId": "C"
-        }
-      ],
-      "title": "Solana System Resources",
+      "title": "Solana Storage Usage",
       "type": "timeseries"
     }
   ],
   "refresh": "30s",
   "schemaVersion": 36,
   "style": "dark",
-  "tags": ["solana", "blockchain", "monitoring", "bitcoin-sprint"],
+  "tags": ["solana", "blockchain", "monitoring"],
   "templating": {
     "list": []
   },

@@ -21,11 +21,12 @@ scrape_configs:
     scrape_interval: 10s
     metrics_path: '/metrics'
 
-  # Bitcoin Core
+  # Bitcoin Core (via exporter)
   - job_name: 'bitcoin-core'
     static_configs:
-      - targets: ['bitcoin-core:8332']
+      - targets: ['bitcoin-exporter:8080']
     scrape_interval: 30s
+    metrics_path: '/metrics'
 
   # Ethereum Geth
   - job_name: 'ethereum-geth'
@@ -33,12 +34,6 @@ scrape_configs:
       - targets: ['geth:6060']
     scrape_interval: 15s
     metrics_path: '/debug/metrics/prometheus'
-
-  # Solana Validator
-  - job_name: 'solana-validator'
-    static_configs:
-      - targets: ['solana-validator:9091']
-    scrape_interval: 15s
 
   # Solana Exporter
   - job_name: 'solana-exporter'
