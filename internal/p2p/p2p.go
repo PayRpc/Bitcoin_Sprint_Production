@@ -74,9 +74,6 @@ type BlockProcessor struct {
 	backpressureMu sync.RWMutex
 	circuitBreaker *CircuitBreaker
 
-	// Compact block processing
-	compactProcessor *CompactBlockProcessor
-
 	// Metrics
 	processedBlocks    int64
 	droppedBlocks      int64
@@ -211,9 +208,7 @@ func (c *Client) Run() {
 		select {
 		case p := <-connectionChan:
 			if p != nil {
-				c.mu.Lock()
-				c.peers = append(c.peers, p)
-				c.mu.Unlock()
+				c.addPeerSafe(p)
 				successfulConnections++
 			}
 		case <-time.After(30 * time.Second):
@@ -221,9 +216,13 @@ func (c *Client) Run() {
 		}
 	}
 
+	c.mu.RLock()
+	peerCount := len(c.peers)
+	c.mu.RUnlock()
 	c.logger.Info("P2P connection pool established",
 		zap.Int("successful", successfulConnections),
-		zap.Int("pool_size", poolSize))
+		zap.Int("pool_size", poolSize),
+		zap.Int("current_peers", peerCount))
 
 	// Start concurrent block processing pipeline
 	c.startBlockProcessingPipeline()
@@ -290,8 +289,16 @@ func (c *Client) parallelConnect(address string, connectionChan chan<- *peer.Pee
 				return nil
 			},
 			OnVerAck: func(p *peer.Peer, msg *wire.MsgVerAck) {
-				c.logger.Info("Version acknowledgment received",
-					zap.String("peer", address))
+				// Normal logging
+				c.logger.Info("Version acknowledgment received", zap.String("peer", address))
+
+				// For Sprint peers, authentication already happened during connection
+				// For regular Bitcoin peers, no additional auth needed
+			},
+			OnPong: func(p *peer.Peer, msg *wire.MsgPong) {
+				// Normal pong handling - no token validation needed
+				// since Sprint authentication happens at connection time
+				c.logger.Debug("Pong received", zap.String("peer", address))
 			},
 			OnBlock: func(p *peer.Peer, msg *wire.MsgBlock, buf []byte) {
 				c.handleBlock(msg)
@@ -303,12 +310,6 @@ func (c *Client) parallelConnect(address string, connectionChan chan<- *peer.Pee
 				c.logger.Debug("Received transaction",
 					zap.String("txid", msg.TxHash().String()),
 					zap.String("peer", address))
-			},
-			OnCmpctBlock: func(p *peer.Peer, msg *wire.MsgCmpctBlock) {
-				c.handleCompactBlock(p, msg)
-			},
-			OnBlockTxn: func(p *peer.Peer, msg *wire.MsgBlockTxn) {
-				c.handleBlockTxn(p, msg)
 			},
 		},
 	}
@@ -328,10 +329,19 @@ func (c *Client) parallelConnect(address string, connectionChan chan<- *peer.Pee
 		return
 	}
 
+	// If peer is in Sprint relay cluster list, enforce handshake
+	if c.isSprintPeer(address) {
+		if err := c.auth.PerformHandshakeClient(conn, 5*time.Second); err != nil {
+			c.logger.Warn("Sprint handshake failed", zap.String("peer", address), zap.Error(err))
+			conn.Close()
+			connectionChan <- nil
+			return
+		}
+		c.logger.Debug("Sprint peer authenticated", zap.String("peer", address))
+	}
+
 	// Add to peer list
-	c.mu.Lock()
-	c.peers = append(c.peers, p)
-	c.mu.Unlock()
+	c.addPeerSafe(p)
 
 	// Associate connection with peer
 	p.AssociateConnection(conn)
@@ -730,8 +740,16 @@ func (c *Client) connectToPeer(address string) error {
 				return nil
 			},
 			OnVerAck: func(p *peer.Peer, msg *wire.MsgVerAck) {
-				c.logger.Info("Version acknowledgment received",
-					zap.String("peer", address))
+				// Normal logging
+				c.logger.Info("Version acknowledgment received", zap.String("peer", address))
+
+				// For Sprint peers, authentication already happened during connection
+				// For regular Bitcoin peers, no additional auth needed
+			},
+			OnPong: func(p *peer.Peer, msg *wire.MsgPong) {
+				// Normal pong handling - no token validation needed
+				// since Sprint authentication happens at connection time
+				c.logger.Debug("Pong received", zap.String("peer", address))
 			},
 			OnBlock: func(p *peer.Peer, msg *wire.MsgBlock, buf []byte) {
 				c.handleBlock(msg)
@@ -743,12 +761,6 @@ func (c *Client) connectToPeer(address string) error {
 				c.logger.Debug("Received transaction",
 					zap.String("txid", msg.TxHash().String()),
 					zap.String("peer", address))
-			},
-			OnCmpctBlock: func(p *peer.Peer, msg *wire.MsgCmpctBlock) {
-				c.handleCompactBlock(p, msg)
-			},
-			OnBlockTxn: func(p *peer.Peer, msg *wire.MsgBlockTxn) {
-				c.handleBlockTxn(p, msg)
 			},
 		},
 	}
@@ -764,10 +776,18 @@ func (c *Client) connectToPeer(address string) error {
 		return fmt.Errorf("failed to connect: %w", err)
 	}
 
+	// If peer is in Sprint relay cluster list, enforce handshake
+	if c.isSprintPeer(address) {
+		if err := c.auth.PerformHandshakeClient(conn, 5*time.Second); err != nil {
+			c.logger.Warn("Sprint handshake failed", zap.String("peer", address), zap.Error(err))
+			conn.Close()
+			return err
+		}
+		c.logger.Debug("Sprint peer authenticated", zap.String("peer", address))
+	}
+
 	// Add to peer list
-	c.mu.Lock()
-	c.peers = append(c.peers, p)
-	c.mu.Unlock()
+	c.addPeerSafe(p)
 
 	// Associate connection with peer
 	p.AssociateConnection(conn)
@@ -924,116 +944,6 @@ func (c *Client) requestHeadersFromPeer(p *peer.Peer, startHash *chainhash.Hash)
 	p.QueueMessage(getHeaders, nil)
 }
 
-// CompactBlockProcessor handles compact block processing for bandwidth efficiency
-type CompactBlockProcessor struct {
-	enabled      bool
-	shortTxIDs   map[string][]byte // Maps block hash to short tx IDs
-	blockCache   map[string]*wire.MsgBlock
-	cacheMu      sync.RWMutex
-	maxCacheSize int
-}
-
-// EnableCompactBlocks enables compact block processing
-func (c *Client) EnableCompactBlocks() {
-	c.blockProcessor.compactProcessor = &CompactBlockProcessor{
-		enabled:      true,
-		shortTxIDs:   make(map[string][]byte),
-		blockCache:   make(map[string]*wire.MsgBlock),
-		maxCacheSize: 1000,
-	}
-	c.logger.Info("Compact block processing enabled")
-}
-
-// handleCompactBlock processes incoming compact blocks
-func (c *Client) handleCompactBlock(p *peer.Peer, msg *wire.MsgCmpctBlock) {
-	if !c.blockProcessor.compactProcessor.enabled {
-		return
-	}
-
-	blockHash := msg.BlockHash().String()
-	c.logger.Debug("Received compact block", zap.String("hash", blockHash))
-
-	// Check if we have the full block in cache
-	c.blockProcessor.compactProcessor.cacheMu.RLock()
-	if fullBlock, exists := c.blockProcessor.compactProcessor.blockCache[blockHash]; exists {
-		c.blockProcessor.compactProcessor.cacheMu.RUnlock()
-		c.handleBlock(fullBlock)
-		return
-	}
-	c.blockProcessor.compactProcessor.cacheMu.RUnlock()
-
-	// Request missing transactions
-	getBlockTxn := wire.NewMsgGetBlockTxn()
-	getBlockTxn.BlockHash = msg.BlockHash()
-
-	// Add indices of missing transactions
-	for i, shortID := range msg.ShortIDs {
-		if !c.hasTransaction(shortID) {
-			getBlockTxn.AddShortIDIndex(uint16(i))
-		}
-	}
-
-	if len(getBlockTxn.ShortIDIndexes) > 0 {
-		p.QueueMessage(getBlockTxn, nil)
-		c.logger.Debug("Requested missing transactions for compact block",
-			zap.String("hash", blockHash),
-			zap.Int("missing_tx", len(getBlockTxn.ShortIDIndexes)))
-	}
-}
-
-// hasTransaction checks if we have a transaction by its short ID
-func (c *Client) hasTransaction(shortID []byte) bool {
-	// In a full implementation, this would check the mempool and UTXO set
-	// For now, we'll use a simple heuristic
-	return len(shortID) == 6 // Placeholder logic
-}
-
-// handleBlockTxn processes block transaction responses
-func (c *Client) handleBlockTxn(p *peer.Peer, msg *wire.MsgBlockTxn) {
-	if !c.blockProcessor.compactProcessor.enabled {
-		return
-	}
-
-	blockHash := msg.BlockHash.String()
-	c.logger.Debug("Received block transactions", zap.String("hash", blockHash))
-
-	// Reconstruct full block from compact block + transactions
-	c.blockProcessor.compactProcessor.cacheMu.RLock()
-	compactBlock, exists := c.blockProcessor.compactProcessor.blockCache[blockHash]
-	c.blockProcessor.compactProcessor.cacheMu.RUnlock()
-
-	if !exists {
-		c.logger.Warn("Received block transactions for unknown compact block",
-			zap.String("hash", blockHash))
-		return
-	}
-
-	// Reconstruct full block (simplified)
-	fullBlock := &wire.MsgBlock{
-		Header: compactBlock.Header,
-	}
-
-	// Add transactions from the response
-	for _, tx := range msg.Transactions {
-		fullBlock.AddTransaction(tx)
-	}
-
-	// Cache the reconstructed block
-	c.blockProcessor.compactProcessor.cacheMu.Lock()
-	if len(c.blockProcessor.compactProcessor.blockCache) >= c.blockProcessor.compactProcessor.maxCacheSize {
-		// Remove oldest entry (simplified LRU)
-		for hash := range c.blockProcessor.compactProcessor.blockCache {
-			delete(c.blockProcessor.compactProcessor.blockCache, hash)
-			break
-		}
-	}
-	c.blockProcessor.compactProcessor.blockCache[blockHash] = fullBlock
-	c.blockProcessor.compactProcessor.cacheMu.Unlock()
-
-	// Process the reconstructed block
-	c.handleBlock(fullBlock)
-}
-
 // NetworkHealthMonitor tracks overall network health and performance
 type NetworkHealthMonitor struct {
 	networkHashrate   int64
@@ -1173,6 +1083,23 @@ func (c *Client) requestFeeEstimation(targetBlocks int) (float64, error) {
 	return 5.0, nil // Minimum fee rate
 }
 
+// addPeerSafe safely adds a peer to the peers slice with proper locking
+func (c *Client) addPeerSafe(p *peer.Peer) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.peers = append(c.peers, p)
+}
+
+// isSprintPeer checks if an address is in the configured Sprint relay peer list
+func (c *Client) isSprintPeer(addr string) bool {
+	for _, sprintNode := range c.cfg.SprintRelayPeers {
+		if addr == sprintNode {
+			return true
+		}
+	}
+	return false
+}
+
 // updateNetworkHealthWithBlock updates network health metrics when a new block is received
 func (c *Client) updateNetworkHealthWithBlock(block *wire.MsgBlock) {
 	if c.networkHealth == nil {
@@ -1182,18 +1109,14 @@ func (c *Client) updateNetworkHealthWithBlock(block *wire.MsgBlock) {
 	c.networkHealth.mu.Lock()
 	defer c.networkHealth.mu.Unlock()
 
-	now := time.Now()
+	prev := c.networkHealth.lastBlockTime
+	now := block.Header.Timestamp
+	if !prev.IsZero() && now.After(prev) {
+		c.networkHealth.blockInterval = now.Sub(prev)
+	}
 	c.networkHealth.lastBlockTime = now
 
-	// Estimate network hashrate based on block interval (simplified)
-	if !c.networkHealth.lastBlockTime.IsZero() {
-		timeDiff := now.Sub(c.networkHealth.lastBlockTime)
-		if timeDiff > 0 {
-			c.networkHealth.blockInterval = timeDiff
-		}
-	}
-
-	// Update difficulty (simplified - would need actual calculation)
+	// Update difficulty (simplified - would need actual calc)
 	c.networkHealth.networkDifficulty = float64(block.Header.Bits)
 
 	c.logger.Debug("Updated network health with new block",

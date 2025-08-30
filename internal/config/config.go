@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -86,6 +87,9 @@ type Config struct {
 	DatabaseType      string // sqlite, postgres, redis
 	DatabaseURL       string // Connection string
 	EnablePersistence bool   // Enable key persistence
+
+	// Sprint relay peer settings
+	SprintRelayPeers []string // List of Sprint relay peers requiring authentication
 }
 
 // Load reads config from env
@@ -133,6 +137,9 @@ func Load() Config {
 		// Blockchain-agnostic settings
 		SupportedChains: []string{"btc", "eth", "sol", "polygon", "arbitrum"},
 		DefaultChain:    getEnv("DEFAULT_CHAIN", "btc"),
+
+		// Sprint relay peer settings (configurable via env)
+		SprintRelayPeers: getEnvSlice("SPRINT_RELAY_PEERS", []string{}),
 
 		// Turbo mode defaults
 		Tier:               tier,
@@ -259,6 +266,23 @@ func getEnvInt(key string, def int) int {
 func getEnvBool(key string, def bool) bool {
 	if v := os.Getenv(key); v != "" {
 		return v == "1" || v == "true"
+	}
+	return def
+}
+
+func getEnvSlice(key string, def []string) []string {
+	if v := os.Getenv(key); v != "" {
+		// Simple comma-separated parsing (can be enhanced for more complex formats)
+		if v == "" {
+			return def
+		}
+		// Split by comma and trim spaces
+		parts := strings.Split(v, ",")
+		result := make([]string, len(parts))
+		for i, part := range parts {
+			result[i] = strings.TrimSpace(part)
+		}
+		return result
 	}
 	return def
 }

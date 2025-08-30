@@ -32,6 +32,10 @@ type Authenticator struct {
 	seen        sync.Map // key-> seenNonce
 	stopJanitor chan struct{}
 	janitorOnce atomic.Bool
+
+	// Prometheus metrics
+	handshakesSuccess int64
+	handshakesFailure int64
 }
 
 type seenNonce struct {
@@ -192,40 +196,50 @@ func (a *Authenticator) PerformHandshakeClient(conn net.Conn, timeout time.Durat
 	// Send request
 	req, err := a.CreateHandshakeMessage()
 	if err != nil {
+		atomic.AddInt64(&a.handshakesFailure, 1)
 		return fmt.Errorf("failed to create handshake: %w", err)
 	}
 	if err := writeFramedJSON(conn, req); err != nil {
+		atomic.AddInt64(&a.handshakesFailure, 1)
 		return fmt.Errorf("failed to send handshake: %w", err)
 	}
 
 	// Read ACK
 	var ack HandshakeAck
 	if err := readFramedJSON(conn, &ack); err != nil {
+		atomic.AddInt64(&a.handshakesFailure, 1)
 		return fmt.Errorf("failed to read handshake ack: %w", err)
 	}
 	if !ack.OK {
+		atomic.AddInt64(&a.handshakesFailure, 1)
 		return errors.New("handshake ack not OK")
 	}
 	if ack.Nonce != req.Nonce {
+		atomic.AddInt64(&a.handshakesFailure, 1)
 		return errors.New("handshake ack nonce mismatch")
 	}
 
 	expectedAckSig, err := a.signAck(ack.Nonce, ack.Timestamp)
 	if err != nil {
+		atomic.AddInt64(&a.handshakesFailure, 1)
 		return err
 	}
 	expRaw, err := base64.URLEncoding.DecodeString(expectedAckSig)
 	if err != nil {
+		atomic.AddInt64(&a.handshakesFailure, 1)
 		return err
 	}
 	msgRaw, err := base64.URLEncoding.DecodeString(ack.Signature)
 	if err != nil {
+		atomic.AddInt64(&a.handshakesFailure, 1)
 		return err
 	}
 	if !hmac.Equal(expRaw, msgRaw) {
+		atomic.AddInt64(&a.handshakesFailure, 1)
 		return errors.New("handshake ack signature verification failed")
 	}
 
+	atomic.AddInt64(&a.handshakesSuccess, 1)
 	a.logger.Info("Sprint peer handshake (client) completed",
 		zap.String("peer", conn.RemoteAddr().String()))
 	return nil
@@ -238,9 +252,11 @@ func (a *Authenticator) PerformHandshakeServer(conn net.Conn, timeout time.Durat
 
 	var req HandshakeMessage
 	if err := readFramedJSON(conn, &req); err != nil {
+		atomic.AddInt64(&a.handshakesFailure, 1)
 		return fmt.Errorf("failed to read handshake: %w", err)
 	}
 	if err := a.VerifyHandshakeMessage(&req); err != nil {
+		atomic.AddInt64(&a.handshakesFailure, 1)
 		return fmt.Errorf("handshake verification failed: %w", err)
 	}
 
@@ -251,13 +267,16 @@ func (a *Authenticator) PerformHandshakeServer(conn net.Conn, timeout time.Durat
 	}
 	sig, err := a.signAck(ack.Nonce, ack.Timestamp)
 	if err != nil {
+		atomic.AddInt64(&a.handshakesFailure, 1)
 		return err
 	}
 	ack.Signature = sig
 	if err := writeFramedJSON(conn, &ack); err != nil {
+		atomic.AddInt64(&a.handshakesFailure, 1)
 		return fmt.Errorf("failed to send handshake ack: %w", err)
 	}
 
+	atomic.AddInt64(&a.handshakesSuccess, 1)
 	a.logger.Info("Sprint peer handshake (server) completed",
 		zap.String("peer", conn.RemoteAddr().String()))
 	return nil
@@ -339,4 +358,9 @@ func (a *Authenticator) startJanitor() {
 			}
 		}
 	}()
+}
+
+// GetHandshakeMetrics returns current handshake metrics for Prometheus
+func (a *Authenticator) GetHandshakeMetrics() (success int64, failure int64) {
+	return atomic.LoadInt64(&a.handshakesSuccess), atomic.LoadInt64(&a.handshakesFailure)
 }
