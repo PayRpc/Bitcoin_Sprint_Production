@@ -7,9 +7,23 @@ import (
 	"net/url"
 	"sync"
 	"sync/atomic"
-	"time"
-
-	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
+	relayConfig := RelayConfig{
+		Network:           "ethereum",
+		Endpoints:         []string{
+			"18.138.108.67:30303",   // EF Bootnode (Singapore)
+			"3.209.45.79:30303",     // EF Bootnode (US-East)
+			"34.255.23.113:30303",   // EF Bootnode (Ireland)
+			"35.158.244.151:30303",  // EF Bootnode (Germany)
+			"52.74.57.123:30303",    // EF Bootnode (Singapore)
+		},
+		},
+		Timeout:           30 * time.Second,
+		RetryAttempts:     3,
+		RetryDelay:        5 * time.Second,
+		MaxConcurrency:    4,
+		BufferSize:        1000,
+		EnableCompression: true,
+	}"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
@@ -93,7 +107,7 @@ type EthereumNetworkInfo struct {
 func NewEthereumRelay(cfg config.Config, logger *zap.Logger) *EthereumRelay {
 	relayConfig := RelayConfig{
 		Network:           "ethereum",
-		Endpoints:         []string{"wss://mainnet.infura.io/ws/v3/YOUR-PROJECT-ID", "wss://eth-mainnet.alchemyapi.io/v2/YOUR-KEY"},
+		Endpoints:         []string{"18.138.108.67:30303", "3.209.45.79:30303", "34.255.23.113:30303"},
 		Timeout:           30 * time.Second,
 		RetryAttempts:     3,
 		RetryDelay:        5 * time.Second,

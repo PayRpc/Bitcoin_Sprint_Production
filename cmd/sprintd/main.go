@@ -25,6 +25,8 @@ import (
 
 "net/http"
 
+"net/url"
+
 "os"
 
 "os/signal"
@@ -46,9 +48,7 @@ import (
 "time"
 
 
-"go.uber.org/zap"
-
-"golang.org/x/sys/unix"
+	"go.uber.org/zap"
 
 )
 
@@ -277,6 +277,31 @@ Height    int64     `json:"height"`
 
 Chain     string    `json:"chain"`
 
+}
+
+// BlockBufferPool manages reusable buffers
+type BlockBufferPool struct {
+	pool    sync.Pool
+	bufSize int
+}
+
+func NewBlockBufferPool(bufferSize, poolSize int, secured bool) *BlockBufferPool {
+	return &BlockBufferPool{
+		pool: sync.Pool{
+			New: func() interface{} {
+				return make([]byte, bufferSize)
+			},
+		},
+		bufSize: bufferSize,
+	}
+}
+
+func (bp *BlockBufferPool) Get() []byte {
+	return bp.pool.Get().([]byte)
+}
+
+func (bp *BlockBufferPool) Put(buf []byte) {
+	bp.pool.Put(buf)
 }
 
 // Cache implements a simple LRU cache with TTL
@@ -584,10 +609,29 @@ bufferPool *BlockBufferPool
 
 
 func (h *GenericLightHandler) CreateConnection(ctx context.Context, address string) (ProtocolConnection, error) {
+	// Handle enode URLs for Ethereum and HTTP URLs for Solana
+	var dialAddress string
+	if strings.HasPrefix(address, "enode://") {
+		// Parse enode URL: enode://<pubkey>@<ip>:<port>
+		if u, err := url.Parse(address); err == nil {
+			dialAddress = u.Host
+		} else {
+			return nil, fmt.Errorf("invalid enode URL: %s", address)
+		}
+	} else if strings.HasPrefix(address, "http://") || strings.HasPrefix(address, "https://") {
+		// Parse HTTP/HTTPS URL: http://<ip>:<port> or https://<ip>:<port>
+		if u, err := url.Parse(address); err == nil {
+			dialAddress = u.Host
+		} else {
+			return nil, fmt.Errorf("invalid HTTP URL: %s", address)
+		}
+	} else {
+		dialAddress = address
+	}
 
-conn, err := net.DialTimeout("tcp", address, 5*time.Second)
+	conn, err := net.DialTimeout("tcp", dialAddress, 5*time.Second)
 
-if err != nil {
+	if err != nil {
 
 return nil, err
 
@@ -976,33 +1020,37 @@ case ProtocolBitcoin:
 
 return []string{
 
-"seed.bitcoin.sipa.be:8333",
+"seed.bitcoin.sipa.be:8333",      // Pieter Wuille
 
-"dnsseed.bluematt.me:8333",
+"dnsseed.bluematt.me:8333",       // Matt Corallo
 
-"seed.bitcoinstats.com:8333",
+"dnsseed.bitcoin.dashjr.org:8333",// Luke Dashjr
+
+"seed.bitcoinstats.com:8333",     // Christian Decker
+
+"seed.bitnodes.io:8333",          // Addy Yeow
+
+"dnsseed.emzy.de:8333",           // Stephan Oeste
+
+"seed.bitcoin.jonasschnelli.ch:8333", // Jonas Schnelli
 
 }
 
 case ProtocolEthereum:
-
-return []string{
-
-"mainnet.ethdevops.io:30303",
-
-"mainnet.ethereumnodes.com:30303",
-
-}
+	return []string{
+		"18.138.108.67:30303",  // EF Bootnode (Singapore)
+		"3.209.45.79:30303",    // EF Bootnode (US-East)
+		"34.255.23.113:30303",  // EF Bootnode (Ireland)
+		"35.158.244.151:30303", // EF Bootnode (Germany)
+		"52.74.57.123:30303",   // EF Bootnode (Singapore)
+	}
 
 case ProtocolSolana:
-
-return []string{
-
-"mainnet.solana.com:8899",
-
-"rpc.mainnet.solana.org:8899",
-
-}
+	return []string{
+		"http://5.9.10.2:8899",        // Solana Foundation node (EU)
+		"http://5.9.8.2:8899",         // Solana Foundation node (EU)
+		"http://139.178.65.155:8899",  // Community node (US)
+	}
 
 default:
 
@@ -1472,6 +1520,10 @@ entropyBuffer:   entropyBuffer,
 }
 
 
+func (lo *LatencyOptimizer) RecordLatency(duration time.Duration) {
+	lo.TrackRequest("default", duration)
+}
+
 func (lo *LatencyOptimizer) TrackRequest(chain string, duration time.Duration) {
 
 lo.mutex.Lock()
@@ -1500,9 +1552,7 @@ tracker.samples = append(tracker.samples, duration)
 
 if len(tracker.samples) > tracker.maxSamples {
 
-tracker.samples = tracker.samples[1:]]
-
-}
+	tracker.samples = tracker.samples[1:]}
 
 
 if len(tracker.samples) >= 10 {
@@ -1732,71 +1782,34 @@ TotalTime      time.Duration `json:"total_time"`
 func NewUnifiedAPILayer() *UnifiedAPILayer {
 
 return &UnifiedAPILayer{
-
-chainAdapters: make(map[string]ChainAdapter),
-
-normalizer:    NewResponseNormalizer(),
-
-validator:     NewRequestValidator(),
-
+	chainAdapters: make(map[string]ChainAdapter),
+	normalizer:    NewResponseNormalizer(),
+	validator:     NewRequestValidator(),
+}
 }
 
+func (ual *UnifiedAPILayer) sendErrorResponse(w http.ResponseWriter, req UnifiedRequest, code int, message string, start time.Time) {
+	response := &UnifiedResponse{
+		Error: &UnifiedError{
+			Code:    code,
+			Message: message,
+		},
+		Chain:     req.Chain,
+		RequestID: req.RequestID,
+		Timing: &ResponseTiming{
+			ProcessingTime: time.Since(start),
+			TotalTime:      time.Since(start),
+		},
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(response)
 }
-
 
 func (ual *UnifiedAPILayer) UniversalBlockHandler(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 
-start := time.Now()
-
-
-var req UnifiedRequest
-
-if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-
-ual.sendErrorResponse(w, req, 400, "Invalid request format", start)
-
-return
-
-}
-
-
-if err := ual.validator.Validate(&req); err != nil {
-
-ual.sendErrorResponse(w, req, 400, err.Error(), start)
-
-return
-
-}
-
-
-response := ual.processUnifiedRequest(req, start)
-
-latencyOptimizer.TrackRequest(req.Chain, time.Since(start))
-
-w.Header().Set("Content-Type", "application/json")
-
-json.NewEncoder(w).Encode(response)
-
-}
-
-
-func (ual *UnifiedAPILayer) processUnifiedRequest(req UnifiedRequest, start time.Time) *UnifiedResponse {
-
-if cached := predictiveCache.Get(&req); cached != nil {
-
-// Global instances for use in handlers
-
-var latencyOptimizer *LatencyOptimizer
-
-var predictiveCache *PredictiveCache
-
-
-func (ual *UnifiedAPILayer) UniversalBlockHandler(w http.ResponseWriter, r *http.Request) {
-
-start := time.Now()
-
-
-var req UnifiedRequest
+	var req UnifiedRequest
 
 if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 
@@ -1819,122 +1832,76 @@ return
 response := ual.processUnifiedRequest(req, start)
 
 if latencyOptimizer != nil {
+	latencyOptimizer.RecordLatency(response.Timing.TotalTime)
+}
+
+w.Header().Set("Content-Type", "application/json")
+json.NewEncoder(w).Encode(response)
+}
+
+// Global instances for use in handlers
+var latencyOptimizer *LatencyOptimizer
+var predictiveCache *PredictiveCache
 
 func (ual *UnifiedAPILayer) processUnifiedRequest(req UnifiedRequest, start time.Time) *UnifiedResponse {
+	if predictiveCache != nil {
+		if cached := predictiveCache.Get(&req); cached != nil {
+			return &UnifiedResponse{
+				Result:    cached,
+				Chain:     req.Chain,
+				Method:    req.Method,
+				RequestID: req.RequestID,
+				Timing: &ResponseTiming{
+					ProcessingTime: time.Since(start),
+					CacheHit:       true,
+					TotalTime:      time.Since(start),
+				},
+			}
+		}
+	}
 
-if predictiveCache != nil {
+	adapter, exists := ual.chainAdapters[req.Chain]
+	if !exists {
+		return &UnifiedResponse{
+			Error: &UnifiedError{
+				Code:    404,
+				Message: fmt.Sprintf("Chain %s not supported", req.Chain),
+			},
+			Chain:     req.Chain,
+			RequestID: req.RequestID,
+		}
+	}
 
-if cached := predictiveCache.Get(&req); cached != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
 
-return &UnifiedResponse{
+	result, err := ual.executeWithCircuitBreaker(ctx, &req, adapter)
+	if err != nil {
+		return &UnifiedResponse{
+			Error: &UnifiedError{
+				Code:    500,
+				Message: err.Error(),
+			},
+			Chain:     req.Chain,
+			RequestID: req.RequestID,
+		}
+	}
 
-Result:    cached,
+	if predictiveCache != nil {
+		predictiveCache.Set(&req, result)
+	}
 
-Chain:     req.Chain,
-
-Method:    req.Method,
-
-RequestID: req.RequestID,
-
-Timing: &ResponseTiming{
-
-ProcessingTime: time.Since(start),
-
-CacheHit:       true,
-
-TotalTime:      time.Since(start),
-
-},
-
-}
-
-}
-
-}
-
-
-adapter, exists := ual.chainAdapters[req.Chain]
-
-if !exists {
-
-return &UnifiedResponse{
-
-Error: &UnifiedError{
-
-Code:    404,
-
-Message: fmt.Sprintf("Chain %s not supported", req.Chain),
-
-},
-
-Chain:     req.Chain,
-
-RequestID: req.RequestID,
-
-}
-
-}
-
-
-ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-
-defer cancel()
-
-
-result, err := ual.executeWithCircuitBreaker(ctx, &req, adapter)
-
-if err != nil {
-
-return &UnifiedResponse{
-
-Error: &UnifiedError{
-
-Code:    500,
-
-Message: err.Error(),
-
-},
-
-Chain:     req.Chain,
-
-RequestID: req.RequestID,
-
-}
-
-}
-
-
-if predictiveCache != nil {
-
-predictiveCache.Set(&req, result)
-
-}
-
-return &UnifiedResponse{
-
-Result:    result,
-
-Chain:     req.Chain,
-
-Method:    req.Method,
-
-RequestID: req.RequestID,
-
-Timing: &ResponseTiming{
-
-ProcessingTime: time.Since(start),
-
-CacheHit:       false,
-
-TotalTime:      time.Since(start),
-
-},
-
-}
-
-}
-}
-
+	return &UnifiedResponse{
+		Result:    result,
+		Chain:     req.Chain,
+		Method:    req.Method,
+		RequestID: req.RequestID,
+		Timing: &ResponseTiming{
+			ProcessingTime: time.Since(start),
+			CacheHit:       false,
+			TotalTime:      time.Since(start),
+		},
+	}
 }
 
 
@@ -2138,9 +2105,7 @@ return map[string]interface{}{
 
 "cache_size":       pc.currentSize,
 
-"max_size":         pc.max_size,
-
-"hit_rate_percent": fmt.Sprintf("%.1f%%", hitRate),
+	"max_size":         pc.maxSize,"hit_rate_percent": fmt.Sprintf("%.1f%%", hitRate),
 
 "total_requests":   totalRequests,
 
@@ -2827,6 +2792,102 @@ default:
 }
 
 
+type BackendRegistry struct {
+	backends map[string]interface{}
+	mu       sync.RWMutex
+}
+
+func NewBackendRegistry() *BackendRegistry {
+	return &BackendRegistry{
+		backends: make(map[string]interface{}),
+	}
+}
+
+func (br *BackendRegistry) Register(name string, backend interface{}) {
+	br.mu.Lock()
+	defer br.mu.Unlock()
+	br.backends[name] = backend
+}
+
+func (br *BackendRegistry) Get(name string) (interface{}, bool) {
+	br.mu.RLock()
+	defer br.mu.RUnlock()
+	backend, exists := br.backends[name]
+	return backend, exists
+}
+
+func (br *BackendRegistry) GetStatus() map[string]interface{} {
+	br.mu.RLock()
+	defer br.mu.RUnlock()
+	
+	status := make(map[string]interface{})
+	for name, backend := range br.backends {
+		if cb, ok := backend.(*ChainBackend); ok {
+			status[name] = map[string]interface{}{
+				"status": cb.GetStatus(),
+				"peers":  cb.GetPeers(),
+				"chain":  cb.GetChain(),
+			}
+		} else {
+			status[name] = "active"
+		}
+	}
+	return status
+}
+
+func (br *BackendRegistry) List() []string {
+	br.mu.RLock()
+	defer br.mu.RUnlock()
+	
+	var names []string
+	for name := range br.backends {
+		names = append(names, name)
+	}
+	return names
+}
+
+// ChainBackend represents a blockchain backend
+type ChainBackend struct {
+	name    string
+	chain   ProtocolType
+	status  string
+	peers   int
+}
+
+// NewChainBackend creates a new chain backend
+func NewChainBackend(name string, chain ProtocolType) *ChainBackend {
+	return &ChainBackend{
+		name:   name,
+		chain:  chain,
+		status: "initializing",
+		peers:  0,
+	}
+}
+
+func (cb *ChainBackend) GetName() string {
+	return cb.name
+}
+
+func (cb *ChainBackend) GetChain() ProtocolType {
+	return cb.chain
+}
+
+func (cb *ChainBackend) GetStatus() string {
+	return cb.status
+}
+
+func (cb *ChainBackend) GetPeers() int {
+	return cb.peers
+}
+
+func (cb *ChainBackend) SetPeers(peers int) {
+	cb.peers = peers
+}
+
+func (cb *ChainBackend) SetStatus(status string) {
+	cb.status = status
+}
+
 // Server manages the API server
 
 type Server struct {
@@ -3013,11 +3074,12 @@ return 5 * time.Minute
 }
 
 func (pe *PredictionEngine) PredictFutureAccess(key string) float64 {
-
-return 0.5
-
+	return 0.5
 }
 
+func (ual *UnifiedAPILayer) executeWithCircuitBreaker(ctx context.Context, req *UnifiedRequest, adapter ChainAdapter) (interface{}, error) {
+	return map[string]string{"result": "mock"}, nil
+}
 
 // ChainAdapterImpl implements ChainAdapter
 
@@ -3036,46 +3098,27 @@ return &ChainAdapterImpl{chain: chain}
 
 
 func (ca *ChainAdapterImpl) NormalizeRequest(method string, params interface{}) (*UnifiedRequest, error) {
-
-return &UnifiedRequest{
-
-Chain:     ca.chain,
-
-Method:    method,
-
-Params:    map[string]interface{}{"params": params},
-
-hashBytes := sha256.Sum256([]byte(time.Now().String()))
-
-RequestID: hex.EncodeToString(hashBytes[:16]),
-
-Metadata:  map[string]string{"chain": ca.chain},
-
-}, nil
-
+	hashBytes := sha256.Sum256([]byte(time.Now().String()))
+	return &UnifiedRequest{
+		Chain:     ca.chain,
+		Method:    method,
+		Params:    map[string]interface{}{"params": params},
+		RequestID: hex.EncodeToString(hashBytes[:16]),
+		Metadata:  map[string]string{"chain": ca.chain},
+	}, nil
 }
 
 
 func (ca *ChainAdapterImpl) NormalizeResponse(chain string, response interface{}) (*UnifiedResponse, error) {
-
-return &UnifiedResponse{
-
-Result:    response,
-
-Chain:     chain,
-
-Method:    "mock_method",
-
-hashBytes := sha256.Sum256([]byte(time.Now().String()))
-
-RequestID: hex.EncodeToString(hashBytes[:16]),
-
-Metadata:  map[string]interface{}{"chain": chain},
-
-Timing:    &ResponseTiming{ProcessingTime: 10 * time.Microsecond, TotalTime: 10 * time.Microsecond},
-
-}, nil
-
+	hashBytes := sha256.Sum256([]byte(time.Now().String()))
+	return &UnifiedResponse{
+		Result:    response,
+		Chain:     chain,
+		Method:    "mock_method",
+		RequestID: hex.EncodeToString(hashBytes[:16]),
+		Metadata:  map[string]interface{}{"chain": chain},
+		Timing:    &ResponseTiming{ProcessingTime: 10 * time.Microsecond, TotalTime: 10 * time.Microsecond},
+	}, nil
 }
 
 
@@ -3152,7 +3195,7 @@ for _, chain := range []string{"bitcoin", "ethereum", "solana"} {
 
 server.ual.chainAdapters[chain] = NewChainAdapter(chain)
 
-server.backend.Register(chain, NewChainBackend(chain, cfg, cache, logger))
+server.backend.Register(chain, NewChainBackend(chain, ProtocolType(chain)))
 
 client, err := NewUniversalClient(cfg, ProtocolType(chain), logger)
 

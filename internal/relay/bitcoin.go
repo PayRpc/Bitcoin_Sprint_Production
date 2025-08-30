@@ -85,7 +85,7 @@ const (
 func NewBitcoinRelay(cfg config.Config, logger *zap.Logger, blockChan chan blocks.BlockEvent, mem *mempool.Mempool) *BitcoinRelay {
 	relayConfig := RelayConfig{
 		Network:           "bitcoin",
-		Endpoints:         []string{"seed.bitcoin.sipa.be:8333", "dnsseed.bluematt.me:8333"},
+		Endpoints:         []string{"seed.bitcoin.sipa.be:8333", "dnsseed.bluematt.me:8333", "dnsseed.bitcoin.dashjr.org:8333"},
 		Timeout:           30 * time.Second,
 		RetryAttempts:     3,
 		RetryDelay:        5 * time.Second,
