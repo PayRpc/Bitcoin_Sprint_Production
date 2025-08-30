@@ -27,7 +27,7 @@ export default withAdminAuth(async function handler(req: NextApiRequest, res: Ne
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
 
       const record = await prisma.apiKey.create({
-        data: { key, email, company, tier, expiresAt }
+        data: { key, email, company: company || null, tier, expiresAt }
       })
 
       // Audit log - write to stdout (can be captured by aggregator)

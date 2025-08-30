@@ -123,12 +123,12 @@ export async function authenticateApiKey(
 
     // Extend request object with API key info
     (req as AuthenticatedRequest).apiKey = validation.apiKey;
-    (req as AuthenticatedRequest).tier = validation.tier;
+    (req as AuthenticatedRequest).tier = validation.tier || 'FREE';
 
     return { 
       success: true, 
       apiKey: validation.apiKey, 
-      tier: validation.tier 
+      tier: validation.tier || 'FREE'
     };
 
   } catch (error) {

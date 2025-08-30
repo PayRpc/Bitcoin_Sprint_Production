@@ -52,7 +52,7 @@ export class StorageApiClient {
       const response = await fetch(url, {
         ...options,
         headers,
-        timeout: 10000, // 10 second timeout
+        // timeout: 10000, // 10 second timeout - not supported in fetch
       });
 
       if (!response.ok) {

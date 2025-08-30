@@ -59,22 +59,22 @@ export function generateTierApiKey(tier: string): string {
 
 export interface ApiKeyValidation {
   valid: boolean;
-  reason?: string;
+  reason?: string | undefined;
   apiKey?: {
     id: string;
     key: string;
     email: string;
-    company?: string | null;
+    company?: string | null | undefined;
     tier: string;
     createdAt: Date;
     expiresAt: Date;
     revoked: boolean;
-    lastUsedAt?: Date | null;
+    lastUsedAt?: Date | null | undefined;
     requests: number;
     blocksToday: number;
   };
-  tier?: string;
-  prefix?: string;
+  tier?: string | undefined;
+  prefix?: string | undefined;
 }
 
 /**
@@ -137,9 +137,9 @@ export async function verifyApiKey(token: string): Promise<ApiKeyValidation> {
     if (!formatCheck.valid) {
       return {
         valid: false,
-        reason: formatCheck.reason,
+        reason: formatCheck.reason || 'Invalid API key format',
         prefix: formatCheck.prefix
-      };
+      } as ApiKeyValidation;
     }
 
     // Step 2: Database lookup

@@ -10,6 +10,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(401).json({ error: 'Authentication required' })
   }
   const token = parts[1]
+  if (!token) {
+    return res.status(401).json({ error: 'Invalid token' })
+  }
   const extendedDays = Number(req.body?.days) || 30
   const updated = await renewApiKey(token, extendedDays)
   if (!updated) return res.status(400).json({ error: 'Failed to renew key' })

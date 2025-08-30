@@ -56,7 +56,7 @@ interface AuthenticatedRequest extends NextApiRequest {
     key: string;
     tier: keyof typeof TIER_CONFIG;
     email: string;
-    company?: string;
+    company?: string | undefined;
     requests: number;
     blocksToday: number;
   };
@@ -167,7 +167,7 @@ export async function authMiddleware(
       key: keyRecord.key,
       tier: keyRecord.tier as keyof typeof TIER_CONFIG,
       email: keyRecord.email,
-      company: keyRecord.company || undefined,
+      company: keyRecord.company ?? undefined,
       requests: 0, // Will be properly tracked after schema update
       blocksToday: 0 // Will be properly tracked after schema update
     };

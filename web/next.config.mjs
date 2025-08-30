@@ -17,6 +17,9 @@ const nextConfig = {
     domains: ['localhost'],
   },
 
+  // Disable telemetry in production
+  telemetry: false,
+
   // API rewrites for development
   async rewrites() {
     return [
@@ -72,4 +75,4 @@ const nextConfig = {
   },
 }
 
-export default nextConfig
+module.exports = nextConfig

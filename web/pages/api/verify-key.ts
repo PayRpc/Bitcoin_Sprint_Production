@@ -50,6 +50,6 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 // Export with authentication middleware
 export default withApiKeyAuth(handler, {
   updateUsage: true,        // Track usage
-  incrementBlocks: false,   // Don't count as block request
-  requiredTier: undefined   // Allow all tiers
+  incrementBlocks: false    // Don't count as block request
+  // Allow all tiers (no requiredTier specified)
 });

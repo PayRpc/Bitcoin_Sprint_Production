@@ -114,8 +114,8 @@ export default async function handler(
       license_status,
       rpc_connectivity,
       turbo_enabled,
-      recommendations: recommendations.length > 0 ? recommendations : undefined,
-      errors: errors.length > 0 ? errors : undefined
+      recommendations: recommendations.length > 0 ? recommendations : [],
+      errors: errors.length > 0 ? errors : []
     };
 
     console.log('[CONFIG TEST] Result:', response);

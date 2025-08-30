@@ -4,18 +4,28 @@ import { fileURLToPath } from 'url';
 let ffi = null;
 let ref = null;
 let ffiAvailable = false;
-try {
-    // Try to load FFI modules dynamically
-    const ffiModule = await import('ffi-napi');
-    const refModule = await import('ref-napi');
-    ffi = ffiModule.default;
-    ref = refModule.default;
-    ffiAvailable = true;
-}
-catch (error) {
-    console.warn('FFI modules not available, using Node.js crypto fallback');
-    console.warn('To enable Rust entropy: npm install ffi-napi ref-napi ref-struct-di');
-    ffiAvailable = false;
+let ffiInitialized = false;
+
+async function initializeFFI() {
+    if (ffiInitialized) return;
+    ffiInitialized = true;
+    
+    try {
+        // Use eval to prevent webpack from resolving these at build time
+        const importFFI = new Function('return import("ffi-napi")');
+        const importRef = new Function('return import("ref-napi")');
+        
+        const ffiModule = await importFFI();
+        const refModule = await importRef();
+        ffi = ffiModule.default;
+        ref = refModule.default;
+        ffiAvailable = true;
+    }
+    catch (error) {
+        console.warn('FFI modules not available, using Node.js crypto fallback');
+        console.warn('To enable Rust entropy: npm install ffi-napi ref-napi ref-struct-di');
+        ffiAvailable = false;
+    }
 }
 /**
  * Rust Entropy Bridge for Admin Authentication
@@ -24,18 +34,33 @@ catch (error) {
 export class RustEntropyBridge {
     lib = null;
     isInitialized = false;
+    initPromise = null;
+    
     constructor() {
-        // Initialize immediately since FFI check is done at module level
-        this.isInitialized = ffiAvailable;
-        if (ffiAvailable) {
-            this.initializeFFI();
-        }
-        else {
-            console.log('✅ Rust entropy bridge initialized with Node.js crypto fallback');
-        }
+        // Don't initialize automatically - wait for explicit call
     }
+    
+    async initialize() {
+        if (this.initPromise) {
+            return this.initPromise;
+        }
+        
+        this.initPromise = (async () => {
+            await initializeFFI();
+            this.isInitialized = ffiAvailable;
+            if (ffiAvailable) {
+                this.initializeFFI();
+            }
+            else {
+                console.log('✅ Rust entropy bridge initialized with Node.js crypto fallback');
+            }
+        })();
+        
+        return this.initPromise;
+    }
+    
     initializeFFI() {
-        if (!ffi || !ref) {
+        if (!ffiAvailable || !ffi || !ref) {
             console.warn('FFI not available during initialization');
             this.isInitialized = false;
             return;
@@ -141,11 +166,11 @@ export class RustEntropyBridge {
     /**
      * Fallback entropy generation when Rust is not available
      */
-    fallbackGenerateSecret(encoding) {
+    async fallbackGenerateSecret(encoding) {
         // Use Node.js crypto for fallback
-        const crypto = require('crypto');
+        const crypto = await import('crypto');
         // Generate 32 bytes of entropy
-        const entropy = crypto.randomBytes(32);
+        const entropy = crypto.default.randomBytes(32);
         switch (encoding) {
             case 'raw':
                 return entropy.toString('hex');
@@ -179,9 +204,10 @@ let entropyBridge = null;
 /**
  * Get the global entropy bridge instance
  */
-export function getEntropyBridge() {
+export async function getEntropyBridge() {
     if (!entropyBridge) {
         entropyBridge = new RustEntropyBridge();
+        await entropyBridge.initialize();
     }
     return entropyBridge;
 }
@@ -191,13 +217,13 @@ export function getEntropyBridge() {
  * @returns Promise<string> - The generated admin secret
  */
 export async function generateAdminSecret(encoding = 'base64') {
-    const bridge = getEntropyBridge();
+    const bridge = await getEntropyBridge();
     return bridge.generateAdminSecret(encoding);
 }
 /**
  * Check if Rust entropy bridge is available
  */
-export function isEntropyBridgeAvailable() {
-    const bridge = getEntropyBridge();
+export async function isEntropyBridgeAvailable() {
+    const bridge = await getEntropyBridge();
     return bridge.isAvailable();
 }

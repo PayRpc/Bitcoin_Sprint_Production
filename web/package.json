@@ -3,6 +3,7 @@
   "version": "2.1.0",
   "description": "Multi-Chain Sprint Enterprise Web Dashboard and API - Supporting Bitcoin, Ethereum, Solana, Cosmos, Polkadot and more",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev -p 3002",
     "build": "next build",
@@ -21,7 +22,12 @@
     "security:audit": "npm audit",
     "security:fix": "npm audit fix",
     "performance:test": "node scripts/performance-test.js",
-    "compliance:check": "node scripts/compliance-check.js"
+    "compliance:check": "node scripts/compliance-check.js",
+    "setup:dev": "node setup-dev.js",
+    "test:connection": "node test-connection.js",
+    "test:server": "node test-server.js",
+    "test:entropy": "node test-entropy-auth.js",
+    "test:all": "npm run test:entropy && npm run test:server && npm run test:connection"
   },
   "dependencies": {
     "@prisma/client": "^5.15.0",

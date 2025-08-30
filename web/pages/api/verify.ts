@@ -8,6 +8,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(401).json({ ok: false })
   }
   const key = parts[1]
+  if (!key) {
+    return res.status(401).json({ ok: false })
+  }
   const v = await verifyKey(key)
   if (!v.ok) return res.status(401).json({ ok: false, reason: v.revoked ? 'revoked' : v.expired ? 'expired' : 'unknown' })
   return res.status(200).json({ ok: true, tier: v.tier })

@@ -6,7 +6,9 @@ function checkPort(host: string, port: number, timeoutMs = 1000): Promise<{ host
     const socket = new net.Socket()
     const onResult = (open: boolean, error?: string) => {
       try { socket.destroy() } catch {}
-      resolve({ host, port, open, error })
+      const result: { host: string; port: number; open: boolean; error?: string } = { host, port, open };
+      if (error) result.error = error;
+      resolve(result);
     }
     socket.setTimeout(timeoutMs)
     socket.once('error', (err) => onResult(false, err?.message || 'error'))
