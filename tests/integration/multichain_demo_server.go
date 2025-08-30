@@ -94,8 +94,8 @@ func (d *MultiChainDemo) handleSprintValue(w http.ResponseWriter, r *http.Reques
 	value := map[string]interface{}{
 		"platform":         "Multi-Chain Sprint",
 		"version":          "2.1.0",
-		"description":      "Enterprise blockchain infrastructure supporting Bitcoin, Ethereum, Solana, Cosmos, Polkadot and more",
-		"supported_chains": []string{"bitcoin", "ethereum", "solana", "cosmos", "polkadot", "avalanche", "polygon", "cardano"},
+		"description":      "Enterprise blockchain infrastructure supporting Bitcoin, Ethereum, and Solana",
+		"supported_chains": []string{"bitcoin", "ethereum", "solana"},
 		"competitive_advantages": map[string]interface{}{
 			"flat_p99_latency": map[string]interface{}{
 				"description": "Consistent sub-100ms P99 across all chains",
@@ -108,13 +108,11 @@ func (d *MultiChainDemo) handleSprintValue(w http.ResponseWriter, r *http.Reques
 				"description":      "Single API integration for all blockchain networks",
 				"endpoint_pattern": "/api/v1/universal/{chain}/{method}",
 				"vs_competitors":   "Competitors require chain-specific integrations and different auth methods",
-				"supported_chains": 8,
+				"supported_chains": 3,
 				"examples": map[string]string{
 					"bitcoin":  "/api/v1/universal/bitcoin/latest_block",
 					"ethereum": "/api/v1/universal/ethereum/latest_block",
 					"solana":   "/api/v1/universal/solana/latest_block",
-					"cosmos":   "/api/v1/universal/cosmos/latest_block",
-					"polkadot": "/api/v1/universal/polkadot/latest_block",
 				},
 			},
 			"cost_advantage": map[string]interface{}{
@@ -298,7 +296,7 @@ func (d *MultiChainDemo) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"platform":         "Multi-Chain Sprint",
 		"version":          "2.1.0",
 		"description":      "Enterprise blockchain infrastructure",
-		"supported_chains": []string{"bitcoin", "ethereum", "solana", "cosmos", "polkadot"},
+		"supported_chains": []string{"bitcoin", "ethereum", "solana"},
 		"mock_mode":        true,
 		"blocks_detected":  len(d.blocks),
 		"uptime":           time.Now().UTC().Format(time.RFC3339),

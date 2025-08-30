@@ -1,0 +1,106 @@
+# Bitcoin Sprint - Fast Sync Docker Compose Override
+# ===================================================
+# This file provides optimized configurations for fast Bitcoin synchronization
+
+version: '3.8'
+
+services:
+  # ===== FAST SYNC BITCOIN NODE =====
+  bitcoin-core-fast:
+    image: bitcoin/bitcoin:latest
+    container_name: bitcoin-core-fast
+    profiles: ["fast-sync"]
+    ports:
+      - "8332:8332"     # RPC
+      - "8333:8333"     # P2P
+      - "28332:28332"   # ZMQ block notifications
+      - "28333:28333"   # ZMQ tx notifications
+    volumes:
+      - bitcoin-data:/home/bitcoin/.bitcoin
+      - ./bitcoin.conf:/home/bitcoin/.bitcoin/bitcoin.conf:ro
+    command: |
+      bitcoind
+      -printtoconsole
+      -conf=/home/bitcoin/.bitcoin/bitcoin.conf
+      -connect=seed.bitcoin.sipa.be
+      -connect=dnsseed.bluematt.me
+      -connect=dnsseed.bitcoin.dashjr.org
+      -connect=seed.bitcoinstats.com
+    networks:
+      - sprint-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bitcoin-cli", "-rpcuser=sprint", "-rpcpassword=sprint_password_2025", "getblockchaininfo"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+
+  # ===== ULTRA FAST BITCOIN NODE (with assumptions) =====
+  bitcoin-core-ultra:
+    image: bitcoin/bitcoin:latest
+    container_name: bitcoin-core-ultra
+    profiles: ["ultra-fast"]
+    ports:
+      - "8332:8332"     # RPC
+      - "8333:8333"     # P2P
+      - "28332:28332"   # ZMQ block notifications
+      - "28333:28333"   # ZMQ tx notifications
+    volumes:
+      - bitcoin-data:/home/bitcoin/.bitcoin
+      - ./bitcoin.conf:/home/bitcoin/.bitcoin/bitcoin.conf:ro
+    command: |
+      bitcoind
+      -printtoconsole
+      -conf=/home/bitcoin/.bitcoin/bitcoin.conf
+      -assumevalid=00000000000000000008a89e7d3806a2c0b73e4d4bc8f4e8c3e8a8b0
+      -connect=seed.bitcoin.sipa.be
+      -connect=dnsseed.bluematt.me
+      -maxconnections=8
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  # ===== BITCOIN NODE WITH EXTERNAL SNAPSHOT =====
+  bitcoin-core-snapshot:
+    image: bitcoin/bitcoin:latest
+    container_name: bitcoin-core-snapshot
+    profiles: ["snapshot"]
+    ports:
+      - "8332:8332"     # RPC
+      - "8333:8333"     # P2P
+      - "28332:28332"   # ZMQ block notifications
+      - "28333:28333"   # ZMQ tx notifications
+    volumes:
+      - bitcoin-data:/home/bitcoin/.bitcoin
+      - ./bitcoin.conf:/home/bitcoin/.bitcoin/bitcoin.conf:ro
+      - ./data/bitcoin-snapshot:/snapshot:ro
+    command: |
+      bitcoind
+      -printtoconsole
+      -conf=/home/bitcoin/.bitcoin/bitcoin.conf
+      -loadblock=/snapshot/blocks
+      -loadtxindex=/snapshot/chainstate
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  # ===== LIGHTNING FAST BITCOIN NODE =====
+  bitcoin-core-lightning:
+    image: bitcoin/bitcoin:latest
+    container_name: bitcoin-core-lightning
+    profiles: ["lightning"]
+    ports:
+      - "8332:8332"     # RPC
+      - "8333:8333"     # P2P
+      - "28332:28332"   # ZMQ block notifications
+      - "28333:28333"   # ZMQ tx notifications
+    volumes:
+      - bitcoin-data:/home/bitcoin/.bitcoin
+      - ./bitcoin-lightning.conf:/home/bitcoin/.bitcoin/bitcoin.conf:ro
+    command: |
+      bitcoind
+      -printtoconsole
+      -conf=/home/bitcoin/.bitcoin/bitcoin.conf
+    networks:
+      - sprint-network
+    restart: unless-stopped

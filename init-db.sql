@@ -111,12 +111,7 @@ CREATE TABLE sprint_chains.chain_status (
 INSERT INTO sprint_chains.chain_status (chain_name, rpc_endpoint, websocket_endpoint) VALUES
 ('bitcoin', 'http://bitcoin-core:8332', 'tcp://bitcoin-core:28332'),
 ('ethereum', 'http://geth:8545', 'ws://geth:8546'),
-('solana', 'http://solana-validator:8899', 'ws://solana-validator:8900'),
-('cosmos', 'http://cosmos-hub:1317', 'ws://cosmos-hub:26657'),
-('polkadot', 'ws://polkadot-node:9944', 'ws://polkadot-node:9944'),
-('avalanche', 'http://avalanche-node:9650', 'ws://avalanche-node:9651'),
-('polygon', 'http://polygon-node:8545', 'ws://polygon-node:8546'),
-('cardano', 'http://cardano-node:3001', 'ws://cardano-node:3002');
+('solana', 'http://solana-validator:8899', 'ws://solana-validator:8900');
 
 -- Transaction cache for fast lookups
 CREATE TABLE sprint_chains.transaction_cache (

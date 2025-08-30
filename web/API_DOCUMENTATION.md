@@ -1,6 +1,6 @@
 # Multi-Chain Sprint API Documentation
 
-This document provides complete documentation for the Multi-Chain Sprint API endpoints supporting Bitcoin, Ethereum, Solana, Cosmos, Polkadot and other major blockchains.
+This document provides complete documentation for the Multi-Chain Sprint API endpoints supporting Bitcoin, Ethereum, and Solana.
 
 ## Authentication
 

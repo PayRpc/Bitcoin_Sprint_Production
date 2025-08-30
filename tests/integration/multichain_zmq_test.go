@@ -96,7 +96,7 @@ func (api *MultiChainAPI) handleSprintValue(w http.ResponseWriter, r *http.Reque
 	value := map[string]interface{}{
 		"platform":         "Multi-Chain Sprint",
 		"version":          "2.1.0",
-		"supported_chains": []string{"bitcoin", "ethereum", "solana", "cosmos", "polkadot"},
+		"supported_chains": []string{"bitcoin", "ethereum", "solana"},
 		"competitive_advantages": map[string]interface{}{
 			"flat_p99_latency": map[string]interface{}{
 				"description": "Consistent sub-100ms P99 across all chains",

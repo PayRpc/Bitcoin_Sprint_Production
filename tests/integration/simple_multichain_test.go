@@ -35,7 +35,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 		"status":    "healthy",
 		"platform":  "Multi-Chain Sprint",
 		"version":   "2.1.0",
-		"chains":    []string{"bitcoin", "ethereum", "solana", "cosmos", "polkadot"},
+		"chains":    []string{"bitcoin", "ethereum", "solana"},
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	}
 
@@ -47,7 +47,7 @@ func handleSprintValue(w http.ResponseWriter, r *http.Request) {
 	value := map[string]interface{}{
 		"platform":    "Multi-Chain Sprint",
 		"description": "Enterprise blockchain infrastructure",
-		"chains":      []string{"bitcoin", "ethereum", "solana", "cosmos", "polkadot"},
+		"chains":      []string{"bitcoin", "ethereum", "solana"},
 		"advantages": map[string]string{
 			"latency":     "Flat P99 <89ms vs Infura 250-2000ms",
 			"cost":        "50% cheaper than Alchemy",

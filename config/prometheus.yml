@@ -1,0 +1,72 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # Bitcoin Sprint Core Service
+  - job_name: 'bitcoin-sprint'
+    static_configs:
+      - targets: ['bitcoin-sprint:9090']
+    scrape_interval: 5s
+    metrics_path: '/metrics'
+
+  # FastAPI Gateway
+  - job_name: 'fastapi-gateway'
+    static_configs:
+      - targets: ['bitcoin-sprint:8080']
+    scrape_interval: 10s
+    metrics_path: '/metrics'
+
+  # Bitcoin Core
+  - job_name: 'bitcoin-core'
+    static_configs:
+      - targets: ['bitcoin-core:8332']
+    scrape_interval: 30s
+
+  # Ethereum Geth
+  - job_name: 'ethereum-geth'
+    static_configs:
+      - targets: ['geth:6060']
+    scrape_interval: 15s
+    metrics_path: '/debug/metrics/prometheus'
+
+  # Solana Validator
+  - job_name: 'solana-validator'
+    static_configs:
+      - targets: ['solana-validator:9091']
+    scrape_interval: 15s
+
+  # Solana Exporter
+  - job_name: 'solana-exporter'
+    static_configs:
+      - targets: ['solana-exporter:8080']
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 30s
+
+  # Grafana
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+    scrape_interval: 30s
+
+  # PostgreSQL
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']
+    scrape_interval: 30s
+
+  # Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 15s

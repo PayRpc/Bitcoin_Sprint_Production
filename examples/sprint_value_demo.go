@@ -86,8 +86,6 @@ func (d *SprintValueDemo) demonstrateUnifiedAPI() {
 		"Bitcoin":  "/api/v1/universal/bitcoin/latest_block",
 		"Ethereum": "/api/v1/universal/ethereum/latest_block",
 		"Solana":   "/api/v1/universal/solana/latest_block",
-		"Cosmos":   "/api/v1/universal/cosmos/latest_block",
-		"Polkadot": "/api/v1/universal/polkadot/latest_block",
 	}
 
 	// Competitor fragmented approach
@@ -95,8 +93,6 @@ func (d *SprintValueDemo) demonstrateUnifiedAPI() {
 		"Bitcoin":  "btc-mainnet.infura.io/v3/{key} (Bitcoin specific)",
 		"Ethereum": "mainnet.infura.io/v3/{key} (Ethereum specific)",
 		"Solana":   "solana-mainnet.alchemy.com/v2/{key} (Solana specific)",
-		"Cosmos":   "cosmos-mainnet.quicknode.pro/{key} (Cosmos specific)",
-		"Polkadot": "polkadot-mainnet.publicnode.com (Polkadot specific)",
 	}
 
 	fmt.Println("   🚀 Sprint Unified API:")
@@ -281,7 +277,7 @@ func startValueServer() {
 					"description":    "Single API integration for all 8+ blockchain networks",
 					"vs_competitors": "Competitors require chain-specific integrations",
 					"endpoint":       "/api/v1/universal/{chain}/{method}",
-					"chains":         []string{"Bitcoin", "Ethereum", "Solana", "Cosmos", "Polkadot", "Avalanche", "Polygon", "Cardano"},
+					"chains":         []string{"Bitcoin", "Ethereum", "Solana"},
 				},
 				"predictive_cache": map[string]interface{}{
 					"description": "ML-powered caching with entropy-based memory buffers",

@@ -62,8 +62,8 @@ COPY --from=builder --chown=sprint:sprint /app/sprintd /app/sprintd
 COPY --from=builder --chown=sprint:sprint /app/enterprise-demo /app/enterprise-demo
 
 # Copy configuration files
-COPY --chown=sprint:sprint bitcoin.conf /app/config/
-COPY --chown=sprint:sprint bitcoin-testnet.conf /app/config/
+COPY --chown=sprint:sprint config/bitcoin.conf /app/config/
+COPY --chown=sprint:sprint config/bitcoin-testnet.conf /app/config/
 
 # Copy web assets if they exist
 COPY --chown=sprint:sprint dashboard.html entropy-monitor.html provider-selection.html /app/web/

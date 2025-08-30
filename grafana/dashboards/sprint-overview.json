@@ -90,13 +90,13 @@
       },
       "targets": [
         {
-          "expr": "rate(sprint_api_requests_total[5m])",
+          "expr": "rate(sprint_api_requests_total{chain=~\"bitcoin|ethereum|solana|entropy\"}[5m])",
           "interval": "",
           "legendFormat": "{{chain}} - {{method}}",
           "refId": "A"
         }
       ],
-      "title": "API Request Rate by Chain",
+      "title": "Core Components API Request Rate",
       "type": "timeseries"
     },
     {
@@ -204,13 +204,13 @@
       },
       "targets": [
         {
-          "expr": "sum by (chain) (sprint_chain_status)",
+          "expr": "sum by (chain) (sprint_chain_status{chain=~\"bitcoin|ethereum|solana|entropy\"})",
           "interval": "",
           "legendFormat": "{{chain}}",
           "refId": "A"
         }
       ],
-      "title": "Chain Status Distribution",
+      "title": "Core Components Status Distribution",
       "type": "piechart"
     },
     {
@@ -275,7 +275,7 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "sprint_chain_block_height",
+          "expr": "sprint_chain_block_height{chain=~\"bitcoin|ethereum|solana|entropy\"}",
           "format": "table",
           "instant": true,
           "interval": "",
@@ -283,7 +283,7 @@
           "refId": "A"
         },
         {
-          "expr": "sprint_chain_peer_count",
+          "expr": "sprint_chain_peer_count{chain=~\"bitcoin|ethereum|solana|entropy\"}",
           "format": "table",
           "instant": true,
           "interval": "",
@@ -291,7 +291,7 @@
           "refId": "B"
         },
         {
-          "expr": "sprint_chain_health_score",
+          "expr": "sprint_chain_health_score{chain=~\"bitcoin|ethereum|solana|entropy\"}",
           "format": "table",
           "instant": true,
           "interval": "",
@@ -299,7 +299,7 @@
           "refId": "C"
         }
       ],
-      "title": "Chain Health Overview",
+      "title": "Core Components Health Overview",
       "transformations": [
         {
           "id": "merge",
@@ -517,22 +517,22 @@
       },
       "targets": [
         {
-          "expr": "sprint_chain_block_height{chain=\"ethereum\"}",
-          "legendFormat": "Ethereum Block Height",
+          "expr": "sprint_chain_block_height{chain=\"bitcoin\"}",
+          "legendFormat": "Bitcoin Block Height",
           "refId": "A"
         },
         {
-          "expr": "sprint_chain_peer_count{chain=\"ethereum\"}",
-          "legendFormat": "Ethereum Peer Count",
+          "expr": "sprint_chain_peer_count{chain=\"bitcoin\"}",
+          "legendFormat": "Bitcoin Peer Count",
           "refId": "B"
         },
         {
-          "expr": "sprint_chain_health_score{chain=\"ethereum\"}",
-          "legendFormat": "Ethereum Health Score",
+          "expr": "sprint_chain_health_score{chain=\"bitcoin\"}",
+          "legendFormat": "Bitcoin Health Score",
           "refId": "C"
         }
       ],
-      "title": "Ethereum Chain Metrics",
+      "title": "Bitcoin Chain Metrics",
       "type": "timeseries"
     },
     {
@@ -581,22 +581,283 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.5, rate(sprint_api_request_duration_seconds_bucket{chain=\"ethereum\"}[5m])) * 1000",
-          "legendFormat": "Ethereum P50 Latency",
+          "expr": "sprint_chain_block_height{chain=\"solana\"}",
+          "legendFormat": "Solana Slot Height",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, rate(sprint_api_request_duration_seconds_bucket{chain=\"ethereum\"}[5m])) * 1000",
-          "legendFormat": "Ethereum P95 Latency",
+          "expr": "sprint_chain_peer_count{chain=\"solana\"}",
+          "legendFormat": "Solana Validator Count",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, rate(sprint_api_request_duration_seconds_bucket{chain=\"ethereum\"}[5m])) * 1000",
-          "legendFormat": "Ethereum P99 Latency",
+          "expr": "sprint_chain_health_score{chain=\"solana\"}",
+          "legendFormat": "Solana Health Score",
           "refId": "C"
         }
       ],
-      "title": "Ethereum API Latency (P50 / P95 / P99)",
+      "title": "Solana Chain Metrics",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sprint_chain_block_height{chain=\"ethereum\"}",
+          "legendFormat": "Ethereum Block Height",
+          "refId": "A"
+        },
+        {
+          "expr": "sprint_chain_peer_count{chain=\"ethereum\"}",
+          "legendFormat": "Ethereum Peer Count",
+          "refId": "B"
+        },
+        {
+          "expr": "sprint_chain_health_score{chain=\"ethereum\"}",
+          "legendFormat": "Ethereum Health Score",
+          "refId": "C"
+        }
+      ],
+      "title": "Ethereum Chain Metrics",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "id": 10,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "pluginVersion": "8.0.0",
+      "targets": [
+        {
+          "expr": "bitcoin_sprint_entropy_bridge_available",
+          "legendFormat": "Entropy Bridge Available",
+          "refId": "A"
+        }
+      ],
+      "title": "Entropy Bridge Connectivity",
+      "type": "gauge"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(bitcoin_sprint_entropy_secret_generation_total[5m])",
+          "legendFormat": "Entropy Generation Rate",
+          "refId": "A"
+        }
+      ],
+      "title": "Entropy Generation Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 40
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(bitcoin_sprint_entropy_secret_generation_duration_seconds_sum[5m]) / rate(bitcoin_sprint_entropy_secret_generation_duration_seconds_count[5m])",
+          "legendFormat": "Average Generation Time",
+          "refId": "A"
+        }
+      ],
+      "title": "Entropy Generation Performance",
       "type": "timeseries"
     }
   ],
@@ -604,8 +865,10 @@
   "style": "dark",
   "tags": [
     "bitcoin-sprint",
-    "multi-chain",
-    "enterprise"
+    "btc",
+    "eth",
+    "sol",
+    "entropy"
   ],
   "templating": {
     "list": []
@@ -616,7 +879,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Bitcoin Sprint Multi-Chain Overview",
-  "uid": "bitcoin-sprint-overview",
-  "version": 1
+  "title": "Bitcoin Sprint Core Components Overview",
+  "uid": "bitcoin-sprint-core-overview",
+  "version": 2
 }

@@ -45,8 +45,6 @@ func main() {
 		{Name: "bitcoin", NetworkType: "UTXO", Endpoint: "/api/v1/universal/bitcoin", Active: true},
 		{Name: "ethereum", NetworkType: "Account", Endpoint: "/api/v1/universal/ethereum", Active: true},
 		{Name: "solana", NetworkType: "Account", Endpoint: "/api/v1/universal/solana", Active: true},
-		{Name: "cosmos", NetworkType: "Tendermint", Endpoint: "/api/v1/universal/cosmos", Active: true},
-		{Name: "polkadot", NetworkType: "Substrate", Endpoint: "/api/v1/universal/polkadot", Active: true},
 	}
 
 	for _, chain := range chains {
@@ -88,8 +86,6 @@ func main() {
 		"/api/v1/universal/bitcoin/latest",
 		"/api/v1/universal/ethereum/latest",
 		"/api/v1/universal/solana/latest",
-		"/api/v1/universal/cosmos/latest",
-		"/api/v1/universal/polkadot/latest",
 	}
 
 	fmt.Println("   Multi-chain API structure:")
