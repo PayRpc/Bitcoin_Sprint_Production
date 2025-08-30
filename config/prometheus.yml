@@ -27,6 +27,13 @@ scrape_configs:
       - targets: ['bitcoin-exporter:8080']
     scrape_interval: 30s
     metrics_path: '/metrics'
+    
+  # Solana Enterprise Metrics Server
+  - job_name: 'solana-enterprise-metrics'
+    static_configs:
+      - targets: ['localhost:21000']
+    scrape_interval: 10s
+    metrics_path: '/metrics'
 
   # Ethereum Geth
   - job_name: 'ethereum-geth'
