@@ -9,15 +9,30 @@ export default async function handler(
   }
 
   try {
-    // Simple stub for build testing
+    // Dynamically import the entropy bridge
+    const entropyModule = await import('../../../rust-entropy-bridge.js');
+    const bridge = await entropyModule.getEntropyBridge();
+    const status = bridge.getStatus();
+
+    // Generate a test secret to verify functionality
+    const startTime = Date.now();
+    const testSecret = await bridge.generateAdminSecret('hex');
+    const generationTime = (Date.now() - startTime) / 1000;
+
+    // Record metrics
+    const { recordEntropySecretGeneration, recordEntropyQualityScore } = await import('../../../lib/prometheus');
+    recordEntropySecretGeneration('hex', true, generationTime);
+    recordEntropyQualityScore(testSecret.length * 2); // Simple quality score based on length
+
     res.status(200).json({
       status: 'operational',
       entropy_bridge: {
-        available: true,
-        rust_available: false,
-        fallback_mode: true,
-        test_secret_length: 64,
-        test_secret_preview: 'a1b2c3d4e5f6g7h8...'
+        available: status.available,
+        rust_available: status.rustAvailable,
+        fallback_mode: status.fallbackMode,
+        test_secret_length: testSecret.length,
+        test_secret_preview: testSecret.substring(0, 16) + '...',
+        generation_time_seconds: generationTime
       },
       timestamp: new Date().toISOString(),
       service: 'bitcoin-sprint-entropy'

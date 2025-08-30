@@ -5,7 +5,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev -p 3002",
+    "dev": "node --max-old-space-size=4096 ./node_modules/.bin/next dev -p 3002",
+    "dev:memory": "node --max-old-space-size=8192 ./node_modules/.bin/next dev -p 3002",
     "build": "next build",
     "start": "next start -p 3002",
     "lint": "next lint",
@@ -27,7 +28,9 @@
     "test:connection": "node test-connection.js",
     "test:server": "node test-server.js",
     "test:entropy": "node test-entropy-auth.js",
-    "test:all": "npm run test:entropy && npm run test:server && npm run test:connection"
+    "test:monitor": "node test-entropy-monitor.js",
+    "test:monitor:standalone": "node test-entropy-monitor-standalone.js",
+    "test:all": "npm run test:entropy && npm run test:monitor && npm run test:server && npm run test:connection"
   },
   "dependencies": {
     "@prisma/client": "^5.15.0",

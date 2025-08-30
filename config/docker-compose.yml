@@ -1,6 +1,5 @@
 # Bitcoin Sprint Multi-Chain Relay Platform
 # Docker Compose configuration for enterprise-grade blockchain infrastructure
-version: '3.8'
 
 networks:
   sprint-network:
@@ -375,8 +374,8 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro
     networks:
       - sprint-network
     restart: unless-stopped

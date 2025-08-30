@@ -81,6 +81,60 @@ const cacheMissesTotal = new client.Counter({
   registers: [register],
 });
 
+// Entropy Bridge Metrics
+const entropyBridgeAvailable = new client.Gauge({
+  name: 'bitcoin_sprint_entropy_bridge_available',
+  help: 'Entropy bridge availability status (1 = available, 0 = unavailable)',
+  registers: [register],
+});
+
+const entropyBridgeRustAvailable = new client.Gauge({
+  name: 'bitcoin_sprint_entropy_bridge_rust_available',
+  help: 'Rust entropy bridge availability (1 = available, 0 = unavailable)',
+  registers: [register],
+});
+
+const entropyBridgeFallbackMode = new client.Gauge({
+  name: 'bitcoin_sprint_entropy_bridge_fallback_mode',
+  help: 'Entropy bridge fallback mode status (1 = fallback active, 0 = native mode)',
+  registers: [register],
+});
+
+const entropySecretGenerationCount = new client.Counter({
+  name: 'bitcoin_sprint_entropy_secret_generation_total',
+  help: 'Total number of entropy secrets generated',
+  labelNames: ['encoding', 'success'],
+  registers: [register],
+});
+
+const entropySecretGenerationDuration = new client.Histogram({
+  name: 'bitcoin_sprint_entropy_secret_generation_duration_seconds',
+  help: 'Duration of entropy secret generation in seconds',
+  labelNames: ['encoding'],
+  buckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5],
+  registers: [register],
+});
+
+const entropyQualityScore = new client.Gauge({
+  name: 'bitcoin_sprint_entropy_quality_score',
+  help: 'Entropy quality score (higher is better)',
+  registers: [register],
+});
+
+const entropyAdminAuthAttempts = new client.Counter({
+  name: 'bitcoin_sprint_entropy_admin_auth_attempts_total',
+  help: 'Total number of admin authentication attempts',
+  labelNames: ['success'],
+  registers: [register],
+});
+
+const entropyAdminAuthDuration = new client.Histogram({
+  name: 'bitcoin_sprint_entropy_admin_auth_duration_seconds',
+  help: 'Duration of admin authentication in seconds',
+  buckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5],
+  registers: [register],
+});
+
 // Update metrics function
 export async function updateMaintenanceMetrics(): Promise<void> {
   try {
@@ -156,6 +210,47 @@ export function recordCacheMiss(cacheType: string): void {
   cacheMissesTotal.labels(cacheType).inc();
 }
 
+// Entropy metrics update functions
+export async function updateEntropyMetrics(): Promise<void> {
+  try {
+    // Dynamically import entropy bridge to avoid circular dependencies
+    let entropyBridge: any = null;
+    try {
+      const eb = await import('./rust-entropy-bridge');
+      if (eb && typeof eb.getEntropyBridge === 'function') {
+        entropyBridge = await eb.getEntropyBridge();
+      }
+    } catch (err) {
+      console.debug('Could not import entropy bridge for metrics:', err);
+    }
+
+    if (entropyBridge) {
+      const status = entropyBridge.getStatus();
+      entropyBridgeAvailable.set(status.available ? 1 : 0);
+      entropyBridgeRustAvailable.set(status.rustAvailable ? 1 : 0);
+      entropyBridgeFallbackMode.set(status.fallbackMode ? 1 : 0);
+    }
+  } catch (error) {
+    console.error('Failed to update entropy metrics:', error);
+  }
+}
+
+export function recordEntropySecretGeneration(encoding: string, success: boolean, duration: number): void {
+  entropySecretGenerationCount.labels(encoding, success.toString()).inc();
+  if (success) {
+    entropySecretGenerationDuration.labels(encoding).observe(duration);
+  }
+}
+
+export function recordEntropyQualityScore(score: number): void {
+  entropyQualityScore.set(score);
+}
+
+export function recordAdminAuth(success: boolean, duration: number): void {
+  entropyAdminAuthAttempts.labels(success.toString()).inc();
+  entropyAdminAuthDuration.observe(duration);
+}
+
 // Initialize metrics update interval
 let metricsInterval: NodeJS.Timeout | null = null;
 
@@ -166,9 +261,13 @@ export function startMetricsCollection(intervalMs: number = 30000): void {
   
   // Update metrics immediately
   updateMaintenanceMetrics();
+  updateEntropyMetrics();
   
   // Set up periodic updates
-  metricsInterval = setInterval(updateMaintenanceMetrics, intervalMs);
+  metricsInterval = setInterval(() => {
+    updateMaintenanceMetrics();
+    updateEntropyMetrics();
+  }, intervalMs);
 }
 
 export function stopMetricsCollection(): void {
@@ -194,6 +293,15 @@ export const metrics = {
   apiRequestDuration,
   cacheHitsTotal,
   cacheMissesTotal,
+  // Entropy metrics
+  entropyBridgeAvailable,
+  entropyBridgeRustAvailable,
+  entropyBridgeFallbackMode,
+  entropySecretGenerationCount,
+  entropySecretGenerationDuration,
+  entropyQualityScore,
+  entropyAdminAuthAttempts,
+  entropyAdminAuthDuration,
 };
 
 // Auto-start metrics collection when module is imported
