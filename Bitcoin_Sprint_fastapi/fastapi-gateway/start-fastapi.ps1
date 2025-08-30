@@ -14,7 +14,7 @@ $ErrorActionPreference = "Stop"
 # Configuration
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $GatewayDir = $PSScriptRoot
-$PythonVersion = "3.11"
+$PythonVersion = "3.13"
 
 Write-Host "🚀 Bitcoin Sprint FastAPI Gateway Startup" -ForegroundColor Cyan
 Write-Host "==============================================" -ForegroundColor Cyan

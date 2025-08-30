@@ -8,8 +8,7 @@ primary_region = "iad"
   PORT = "8080"
   ENVIRONMENT = "production"
   LOG_LEVEL = "info"
-  GIN_MODE = "release"
-  SPRINTD_PORT = "9090"
+  PYTHON_VERSION = "3.13"
   FASTAPI_PORT = "8080"
 
 [[services]]
@@ -31,10 +30,6 @@ primary_region = "iad"
     soft_limit = 1000
     hard_limit = 2000
 
-[metrics]
-  port = 8080
-  path = "/metrics"
-
 [checks]
   [checks.health]
     port = 8080
@@ -44,18 +39,14 @@ primary_region = "iad"
     method = "GET"
     path = "/health"
 
-  [checks.backend]
+  [checks.api]
     port = 8080
     type = "http"
     interval = "60s"
     timeout = "15s"
     method = "GET"
-    path = "/api/v1/backend/status"
+    path = "/status"
 
 [[vm]]
   size = "shared-cpu-1x"
   memory = "512mb"
-
-[mounts]
-  source = "bitcoin_sprint_data"
-  destination = "/app/data"

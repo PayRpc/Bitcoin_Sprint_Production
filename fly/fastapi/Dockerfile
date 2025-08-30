@@ -19,8 +19,8 @@ COPY config/ ./config/
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o sprintd ./cmd/sprintd
 
 # Python stage for FastAPI
-# Use Python 3.13.7 for FastAPI (matches local development environment)
-FROM python:3.13.7-slim as fastapi-builder
+# Use Python 3.13 for FastAPI (standardized version)
+FROM python:3.13-slim as fastapi-builder
 
 # Install system dependencies (including Rust for pydantic-core compilation)
 RUN apt-get update && apt-get install -y \

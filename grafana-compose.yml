@@ -1,7 +1,9 @@
 networks:
-  external_network:
-    external: true
-    name: bitcoin_sprint_sprint-network
+  sprint-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 
 volumes:
   grafana-data:
@@ -17,8 +19,8 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana-data:/var/lib/grafana
-      - C:/Projects/Bitcoin-Sprint-5/BItcoin_Sprint/grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - C:/Projects/Bitcoin-Sprint-5/BItcoin_Sprint/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
     networks:
-      - external_network
+      - sprint-network
     restart: unless-stopped

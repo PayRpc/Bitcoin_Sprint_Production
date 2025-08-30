@@ -3,6 +3,32 @@
 [![CI](https://github.com/PayRpc/BItcoin_Sprint/actions/workflows/ci.yml/badge.svg)](https://github.com/PayRpc/BItcoin_Sprint/actions/workflows/ci.yml)
 [![Windows CGO](https://github.com/PayRpc/BItcoin_Sprint/actions/workflows/windows-cgo.yml/badge.svg)](https://github.com/PayRpc/BItcoin_Sprint/actions/workflows/windows-cgo.yml)
 
+## 🎯 QUICK START - Streamlined Python 3.13 Setup
+
+**Too big? Not connected?** Here's the simplified version:
+
+### One-Click Startup (Windows)
+```cmd
+# Double-click to start everything:
+start-all.bat
+```
+
+### Services Overview
+| Service | Port | Status |
+|---------|------|--------|
+| **FastAPI Gateway** | 8000 | ✅ Python 3.13 |
+| **Next.js Frontend** | 3002 | ✅ Running |
+| **Go Backend** | 8080 | ✅ Connected |
+| **Grafana** | 3000 | ✅ Monitoring |
+
+### Python 3.13 Everywhere
+- ✅ FastAPI Gateway: Python 3.13 venv
+- ✅ Fly Deployment: Python 3.13 Docker
+- ✅ System: Python 3.13 available
+- ✅ All dependencies: Compatible with Python 3.13
+
+---
+
 **Enterprise-grade multi-chain blockchain infrastructure** that transforms how businesses interact with Bitcoin, Ethereum, Solana, Cosmos, Polkadot and other major blockchains. We provide real-time block monitoring, secure API access, and enterprise-level integrations that scale from individual developers to large financial institutions.
 
 ## 🚀 Production Readiness Status
