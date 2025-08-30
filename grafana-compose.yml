@@ -1,0 +1,24 @@
+networks:
+  external_network:
+    external: true
+    name: bitcoin_sprint_sprint-network
+
+volumes:
+  grafana-data:
+
+services:
+  grafana:
+    image: grafana/grafana:10.0.0
+    container_name: sprint-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=sprint123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - C:/Projects/Bitcoin-Sprint-5/BItcoin_Sprint/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - C:/Projects/Bitcoin-Sprint-5/BItcoin_Sprint/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - external_network
+    restart: unless-stopped

@@ -9,4 +9,4 @@ providers:
     updateIntervalSeconds: 30
     allowUiUpdates: true
     options:
-      path: /opt/bitcoin-sprint/grafana/dashboards
+      path: /var/lib/grafana/dashboards

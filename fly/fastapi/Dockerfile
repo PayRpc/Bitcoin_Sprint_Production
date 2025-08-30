@@ -19,13 +19,17 @@ COPY config/ ./config/
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o sprintd ./cmd/sprintd
 
 # Python stage for FastAPI
-FROM python:3.11-slim AS python-builder
+# Use Python 3.13.7 for FastAPI (matches local development environment)
+FROM python:3.13.7-slim as fastapi-builder
 
-# Install system dependencies
+# Install system dependencies (including Rust for pydantic-core compilation)
 RUN apt-get update && apt-get install -y \
     gcc \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    build-essential \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    && . ~/.cargo/env
 
 # Create virtual environment
 RUN python -m venv /opt/venv
@@ -33,10 +37,10 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy Python requirements
 COPY Bitcoin_Sprint_fastapi/fastapi-gateway/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN . ~/.cargo/env && pip install --no-cache-dir -r requirements.txt
 
 # Production stage
-FROM python:3.11-slim
+FROM python:3.13.7-slim
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
@@ -54,7 +58,7 @@ WORKDIR /app
 COPY --from=go-builder /go/src/bitcoin-sprint/sprintd /usr/local/bin/sprintd
 
 # Copy Python virtual environment
-COPY --from=python-builder /opt/venv /opt/venv
+COPY --from=fastapi-builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy FastAPI application code
