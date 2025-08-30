@@ -14,6 +14,10 @@ volumes:
   solana-data:
   solana-data-2:
   solana-data-3:
+  solana-data-4:
+  solana-data-5:
+  solana-data-6:
+  solana-data-7:
   redis-data:
   postgres-data:
   prometheus-data:
@@ -163,6 +167,175 @@ services:
       timeout: 10s
       retries: 3
 
+  # Additional Solana Validators for multi-validator testnet
+  solana-validator-2:
+    image: solanalabs/solana:v1.16.0
+    container_name: solana-validator-2
+    ports:
+      - "9901:9901"     # Gossip port
+      - "8901:8901"     # WebSocket
+    volumes:
+      - solana-data-2:/root/.config/solana
+    environment:
+      - SOLANA_METRICS_CONFIG=host=http://0.0.0.0:9091
+    command: |
+      solana-test-validator
+      --rpc-bind-address=0.0.0.0
+      --rpc-port=8899
+      --websocket-url=ws://0.0.0.0:8901
+      --gossip-port=9901
+      --ledger=/root/.config/solana/test-ledger-2
+      --reset
+      --log
+      --accounts-db-cache-size-mb=512
+      --entrypoint=solana-validator:9900
+      --gossip-host=solana-validator-2
+    depends_on:
+      - solana-validator
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  solana-validator-3:
+    image: solanalabs/solana:v1.16.0
+    container_name: solana-validator-3
+    ports:
+      - "9902:9902"     # Gossip port
+      - "8902:8902"     # WebSocket
+    volumes:
+      - solana-data-3:/root/.config/solana
+    environment:
+      - SOLANA_METRICS_CONFIG=host=http://0.0.0.0:9091
+    command: |
+      solana-test-validator
+      --rpc-bind-address=0.0.0.0
+      --rpc-port=8899
+      --websocket-url=ws://0.0.0.0:8902
+      --gossip-port=9902
+      --ledger=/root/.config/solana/test-ledger-3
+      --reset
+      --log
+      --accounts-db-cache-size-mb=512
+      --entrypoint=solana-validator:9900
+      --gossip-host=solana-validator-3
+    depends_on:
+      - solana-validator
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  solana-validator-4:
+    image: solanalabs/solana:v1.16.0
+    container_name: solana-validator-4
+    ports:
+      - "9903:9903"     # Gossip port
+      - "8903:8903"     # WebSocket
+    volumes:
+      - solana-data-4:/root/.config/solana
+    environment:
+      - SOLANA_METRICS_CONFIG=host=http://0.0.0.0:9091
+    command: |
+      solana-test-validator
+      --rpc-bind-address=0.0.0.0
+      --rpc-port=8899
+      --websocket-url=ws://0.0.0.0:8903
+      --gossip-port=9903
+      --ledger=/root/.config/solana/test-ledger-4
+      --reset
+      --log
+      --accounts-db-cache-size-mb=512
+      --entrypoint=solana-validator:9900
+      --gossip-host=solana-validator-4
+    depends_on:
+      - solana-validator
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  solana-validator-5:
+    image: solanalabs/solana:v1.16.0
+    container_name: solana-validator-5
+    ports:
+      - "9904:9904"     # Gossip port
+      - "8904:8904"     # WebSocket
+    volumes:
+      - solana-data-5:/root/.config/solana
+    environment:
+      - SOLANA_METRICS_CONFIG=host=http://0.0.0.0:9091
+    command: |
+      solana-test-validator
+      --rpc-bind-address=0.0.0.0
+      --rpc-port=8899
+      --websocket-url=ws://0.0.0.0:8904
+      --gossip-port=9904
+      --ledger=/root/.config/solana/test-ledger-5
+      --reset
+      --log
+      --accounts-db-cache-size-mb=512
+      --entrypoint=solana-validator:9900
+      --gossip-host=solana-validator-5
+    depends_on:
+      - solana-validator
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  solana-validator-6:
+    image: solanalabs/solana:v1.16.0
+    container_name: solana-validator-6
+    ports:
+      - "9905:9905"     # Gossip port
+      - "8905:8905"     # WebSocket
+    volumes:
+      - solana-data-6:/root/.config/solana
+    environment:
+      - SOLANA_METRICS_CONFIG=host=http://0.0.0.0:9091
+    command: |
+      solana-test-validator
+      --rpc-bind-address=0.0.0.0
+      --rpc-port=8899
+      --websocket-url=ws://0.0.0.0:8905
+      --gossip-port=9905
+      --ledger=/root/.config/solana/test-ledger-6
+      --reset
+      --log
+      --accounts-db-cache-size-mb=512
+      --entrypoint=solana-validator:9900
+      --gossip-host=solana-validator-6
+    depends_on:
+      - solana-validator
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  solana-validator-7:
+    image: solanalabs/solana:v1.16.0
+    container_name: solana-validator-7
+    ports:
+      - "9906:9906"     # Gossip port
+      - "8906:8906"     # WebSocket
+    volumes:
+      - solana-data-7:/root/.config/solana
+    environment:
+      - SOLANA_METRICS_CONFIG=host=http://0.0.0.0:9091
+    command: |
+      solana-test-validator
+      --rpc-bind-address=0.0.0.0
+      --rpc-port=8899
+      --websocket-url=ws://0.0.0.0:8906
+      --gossip-port=9906
+      --ledger=/root/.config/solana/test-ledger-7
+      --reset
+      --log
+      --accounts-db-cache-size-mb=512
+      --entrypoint=solana-validator:9900
+      --gossip-host=solana-validator-7
+    depends_on:
+      - solana-validator
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
   # ===== SOLANA METRICS EXPORTER =====
   solana-exporter:
     build:
@@ -173,10 +346,22 @@ services:
       - "8082:8080"     # Metrics exporter
     environment:
       - SOLANA_RPC_URL=http://solana-validator:8899
+      - SOLANA_RPC_URL_2=http://solana-validator-2:8899
+      - SOLANA_RPC_URL_3=http://solana-validator-3:8899
+      - SOLANA_RPC_URL_4=http://solana-validator-4:8899
+      - SOLANA_RPC_URL_5=http://solana-validator-5:8899
+      - SOLANA_RPC_URL_6=http://solana-validator-6:8899
+      - SOLANA_RPC_URL_7=http://solana-validator-7:8899
       - METRICS_PORT=8080
       - UPDATE_INTERVAL=30s
     depends_on:
       - solana-validator
+      - solana-validator-2
+      - solana-validator-3
+      - solana-validator-4
+      - solana-validator-5
+      - solana-validator-6
+      - solana-validator-7
     networks:
       - sprint-network
     restart: unless-stopped
@@ -200,80 +385,6 @@ services:
       echo 'docker exec -it solana-bench-tps solana-bench-tps --entrypoint http://solana-validator:8899 --duration 60 --tx_count 1000'
       sleep infinity
       "
-
-  # ===== ADDITIONAL SOLANA VALIDATORS =====
-  solana-validator-2:
-    image: solanalabs/solana:v1.16.0
-    container_name: solana-validator-2
-    profiles: ["multi-validator"]
-    ports:
-      - "8901:8899"     # RPC
-      - "8902:8900"     # WebSocket
-      - "9901:9900"     # Gossip
-    volumes:
-      - solana-data-2:/root/.config/solana
-    environment:
-      - SOLANA_METRICS_CONFIG=host=http://0.0.0.0:9091
-    command: |
-      solana-test-validator
-      --rpc-bind-address=0.0.0.0
-      --rpc-port=8899
-      --websocket-url=ws://0.0.0.0:8900
-      --gossip-port=9900
-      --ledger=/root/.config/solana/test-ledger
-      --reset
-      --log
-      --accounts-db-cache-size-mb=512
-      --enable-rpc-transaction-history
-      --rpc-pubsub-enable-block-subscription
-      --rpc-pubsub-enable-account-subscription
-      --gossip-host=0.0.0.0
-      --known-validator=127.0.0.1:9900
-    networks:
-      - sprint-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8899/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  solana-validator-3:
-    image: solanalabs/solana:v1.16.0
-    container_name: solana-validator-3
-    profiles: ["multi-validator"]
-    ports:
-      - "8903:8899"     # RPC
-      - "8904:8900"     # WebSocket
-      - "9902:9900"     # Gossip
-    volumes:
-      - solana-data-3:/root/.config/solana
-    environment:
-      - SOLANA_METRICS_CONFIG=host=http://0.0.0.0:9091
-    command: |
-      solana-test-validator
-      --rpc-bind-address=0.0.0.0
-      --rpc-port=8899
-      --websocket-url=ws://0.0.0.0:8900
-      --gossip-port=9900
-      --ledger=/root/.config/solana/test-ledger
-      --reset
-      --log
-      --accounts-db-cache-size-mb=512
-      --enable-rpc-transaction-history
-      --rpc-pubsub-enable-block-subscription
-      --rpc-pubsub-enable-account-subscription
-      --gossip-host=0.0.0.0
-      --known-validator=127.0.0.1:9900
-      --known-validator=127.0.0.1:9901
-    networks:
-      - sprint-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8899/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   # ===== CACHING & DATABASE LAYER =====
   redis:
