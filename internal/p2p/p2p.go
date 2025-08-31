@@ -19,7 +19,6 @@ import (
 	"github.com/btcsuite/btcd/peer"
 	"github.com/btcsuite/btcd/wire"
 	"go.uber.org/zap"
-	diag "github.com/PayRpc/Bitcoin-Sprint/internal/p2p/diag"
 )
 
 // Client manages P2P peers with secure handshake authentication and resilient reconnection
@@ -293,14 +292,6 @@ func (c *Client) parallelConnect(address string, connectionChan chan<- *peer.Pee
 				// Normal logging
 				c.logger.Info("Version acknowledgment received", zap.String("peer", address))
 
-				// mark handshake success for diagnostics
-				diag.RecordAttempt("bitcoin", diag.AttemptRecord{
-					Timestamp:        time.Now(),
-					Address:          address,
-					TcpSuccess:       true,
-					HandshakeSuccess: true,
-				})
-
 				// For Sprint peers, authentication already happened during connection
 				// For regular Bitcoin peers, no additional auth needed
 			},
@@ -333,58 +324,20 @@ func (c *Client) parallelConnect(address string, connectionChan chan<- *peer.Pee
 	// Set connection timeout
 	conn, err := net.DialTimeout("tcp", address, 30*time.Second)
 	if err != nil {
-		// Structured dial attempt log - TCP failure
-		c.logger.Warn("P2P dial attempt",
-			zap.String("address", address),
-			zap.Bool("tcp_success", false),
-			zap.String("tcp_error", err.Error()),
-		)
-		// record into attempts buffer for network 'bitcoin'
-		diag.RecordAttempt("bitcoin", diag.AttemptRecord{
-			Timestamp:  time.Now(),
-			Address:    address,
-			TcpSuccess: false,
-			TcpError:   err.Error(),
-		})
+		c.logger.Warn("Failed to connect to peer", zap.String("address", address), zap.Error(err))
 		connectionChan <- nil
 		return
 	}
-	// Structured dial attempt log - TCP success
-	c.logger.Info("P2P dial attempt",
-		zap.String("address", address),
-		zap.Bool("tcp_success", true),
-	)
 
 	// If peer is in Sprint relay cluster list, enforce handshake
 	if c.isSprintPeer(address) {
 		if err := c.auth.PerformHandshakeClient(conn, 5*time.Second); err != nil {
-			// Handshake failed
-			c.logger.Warn("P2P handshake result",
-				zap.String("address", address),
-				zap.Bool("handshake_success", false),
-				zap.String("handshake_error", err.Error()),
-			)
-			diag.RecordAttempt("bitcoin", diag.AttemptRecord{
-				Timestamp:        time.Now(),
-				Address:          address,
-				TcpSuccess:       true,
-				HandshakeSuccess: false,
-				HandshakeError:   err.Error(),
-			})
+			c.logger.Warn("Sprint handshake failed", zap.String("peer", address), zap.Error(err))
 			conn.Close()
 			connectionChan <- nil
 			return
 		}
-		c.logger.Info("P2P handshake result",
-			zap.String("address", address),
-			zap.Bool("handshake_success", true),
-		)
-		diag.RecordAttempt("bitcoin", diag.AttemptRecord{
-			Timestamp:        time.Now(),
-			Address:          address,
-			TcpSuccess:       true,
-			HandshakeSuccess: true,
-		})
+		c.logger.Debug("Sprint peer authenticated", zap.String("peer", address))
 	}
 
 	// Add to peer list
@@ -820,34 +773,17 @@ func (c *Client) connectToPeer(address string) error {
 	// Set connection timeout
 	conn, err := net.DialTimeout("tcp", address, 30*time.Second)
 	if err != nil {
-		// Log TCP failure for retry logic
-		c.logger.Warn("P2P dial attempt",
-			zap.String("address", address),
-			zap.Bool("tcp_success", false),
-			zap.String("tcp_error", err.Error()),
-		)
 		return fmt.Errorf("failed to connect: %w", err)
 	}
-	c.logger.Info("P2P dial attempt",
-		zap.String("address", address),
-		zap.Bool("tcp_success", true),
-	)
 
 	// If peer is in Sprint relay cluster list, enforce handshake
 	if c.isSprintPeer(address) {
 		if err := c.auth.PerformHandshakeClient(conn, 5*time.Second); err != nil {
-			c.logger.Warn("P2P handshake result",
-				zap.String("address", address),
-				zap.Bool("handshake_success", false),
-				zap.String("handshake_error", err.Error()),
-			)
+			c.logger.Warn("Sprint handshake failed", zap.String("peer", address), zap.Error(err))
 			conn.Close()
 			return err
 		}
-		c.logger.Info("P2P handshake result",
-			zap.String("address", address),
-			zap.Bool("handshake_success", true),
-		)
+		c.logger.Debug("Sprint peer authenticated", zap.String("peer", address))
 	}
 
 	// Add to peer list
@@ -861,33 +797,6 @@ func (c *Client) connectToPeer(address string) error {
 		zap.Int32("total_peers", int32(len(c.peers))))
 
 	return nil
-}
-
-// GetPeerCount returns the current number of connected peers
-func (c *Client) GetPeerCount() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return len(c.peers)
-}
-
-// GetPeerIDs returns a slice of peer remote addresses (string) currently known
-func (c *Client) GetPeerIDs() []string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	ids := make([]string, 0, len(c.peers))
-	for _, p := range c.peers {
-		if p == nil {
-			continue
-		}
-		// peer.Peer has a RemoteAddr() method exposed via Conn():
-		if p.Conn() != nil {
-			ids = append(ids, p.Conn().RemoteAddr().String())
-		} else {
-			// Fallback to the string representation
-			ids = append(ids, p.String())
-		}
-	}
-	return ids
 }
 
 func (c *Client) handleBlock(block *wire.MsgBlock) {

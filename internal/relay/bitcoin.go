@@ -12,7 +12,6 @@ import (
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
 	"go.uber.org/zap"
-	diag "github.com/PayRpc/Bitcoin-Sprint/internal/p2p/diag"
 )
 
 // BitcoinRelay implements RelayClient for Bitcoin network using btcd peer connections
@@ -322,12 +321,6 @@ func (br *BitcoinRelay) connectToPeer(ctx context.Context, endpoint string) {
 		br.logger.Warn("Failed to connect to peer",
 			zap.String("endpoint", endpoint),
 			zap.Error(err))
-		diag.RecordAttempt("bitcoin", diag.AttemptRecord{
-			Timestamp:  time.Now(),
-			Address:    endpoint,
-			TcpSuccess: false,
-			TcpError:   err.Error(),
-		})
 		return
 	}
 
@@ -357,12 +350,6 @@ func (br *BitcoinRelay) connectToPeer(ctx context.Context, endpoint string) {
 
 	atomic.AddInt32(&br.activePeers, 1)
 	br.logger.Info("Connected to Bitcoin peer", zap.String("endpoint", endpoint))
-	diag.RecordAttempt("bitcoin", diag.AttemptRecord{
-		Timestamp:        time.Now(),
-		Address:          endpoint,
-		TcpSuccess:       true,
-		HandshakeSuccess: true, // assume success if we reached here
-	})
 }
 
 // updateHealth updates the health status

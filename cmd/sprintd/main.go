@@ -1129,24 +1129,6 @@ stopped  atomic.Bool
 
 }
 
-// GetPeerCount returns number of peers tracked by UniversalClient
-func (uc *UniversalClient) GetPeerCount() int {
-	uc.peersMu.RLock()
-	defer uc.peersMu.RUnlock()
-	return len(uc.peers)
-}
-
-// GetPeerIDs returns slice of peer identifiers known to UniversalClient
-func (uc *UniversalClient) GetPeerIDs() []string {
-	uc.peersMu.RLock()
-	defer uc.peersMu.RUnlock()
-	ids := make([]string, 0, len(uc.peers))
-	for k := range uc.peers {
-		ids = append(ids, k)
-	}
-	return ids
-}
-
 
 func NewUniversalClient(cfg Config, protocol ProtocolType, logger *zap.Logger) (*UniversalClient, error) {
 
@@ -1361,6 +1343,17 @@ c.logger.Warn("Failed to send to peer", zap.String("peer_id", peerID), zap.Error
 wg.Wait()
 
 return lastError
+
+}
+
+
+func (c *UniversalClient) GetPeerCount() int {
+
+c.peersMu.RLock()
+
+defer c.peersMu.RUnlock()
+
+return len(c.peers)
 
 }
 
@@ -3240,9 +3233,6 @@ s.mux.HandleFunc("/version", s.versionHandler)
 s.mux.HandleFunc("/generate-key", s.generateKeyHandler)
 
 s.mux.HandleFunc("/status", s.statusHandler)
-
-	// P2P diagnostics - lightweight endpoint exposing peer counts and ids
-	s.mux.HandleFunc("/api/v1/p2p/diag", s.p2pDiagHandler)
 
 s.mux.HandleFunc("/mempool", s.mempoolHandler)
 

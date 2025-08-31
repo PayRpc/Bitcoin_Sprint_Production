@@ -7,13 +7,26 @@ import (
 	"net/url"
 	"sync"
 	"sync/atomic"
-	"time"
-
-	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
+	relayConfig := RelayConfig{
+		Network:           "ethereum",
+		Endpoints:         []string{
+			"18.138.108.67:30303",   // EF Bootnode (Singapore)
+			"3.209.45.79:30303",     // EF Bootnode (US-East)
+			"34.255.23.113:30303",   // EF Bootnode (Ireland)
+			"35.158.244.151:30303",  // EF Bootnode (Germany)
+			"52.74.57.123:30303",    // EF Bootnode (Singapore)
+		},
+		},
+		Timeout:           30 * time.Second,
+		RetryAttempts:     3,
+		RetryDelay:        5 * time.Second,
+		MaxConcurrency:    4,
+		BufferSize:        1000,
+		EnableCompression: true,
+	}"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
-	diag "github.com/PayRpc/Bitcoin-Sprint/internal/p2p/diag"
 )
 
 // EthereumRelay implements RelayClient for Ethereum network using JSON-RPC WebSocket
@@ -46,9 +59,6 @@ type EthereumRelay struct {
 	// Subscription management
 	subscriptions map[string]chan *EthereumNotification
 	subMu         sync.RWMutex
-	// Handshake timers for diagnostics
-	handshakeTimers   map[string]*time.Timer
-	handshakeTimersMu sync.Mutex
 }
 
 // EthereumResponse represents a JSON-RPC response
@@ -118,7 +128,6 @@ func NewEthereumRelay(cfg config.Config, logger *zap.Logger) *EthereumRelay {
 			ConnectionState: "disconnected",
 		},
 		metrics: &RelayMetrics{},
-	handshakeTimers: make(map[string]*time.Timer),
 	}
 }
 
@@ -444,13 +453,6 @@ func (er *EthereumRelay) connectToEndpoint(ctx context.Context, endpoint string)
 		er.logger.Warn("Failed to connect to Ethereum endpoint",
 			zap.String("endpoint", endpoint),
 			zap.Error(err))
-		// record failed TCP attempt
-		diag.RecordAttempt("ethereum", diag.AttemptRecord{
-			Timestamp:  time.Now(),
-			Address:    endpoint,
-			TcpSuccess: false,
-			TcpError:   err.Error(),
-		})
 		return
 	}
 
@@ -460,105 +462,24 @@ func (er *EthereumRelay) connectToEndpoint(ctx context.Context, endpoint string)
 
 	er.logger.Info("Connected to Ethereum endpoint", zap.String("endpoint", endpoint))
 
-	// record successful TCP/connect attempt (handshake not yet confirmed)
-	diag.RecordAttempt("ethereum", diag.AttemptRecord{
-		Timestamp:        time.Now(),
-		Address:          endpoint,
-		TcpSuccess:       true,
-		HandshakeSuccess: false,
-		HandshakeError:   "",
-	})
-
-	// Start message handler (pass endpoint + done channel so handler can mark handshake when first valid response arrives)
-	done := make(chan struct{})
-	go er.handleMessages(conn, endpoint, done)
-
-	// Start handshake timer (10s). If no valid JSON-RPC response arrives we record handshake failure.
-	handshakeTimer := time.AfterFunc(10*time.Second, func() {
-		diag.RecordAttempt("ethereum", diag.AttemptRecord{
-			Timestamp:        time.Now(),
-			Address:          endpoint,
-			TcpSuccess:       true,
-			HandshakeSuccess: false,
-			HandshakeError:   "timeout: no JSON-RPC response",
-		})
-		// signal done if not already closed
-		select {
-		case <-done:
-		default:
-			close(done)
-		}
-	})
-
-	// Save timer reference so it can be cancelled on handshake success or early failure
-	er.handshakeTimersMu.Lock()
-	er.handshakeTimers[endpoint] = handshakeTimer
-	er.handshakeTimersMu.Unlock()
+	// Start message handler
+	go er.handleMessages(conn)
 }
 
 // handleMessages handles incoming WebSocket messages
-func (er *EthereumRelay) handleMessages(conn *websocket.Conn, endpoint string, done chan struct{}) {
+func (er *EthereumRelay) handleMessages(conn *websocket.Conn) {
 	defer conn.Close()
-
-	handshakeDone := false
 
 	for {
 		_, message, err := conn.ReadMessage()
-			if err != nil {
-				er.logger.Warn("WebSocket read error", zap.Error(err))
-				// if handshake never completed, record failure with the read error and cancel timer
-				if !handshakeDone {
-					diag.RecordAttempt("ethereum", diag.AttemptRecord{
-						Timestamp:        time.Now(),
-						Address:          endpoint,
-						TcpSuccess:       true,
-						HandshakeSuccess: false,
-						HandshakeError:   err.Error(),
-					})
-					// cancel any handshake timer
-					er.handshakeTimersMu.Lock()
-					if t, ok := er.handshakeTimers[endpoint]; ok {
-						t.Stop()
-						delete(er.handshakeTimers, endpoint)
-					}
-					er.handshakeTimersMu.Unlock()
-					// signal done to the watcher
-					select {
-					case <-done:
-					default:
-						close(done)
-					}
-				}
-				break
-			}
+		if err != nil {
+			er.logger.Warn("WebSocket read error", zap.Error(err))
+			break
+		}
 
 		// Parse message as JSON-RPC response or notification
 		var response EthereumResponse
 		if err := json.Unmarshal(message, &response); err == nil && response.ID > 0 {
-			// On first valid JSON-RPC response, mark handshake success for diagnostics
-				if !handshakeDone {
-					handshakeDone = true
-					diag.RecordAttempt("ethereum", diag.AttemptRecord{
-						Timestamp:        time.Now(),
-						Address:          endpoint,
-						TcpSuccess:       true,
-						HandshakeSuccess: true,
-						HandshakeError:   "",
-					})
-					// Cancel handshake timer if present
-					er.handshakeTimersMu.Lock()
-					if t, ok := er.handshakeTimers[endpoint]; ok {
-						t.Stop()
-						delete(er.handshakeTimers, endpoint)
-					}
-					er.handshakeTimersMu.Unlock()
-					// signal done to the watcher
-					select {
-					case <-done:
-					default:
-						close(done)
-					}
-				}
 			// Handle response
 			er.handleResponse(&response)
 		} else {
