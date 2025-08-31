@@ -1181,114 +1181,102 @@ stopChan: make(chan struct{}),
 
 
 func (c *UniversalClient) ConnectToNetwork(ctx context.Context) error {
+	factory := map[ProtocolType]ProtocolFactory{
+		ProtocolBitcoin:  &GenericProtocolFactory{chain: ProtocolBitcoin},
+		ProtocolEthereum: &GenericProtocolFactory{chain: ProtocolEthereum},
+		ProtocolSolana:   &GenericProtocolFactory{chain: ProtocolSolana},
+	}[c.protocol]
 
-factory := map[ProtocolType]ProtocolFactory{
+	seeds := factory.GetDefaultSeeds()
 
-ProtocolBitcoin:  &GenericProtocolFactory{chain: ProtocolBitcoin},
+	var wg sync.WaitGroup
+	results := make(chan struct {
+		conn ProtocolConnection
+		addr string
+		err  error
+	}, len(seeds))
 
-ProtocolEthereum: &GenericProtocolFactory{chain: ProtocolEthereum},
+	for _, addr := range seeds {
+		wg.Add(1)
+		go func(address string) {
+			defer wg.Done()
 
-ProtocolSolana:   &GenericProtocolFactory{chain: ProtocolSolana},
+			// Track diagnostics per attempt
+			rec := AttemptRecord{Address: address, Timestamp: time.Now().UTC()}
 
-}[c.protocol]
+			conn, err := c.handler.CreateConnection(ctx, address)
+			if err != nil {
+				rec.TcpSuccess = false
+				rec.TcpError = err.Error()
+				RecordAttempt(string(c.protocol), rec)
+				results <- struct {
+					conn ProtocolConnection
+					addr string
+					err  error
+				}{nil, address, err}
+				return
+			}
 
+			rec.TcpSuccess = true
+			// Validate and initialize as a proxy for protocol handshake
+			if vErr := c.handler.ValidateConnection(conn); vErr != nil {
+				rec.HandshakeSuccess = false
+				rec.HandshakeError = vErr.Error()
+				RecordAttempt(string(c.protocol), rec)
+				results <- struct {
+					conn ProtocolConnection
+					addr string
+					err  error
+				}{nil, address, vErr}
+				return
+			}
+			if iErr := c.handler.InitializeConnection(conn); iErr != nil {
+				rec.HandshakeSuccess = false
+				rec.HandshakeError = iErr.Error()
+				RecordAttempt(string(c.protocol), rec)
+				results <- struct {
+					conn ProtocolConnection
+					addr string
+					err  error
+				}{nil, address, iErr}
+				return
+			}
 
-seeds := factory.GetDefaultSeeds()
+			rec.HandshakeSuccess = true
+			RecordAttempt(string(c.protocol), rec)
 
-var wg sync.WaitGroup
+			// store peer and report success
+			c.peersMu.Lock()
+			peerID := generatePeerID(address, string(c.protocol))
+			c.peers[peerID] = conn
+			c.peersMu.Unlock()
 
-results := make(chan struct {
+			results <- struct {
+				conn ProtocolConnection
+				addr string
+				err  error
+			}{conn, address, nil}
+		}(addr)
+	}
 
-conn ProtocolConnection
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
 
-addr string
+	success := 0
+	for result := range results {
+		if result.err == nil {
+			success++
+			c.logger.Info("Connected to peer", zap.String("address", result.addr))
+		}
+	}
 
-err  error
-
-}, len(seeds))
-
-
-for _, addr := range seeds {
-
-wg.Add(1)
-
-go func(address string) {
-
-defer wg.Done()
-
-conn, err := c.handler.CreateConnection(ctx, address)
-
-if err == nil && c.handler.ValidateConnection(conn) == nil && c.handler.InitializeConnection(conn) == nil {
-
-c.peersMu.Lock()
-
-peerID := generatePeerID(address, string(c.protocol))
-
-c.peers[peerID] = conn
-
-c.peersMu.Unlock()
-
-results <- struct {
-
-conn ProtocolConnection
-
-addr string
-
-err  error
-
-}{conn, address, nil}
-
-} else {
-
-results <- struct {
-
-conn ProtocolConnection
-
-addr string
-
-err  error
-
-}{nil, address, err}
-
-}
-
-}(addr)
-
-}
-
-
-go func() {
-
-wg.Wait()
-
-close(results)
-
-}()
-
-
-success := 0
-
-for result := range results {
-
-if result.err == nil {
-
-success++
-
-c.logger.Info("Connected to peer", zap.String("address", result.addr))
-
-}
-
-}
-
-
-if success == 0 {
-
-return errors.New("failed to connect to any peers")
-
-}
-
-return nil
-
+	if success == 0 {
+		SetLastError(string(c.protocol), "failed to connect to any peers")
+		return errors.New("failed to connect to any peers")
+	}
+	return nil
 }
 
 
@@ -1357,43 +1345,38 @@ return len(c.peers)
 
 }
 
+// GetPeerIDs returns a snapshot slice of current peer IDs
+func (c *UniversalClient) GetPeerIDs() []string {
+	c.peersMu.RLock()
+	defer c.peersMu.RUnlock()
+	ids := make([]string, 0, len(c.peers))
+	for id := range c.peers {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 
 func (c *UniversalClient) Shutdown(ctx context.Context) error {
+	if !c.stopped.CompareAndSwap(false, true) {
+		return errors.New("client already stopped")
+	}
 
-if !c.stopped.CompareAndSwap(false, true) {
+	close(c.stopChan)
 
-return errors.New("client already stopped")
+	c.peersMu.Lock()
+	for _, conn := range c.peers {
+		c.handler.TerminateConnection(conn)
+	}
+	c.peers = make(map[string]ProtocolConnection)
+	c.peersMu.Unlock()
 
+	return nil
 }
-
-
-close(c.stopChan)
-
-
-c.peersMu.Lock()
-
-for _, conn := range c.peers {
-
-c.handler.TerminateConnection(conn)
-
-}
-
-c.peers = make(map[string]ProtocolConnection)
-
-c.peersMu.Unlock()
-
-
-return nil
-
-}
-
 
 func generatePeerID(address, protocol string) string {
-
-hash := sha256.Sum256([]byte(address + protocol))
-
-return fmt.Sprintf("peer_%s", hex.EncodeToString(hash[:8]))
-
+	hash := sha256.Sum256([]byte(address + protocol))
+	return fmt.Sprintf("peer_%s", hex.EncodeToString(hash[:8]))
 }
 
 
@@ -3241,6 +3224,9 @@ s.mux.HandleFunc("/analytics", s.analyticsSummaryHandler)
 s.mux.HandleFunc("/license", s.licenseInfoHandler)
 
 s.mux.HandleFunc("/chains", s.chainsHandler)
+
+// P2P diagnostics endpoint
+s.mux.HandleFunc("/api/v1/p2p/diag", s.p2pDiagHandler)
 
 s.esm.RegisterEnterpriseRoutes()
 
