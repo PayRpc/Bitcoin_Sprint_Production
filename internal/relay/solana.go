@@ -13,6 +13,7 @@ import (
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
+	diag "github.com/PayRpc/Bitcoin-Sprint/internal/p2p/diag"
 )
 
 // SolanaRelay implements RelayClient for Solana network using WebSocket + QUIC
@@ -45,6 +46,9 @@ type SolanaRelay struct {
 	// Subscription management
 	subscriptions map[string]chan *SolanaNotification
 	subMu         sync.RWMutex
+	// Handshake timers for diagnostics
+	handshakeTimers   map[string]*time.Timer
+	handshakeTimersMu sync.Mutex
 }
 
 // SolanaResponse represents a JSON-RPC response
@@ -135,6 +139,7 @@ func NewSolanaRelay(cfg config.Config, logger *zap.Logger) *SolanaRelay {
 			ConnectionState: "disconnected",
 		},
 		metrics: &RelayMetrics{},
+	handshakeTimers: make(map[string]*time.Timer),
 	}
 }
 
@@ -424,6 +429,12 @@ func (sr *SolanaRelay) connectToEndpoint(ctx context.Context, endpoint string) {
 		sr.logger.Warn("Failed to connect to Solana endpoint",
 			zap.String("endpoint", endpoint),
 			zap.Error(err))
+		diag.RecordAttempt("solana", diag.AttemptRecord{
+			Timestamp:  time.Now(),
+			Address:    endpoint,
+			TcpSuccess: false,
+			TcpError:   err.Error(),
+		})
 		return
 	}
 
@@ -433,24 +444,102 @@ func (sr *SolanaRelay) connectToEndpoint(ctx context.Context, endpoint string) {
 
 	sr.logger.Info("Connected to Solana endpoint", zap.String("endpoint", endpoint))
 
-	// Start message handler
-	go sr.handleMessages(conn)
+	// record successful websocket connect; handshake not yet confirmed
+	diag.RecordAttempt("solana", diag.AttemptRecord{
+		Timestamp:        time.Now(),
+		Address:          endpoint,
+		TcpSuccess:       true,
+		HandshakeSuccess: false,
+		HandshakeError:   "",
+	})
+
+	// Start message handler (pass endpoint + done channel so handler can mark handshake when first valid response arrives)
+	done := make(chan struct{})
+	go sr.handleMessages(conn, endpoint, done)
+
+	// Start handshake timer (10s). If no valid JSON-RPC response arrives we record handshake failure.
+	handshakeTimer := time.AfterFunc(10*time.Second, func() {
+		diag.RecordAttempt("solana", diag.AttemptRecord{
+			Timestamp:        time.Now(),
+			Address:          endpoint,
+			TcpSuccess:       true,
+			HandshakeSuccess: false,
+			HandshakeError:   "timeout: no JSON-RPC response",
+		})
+		// signal done if not already closed
+		select {
+		case <-done:
+		default:
+			close(done)
+		}
+	})
+
+	// Save timer reference so it can be cancelled on handshake success or early failure
+	sr.handshakeTimersMu.Lock()
+	sr.handshakeTimers[endpoint] = handshakeTimer
+	sr.handshakeTimersMu.Unlock()
 }
 
 // handleMessages handles incoming WebSocket messages
-func (sr *SolanaRelay) handleMessages(conn *websocket.Conn) {
+func (sr *SolanaRelay) handleMessages(conn *websocket.Conn, endpoint string, done chan struct{}) {
 	defer conn.Close()
+
+	handshakeDone := false
 
 	for {
 		_, message, err := conn.ReadMessage()
-		if err != nil {
-			sr.logger.Warn("WebSocket read error", zap.Error(err))
-			break
-		}
+			if err != nil {
+				sr.logger.Warn("WebSocket read error", zap.Error(err))
+				if !handshakeDone {
+					diag.RecordAttempt("solana", diag.AttemptRecord{
+						Timestamp:        time.Now(),
+						Address:          endpoint,
+						TcpSuccess:       true,
+						HandshakeSuccess: false,
+						HandshakeError:   err.Error(),
+					})
+					// cancel any handshake timer
+					sr.handshakeTimersMu.Lock()
+					if t, ok := sr.handshakeTimers[endpoint]; ok {
+						t.Stop()
+						delete(sr.handshakeTimers, endpoint)
+					}
+					sr.handshakeTimersMu.Unlock()
+					select {
+					case <-done:
+					default:
+						close(done)
+					}
+				}
+				break
+			}
 
 		// Parse message as JSON-RPC response or notification
 		var response SolanaResponse
 		if err := json.Unmarshal(message, &response); err == nil && response.ID > 0 {
+			// On first valid RPC response, mark handshake success for diagnostics
+				if !handshakeDone {
+					handshakeDone = true
+					diag.RecordAttempt("solana", diag.AttemptRecord{
+						Timestamp:        time.Now(),
+						Address:          endpoint,
+						TcpSuccess:       true,
+						HandshakeSuccess: true,
+						HandshakeError:   "",
+					})
+					// Cancel handshake timer if present
+					sr.handshakeTimersMu.Lock()
+					if t, ok := sr.handshakeTimers[endpoint]; ok {
+						t.Stop()
+						delete(sr.handshakeTimers, endpoint)
+					}
+					sr.handshakeTimersMu.Unlock()
+					select {
+					case <-done:
+					default:
+						close(done)
+					}
+				}
 			// Handle response
 			sr.handleResponse(&response)
 		} else {

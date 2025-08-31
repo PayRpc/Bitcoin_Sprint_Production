@@ -19,6 +19,7 @@ import (
 	"github.com/btcsuite/btcd/peer"
 	"github.com/btcsuite/btcd/wire"
 	"go.uber.org/zap"
+	diag "github.com/PayRpc/Bitcoin-Sprint/internal/p2p/diag"
 )
 
 // Client manages P2P peers with secure handshake authentication and resilient reconnection
@@ -292,6 +293,14 @@ func (c *Client) parallelConnect(address string, connectionChan chan<- *peer.Pee
 				// Normal logging
 				c.logger.Info("Version acknowledgment received", zap.String("peer", address))
 
+				// mark handshake success for diagnostics
+				diag.RecordAttempt("bitcoin", diag.AttemptRecord{
+					Timestamp:        time.Now(),
+					Address:          address,
+					TcpSuccess:       true,
+					HandshakeSuccess: true,
+				})
+
 				// For Sprint peers, authentication already happened during connection
 				// For regular Bitcoin peers, no additional auth needed
 			},
@@ -330,6 +339,13 @@ func (c *Client) parallelConnect(address string, connectionChan chan<- *peer.Pee
 			zap.Bool("tcp_success", false),
 			zap.String("tcp_error", err.Error()),
 		)
+		// record into attempts buffer for network 'bitcoin'
+		diag.RecordAttempt("bitcoin", diag.AttemptRecord{
+			Timestamp:  time.Now(),
+			Address:    address,
+			TcpSuccess: false,
+			TcpError:   err.Error(),
+		})
 		connectionChan <- nil
 		return
 	}
@@ -348,6 +364,13 @@ func (c *Client) parallelConnect(address string, connectionChan chan<- *peer.Pee
 				zap.Bool("handshake_success", false),
 				zap.String("handshake_error", err.Error()),
 			)
+			diag.RecordAttempt("bitcoin", diag.AttemptRecord{
+				Timestamp:        time.Now(),
+				Address:          address,
+				TcpSuccess:       true,
+				HandshakeSuccess: false,
+				HandshakeError:   err.Error(),
+			})
 			conn.Close()
 			connectionChan <- nil
 			return
@@ -356,6 +379,12 @@ func (c *Client) parallelConnect(address string, connectionChan chan<- *peer.Pee
 			zap.String("address", address),
 			zap.Bool("handshake_success", true),
 		)
+		diag.RecordAttempt("bitcoin", diag.AttemptRecord{
+			Timestamp:        time.Now(),
+			Address:          address,
+			TcpSuccess:       true,
+			HandshakeSuccess: true,
+		})
 	}
 
 	// Add to peer list
