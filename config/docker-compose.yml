@@ -655,13 +655,21 @@ services:
     container_name: bitcoin-sprint-web
     ports:
       - "3002:3002"     # Web Dashboard
+    env_file:
+      - ./web/.env.production
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=http://bitcoin-sprint:8080/api
-      - DATABASE_URL=postgresql://sprint:sprint@postgres:5432/sprint_db
+      - NEXT_PUBLIC_APP_ENV=production
     depends_on:
       - bitcoin-sprint
       - postgres
+      - prometheus
     networks:
       - sprint-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

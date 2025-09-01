@@ -1,6 +1,8 @@
 version: '3.8'
 
 networks:
+  sprint-network:
+    external: true
   monitoring:
     driver: bridge
 
@@ -19,6 +21,7 @@ services:
     volumes:
       - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     networks:
+      - sprint-network
       - monitoring
     restart: unless-stopped
     command:
@@ -43,6 +46,7 @@ services:
       - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
       - ../grafana/provisioning:/etc/grafana/provisioning:ro
     networks:
+      - sprint-network
       - monitoring
     restart: unless-stopped
     depends_on:

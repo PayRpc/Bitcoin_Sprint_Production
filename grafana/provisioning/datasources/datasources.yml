@@ -35,3 +35,14 @@ datasources:
       interval: Daily
       timeField: "@timestamp"
       esVersion: 8
+      
+  - name: Bitcoin Sprint Web API
+    type: json
+    access: proxy
+    url: http://bitcoin-sprint-web:3002/api
+    isDefault: false
+    editable: true
+    jsonData:
+      httpMethod: GET
+      keepCookies: []
+      queryParams: ""

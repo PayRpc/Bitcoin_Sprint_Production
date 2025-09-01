@@ -72,3 +72,10 @@ scrape_configs:
     static_configs:
       - targets: ['redis:6379']
     scrape_interval: 15s
+
+  # Bitcoin Sprint Web Dashboard
+  - job_name: 'bitcoin-sprint-web'
+    static_configs:
+      - targets: ['bitcoin-sprint-web:3002']
+    scrape_interval: 15s
+    metrics_path: '/api/metrics'
