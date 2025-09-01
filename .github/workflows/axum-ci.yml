@@ -1,0 +1,55 @@
+name: Axum API CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test-axum:
+    name: Build and Test Axum Server (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Show toolchain
+        run: |
+          rustc -Vv
+          cargo -V
+        shell: pwsh
+
+      - name: Build Axum server (release)
+        run: |
+          Set-Location secure\rust
+          cargo build --release --bin bitcoin_sprint_api --features axum-only
+        shell: pwsh
+
+      - name: Run hardened PowerShell test
+        run: |
+          Set-Location $env:GITHUB_WORKSPACE
+          .\test-axum-server.ps1
+        shell: pwsh
+
+      - name: Upload bin artifact (for debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: axum-binaries
+          path: |
+            bin/bitcoin_sprint_api.exe
+            secure/rust/target/release/bitcoin_sprint_api.exe

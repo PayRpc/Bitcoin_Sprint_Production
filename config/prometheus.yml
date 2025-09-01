@@ -10,7 +10,8 @@ scrape_configs:
   # Bitcoin Sprint Core Service
   - job_name: 'bitcoin-sprint'
     static_configs:
-      - targets: ['localhost:8082']
+  # Scrape both Go (8082) and Rust (8443) backends running on the host from inside Docker
+  - targets: ['host.docker.internal:8082', 'host.docker.internal:8443']
     scrape_interval: 5s
     metrics_path: '/metrics'
 

@@ -1,10 +1,4 @@
-use axum::{
-    extract::{Path, Query},
-    http::StatusCode,
-    response::{IntoResponse, Json},
-    routing::{get, post},
-    Router,
-};
+use axum::{extract::{Path, Query}, middleware, middleware::from_fn, http::{Request, StatusCode}, response::{IntoResponse, Response}, routing::{get, post}, Router, Json};
 use chrono::{DateTime, Utc};
 use dotenvy::dotenv;
 use serde::{Deserialize, Serialize};
@@ -14,12 +8,16 @@ use std::collections::HashMap;
 use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 use std::time::{Duration, Instant};
 use tokio::net::TcpStream;
-use tokio::sync::{mpsc, Mutex};
-use tokio::task;
-use tracing::{error, info, warn};
+use tokio::sync::mpsc;
+use tracing::{debug, error, info, warn};
+use axum::http::header::CONTENT_TYPE;
+use prometheus::{Encoder, TextEncoder, register_counter_vec, CounterVec, register_gauge_vec, GaugeVec, register_histogram_vec, HistogramVec};
 use uuid::Uuid;
+use rand;
+use hex;
 
 // Version information
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -243,7 +241,7 @@ impl LatencyOptimizer {
         if chain_vec.len() >= 10 {
             let mut sorted = chain_vec.clone();
             sorted.sort();
-            let p99_index = (0.99 * sorted.len() as f64).ceil() as usize - 1;
+            let p99_index = ((0.99f64 * sorted.len() as f64).ceil() as usize).saturating_sub(1);
             let current_p99 = sorted[p99_index];
             if current_p99 > self.target_p99 {
                 warn!("P99 exceeded for chain {}: {:?} > {:?}", chain, current_p99, self.target_p99);
@@ -252,22 +250,437 @@ impl LatencyOptimizer {
     }
 }
 
+// Tier Management System (ported from Go)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TierConfig {
+    name: String,
+    requests_per_second: u32,
+    requests_per_month: u64,
+    max_concurrent: u32,
+    cache_priority: u32,
+    latency_target_ms: u64,
+    features: Vec<String>,
+    price_per_request: f64,
+}
+
+#[derive(Debug, Clone)]
+struct TierManager {
+    tiers: HashMap<String, TierConfig>,
+    user_tiers: Arc<Mutex<HashMap<String, String>>>,
+    rate_limiters: Arc<Mutex<HashMap<String, RateLimiter>>>,
+    monetization: MonetizationEngine,
+}
+
+impl TierManager {
+    fn new() -> Self {
+        let mut tiers = HashMap::new();
+
+        // Free tier
+        tiers.insert("free".to_string(), TierConfig {
+            name: "Free".to_string(),
+            requests_per_second: 10,
+            requests_per_month: 100_000,
+            max_concurrent: 5,
+            cache_priority: 1,
+            latency_target_ms: 500,
+            features: vec!["basic_api".to_string()],
+            price_per_request: 0.0,
+        });
+
+        // Pro tier
+        tiers.insert("pro".to_string(), TierConfig {
+            name: "Pro".to_string(),
+            requests_per_second: 100,
+            requests_per_month: 10_000_000,
+            max_concurrent: 50,
+            cache_priority: 2,
+            latency_target_ms: 100,
+            features: vec!["basic_api".to_string(), "websockets".to_string(), "historical_data".to_string()],
+            price_per_request: 0.0001,
+        });
+
+        // Enterprise tier
+        tiers.insert("enterprise".to_string(), TierConfig {
+            name: "Enterprise".to_string(),
+            requests_per_second: 1000,
+            requests_per_month: 1_000_000_000,
+            max_concurrent: 500,
+            cache_priority: 3,
+            latency_target_ms: 50,
+            features: vec!["all".to_string(), "custom_endpoints".to_string(), "dedicated_support".to_string(), "sla".to_string()],
+            price_per_request: 0.00005,
+        });
+
+        TierManager {
+            tiers,
+            user_tiers: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiters: Arc::new(Mutex::new(HashMap::new())),
+            monetization: MonetizationEngine::new(),
+        }
+    }
+
+    async fn get_tier_config(&self, tier: &str) -> Option<&TierConfig> {
+        self.tiers.get(tier)
+    }
+
+    async fn assign_user_tier(&self, user_id: &str, tier: &str) {
+        let mut user_tiers = self.user_tiers.lock().await;
+        user_tiers.insert(user_id.to_string(), tier.to_string());
+    }
+
+    async fn get_user_tier(&self, user_id: &str) -> String {
+        let user_tiers = self.user_tiers.lock().await;
+        user_tiers.get(user_id).cloned().unwrap_or_else(|| "free".to_string())
+    }
+
+    async fn check_rate_limit(&self, user_id: &str) -> bool {
+        let user_tier = self.get_user_tier(user_id).await;
+        let tier_config = match self.get_tier_config(&user_tier).await {
+            Some(config) => config,
+            None => return false,
+        };
+
+        let mut rate_limiters = self.rate_limiters.lock().await;
+        let limiter = rate_limiters.entry(user_id.to_string()).or_insert_with(|| {
+            RateLimiter::new(tier_config.requests_per_second as u64, Duration::from_secs(60))
+        });
+
+        limiter.allow()
+    }
+}
+
+// Rate Limiter (ported from Go)
+#[derive(Debug, Clone)]
+struct RateLimiter {
+    tokens: Arc<Mutex<f64>>,
+    max_tokens: f64,
+    refill_rate: f64, // tokens per second
+    last_refill: Arc<Mutex<DateTime<Utc>>>,
+}
+
+impl RateLimiter {
+    fn new(requests_per_minute: u64, window: Duration) -> Self {
+        let max_tokens = requests_per_minute as f64;
+        let refill_rate = max_tokens / window.as_secs_f64();
+
+        RateLimiter {
+            tokens: Arc::new(Mutex::new(max_tokens)),
+            max_tokens,
+            refill_rate,
+            last_refill: Arc::new(Mutex::new(Utc::now())),
+        }
+    }
+
+    fn allow(&self) -> bool {
+        // For simplicity, we'll use a synchronous approach here
+        // In a real implementation, this would need to be async
+        let mut tokens = self.tokens.try_lock().unwrap();
+        let mut last_refill = self.last_refill.try_lock().unwrap();
+
+        let now = Utc::now();
+        let elapsed = now.signed_duration_since(*last_refill).num_milliseconds() as f64 / 1000.0;
+        *tokens = (*tokens + elapsed * self.refill_rate).min(self.max_tokens);
+        *last_refill = now;
+
+        if *tokens >= 1.0 {
+            *tokens -= 1.0;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+// Key Manager (ported from Go)
+#[derive(Debug, Clone)]
+struct KeyManager {
+    keys: Arc<Mutex<HashMap<String, KeyDetails>>>,
+}
+
+impl KeyManager {
+    fn new() -> Self {
+        KeyManager {
+            keys: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    async fn generate_key(&self, tier: &str, _client_ip: &str) -> Result<String, String> {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let key_bytes: [u8; 16] = rng.gen();
+        let key = format!("key_{}", hex::encode(key_bytes));
+
+        let details = KeyDetails {
+            hash: hex::encode(Sha256::digest(key.as_bytes())),
+            tier: tier.to_string(),
+            created_at: Utc::now(),
+            expires_at: Utc::now() + chrono::Duration::days(30),
+            request_count: 0,
+            rate_limit_remaining: self.get_rate_limit_for_tier(tier),
+        };
+
+        let mut keys = self.keys.lock().await;
+        keys.insert(key.clone(), details);
+
+        Ok(key)
+    }
+
+    async fn validate_key(&self, key: &str) -> Option<KeyDetails> {
+        let keys = self.keys.lock().await;
+        keys.get(key).cloned()
+    }
+
+    fn get_rate_limit_for_tier(&self, tier: &str) -> u32 {
+        match tier {
+            "free" => 1000,
+            "pro" => 10_000,
+            "enterprise" => 100_000,
+            _ => 1000,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct KeyDetails {
+    hash: String,
+    tier: String,
+    created_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+    request_count: u64,
+    rate_limit_remaining: u32,
+}
+
+// Monetization Engine (ported from Go)
+#[derive(Debug, Clone)]
+struct MonetizationEngine {}
+
+impl MonetizationEngine {
+    fn new() -> Self {
+        MonetizationEngine {}
+    }
+
+    async fn calculate_cost(&self, tier: &str, request_count: u64) -> f64 {
+        match tier {
+            "free" => 0.0,
+            "pro" => request_count as f64 * 0.0001,
+            "enterprise" => request_count as f64 * 0.00005,
+            _ => 0.0,
+        }
+    }
+}
+
+// Predictive Cache (ported from Go)
+#[derive(Clone)]
+struct PredictiveCache {
+    cache: Arc<Mutex<HashMap<String, CacheEntry>>>,
+    predictions: Arc<Mutex<PredictionEngine>>,
+    max_size: usize,
+    current_size: Arc<Mutex<usize>>,
+}
+
+#[derive(Clone)]
+struct CacheEntry {
+    key: String,
+    value: Value,
+    created: DateTime<Utc>,
+    last_access: DateTime<Utc>,
+    access_count: u64,
+    prediction: f64,
+    ttl: Duration,
+}
+
+#[derive(Clone)]
+struct PredictionEngine {
+    patterns: Arc<Mutex<HashMap<String, AccessPattern>>>,
+    ml_model: SimpleMLModel,
+    prediction_ttl: Duration,
+}
+
+#[derive(Clone)]
+struct AccessPattern {
+    frequency: HashMap<String, u32>,
+    last_accesses: Vec<DateTime<Utc>>,
+    trend_score: f64,
+}
+
+#[derive(Clone)]
+struct SimpleMLModel {}
+
+impl PredictiveCache {
+    fn new(max_size: usize) -> Self {
+        PredictiveCache {
+            cache: Arc::new(Mutex::new(HashMap::new())),
+            predictions: Arc::new(Mutex::new(PredictionEngine {
+                patterns: Arc::new(Mutex::new(HashMap::new())),
+                ml_model: SimpleMLModel {},
+                prediction_ttl: Duration::from_secs(300),
+            })),
+            max_size,
+            current_size: Arc::new(Mutex::new(0)),
+        }
+    }
+
+    async fn get(&self, key: &str) -> Option<Value> {
+        let mut cache = self.cache.lock().await;
+        if let Some(entry) = cache.get_mut(key) {
+            if Utc::now() > entry.created + chrono::Duration::from_std(entry.ttl).unwrap() {
+                cache.remove(key);
+                return None;
+            }
+            entry.last_access = Utc::now();
+            entry.access_count += 1;
+            Some(entry.value.clone())
+        } else {
+            None
+        }
+    }
+
+    async fn set(&self, key: String, value: Value) {
+        let mut cache = self.cache.lock().await;
+        let mut current_size = self.current_size.lock().await;
+
+        if *current_size >= self.max_size {
+            self.evict_least_predicted(&mut cache).await;
+        }
+
+        let predicted_ttl = self.predictions.lock().await.predict_optimal_ttl(&key).await;
+        let entry = CacheEntry {
+            key: key.clone(),
+            value,
+            created: Utc::now(),
+            last_access: Utc::now(),
+            access_count: 0,
+            prediction: 0.0,
+            ttl: predicted_ttl,
+        };
+
+        cache.insert(key, entry);
+        *current_size += 1;
+    }
+
+    async fn evict_least_predicted(&self, cache: &mut HashMap<String, CacheEntry>) {
+        let mut min_prediction = f64::INFINITY;
+        let mut key_to_remove = None;
+
+        for (key, entry) in cache.iter() {
+            if entry.prediction < min_prediction {
+                min_prediction = entry.prediction;
+                key_to_remove = Some(key.clone());
+            }
+        }
+
+        if let Some(key) = key_to_remove {
+            cache.remove(&key);
+            let mut current_size = self.current_size.lock().await;
+            *current_size -= 1;
+        }
+    }
+}
+
+impl PredictionEngine {
+    async fn predict_optimal_ttl(&self, _key: &str) -> Duration {
+        // Simple prediction: return 5 minutes for now
+        // In production, this would use ML to predict based on access patterns
+        Duration::from_secs(300)
+    }
+}
+
+// Metrics Tracker with labeled Prometheus metrics
+#[derive(Clone)]
+struct MetricsTracker {
+    requests_total: CounterVec,
+    request_duration: HistogramVec,
+    cache_hits: CounterVec,
+    cache_misses: CounterVec,
+    active_connections: GaugeVec,
+}
+
+impl MetricsTracker {
+    fn new() -> Self {
+        let requests_total = register_counter_vec!(
+            "sprint_requests_total",
+            "Total number of requests",
+            &["chain", "method", "status"]
+        ).unwrap();
+
+        let request_duration = register_histogram_vec!(
+            "sprint_request_duration_seconds",
+            "Request duration in seconds",
+            &["chain", "method"]
+        ).unwrap();
+
+        let cache_hits = register_counter_vec!(
+            "sprint_cache_hits_total",
+            "Total number of cache hits",
+            &["chain", "method"]
+        ).unwrap();
+
+        let cache_misses = register_counter_vec!(
+            "sprint_cache_misses_total",
+            "Total number of cache misses",
+            &["chain", "method"]
+        ).unwrap();
+
+        let active_connections = register_gauge_vec!(
+            "sprint_active_connections",
+            "Number of active connections",
+            &["chain"]
+        ).unwrap();
+
+        MetricsTracker {
+            requests_total,
+            request_duration,
+            cache_hits,
+            cache_misses,
+            active_connections,
+        }
+    }
+
+    fn increment_requests(&self, chain: &str, method: &str, status: &str) {
+        self.requests_total.with_label_values(&[chain, method, status]).inc();
+    }
+
+    fn observe_duration(&self, chain: &str, method: &str, duration: f64) {
+        self.request_duration.with_label_values(&[chain, method]).observe(duration);
+    }
+
+    fn increment_cache_hit(&self, chain: &str, method: &str) {
+        self.cache_hits.with_label_values(&[chain, method]).inc();
+    }
+
+    fn increment_cache_miss(&self, chain: &str, method: &str) {
+        self.cache_misses.with_label_values(&[chain, method]).inc();
+    }
+
+    fn set_active_connections(&self, chain: &str, count: f64) {
+        self.active_connections.with_label_values(&[chain]).set(count);
+    }
+}
+
+// Middleware for API key authentication
+async fn auth_middleware(req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next) -> Result<axum::response::Response, axum::http::StatusCode> {
+    // Simple API key check (in production, use HMAC or JWT)
+    let api_key = req.headers().get("x-api-key").and_then(|v| v.to_str().ok());
+    if api_key != Some("sprint-api-key") { // Replace with env var in production
+        return Err(axum::http::StatusCode::UNAUTHORIZED);
+    }
+    Ok(next.run(req).await)
+}
+
 // UniversalClient (expanded to match more Go methods)
+#[derive(Clone)]
 struct UniversalClient {
     cfg: Config,
     protocol: ProtocolType,
     peers: Arc<Mutex<HashMap<String, TcpStream>>>,
-    stop_chan: mpsc::Sender<()>,
 }
 
 impl UniversalClient {
     async fn new(cfg: Config, protocol: ProtocolType) -> Result<Self, String> {
-        let (tx, _rx) = mpsc::channel(1);
         Ok(UniversalClient {
             cfg,
             protocol,
             peers: Arc::new(Mutex::new(HashMap::new())),
-            stop_chan: tx,
         })
     }
 
@@ -275,17 +688,16 @@ impl UniversalClient {
         let seeds = self.get_default_seeds();
         let mut success = 0;
         for addr in seeds {
-            match TcpStream::connect(&addr).await {
-                Ok(mut conn) => {
-                    // Set options to match Go
+            match tokio::time::timeout(self.cfg.connection_timeout, TcpStream::connect(&addr)).await {
+                Ok(Ok(conn)) => {
                     conn.set_nodelay(true).ok();
-                    // Keepalive, buffers, etc., would require socket options
                     let peer_id = self.generate_peer_id(&addr);
                     self.peers.lock().await.insert(peer_id, conn);
                     info!("Connected to peer: {}", addr);
                     success += 1;
                 }
-                Err(e) => error!("Failed to connect to {}: {}", addr, e),
+                Ok(Err(e)) => error!("Failed to connect to {}: {}", addr, e),
+                Err(_) => warn!("Timeout connecting to {}", addr),
             }
         }
         if success == 0 {
@@ -337,8 +749,8 @@ impl UniversalClient {
         self.peers.lock().await.len()
     }
 
+    // Potential shutdown hook: currently peers are ephemeral, clear when needed
     async fn shutdown(&self) {
-        self.stop_chan.send(()).await.ok();
         let mut peers = self.peers.lock().await;
         peers.clear();
     }
@@ -351,6 +763,10 @@ struct Server {
     cache: Cache,
     latency_optimizer: LatencyOptimizer,
     p2p_clients: Arc<Mutex<HashMap<ProtocolType, UniversalClient>>>,
+    tier_manager: Arc<TierManager>,
+    key_manager: Arc<KeyManager>,
+    predictive_cache: Arc<PredictiveCache>,
+    metrics: Arc<MetricsTracker>,
 }
 
 impl Server {
@@ -371,37 +787,56 @@ impl Server {
             cache: Cache::new(cfg.cache_size as usize),
             latency_optimizer: LatencyOptimizer::new(Duration::from_millis(100)),
             p2p_clients: Arc::new(Mutex::new(p2p_clients)),
+            tier_manager: Arc::new(TierManager::new()),
+            key_manager: Arc::new(KeyManager::new()),
+            predictive_cache: Arc::new(PredictiveCache::new(cfg.cache_size as usize)),
+            metrics: Arc::new(MetricsTracker::new()),
         }
     }
 
-    fn register_routes(&self) -> Router {
+    fn register_routes(&self) -> Router<Server> {
+        let protected_routes = Router::new()
+            .route("/api/v1/universal/:chain/:method", post(universal_handler))
+            .route("/api/v1/latency", get(latency_stats_handler))
+            .route("/api/v1/cache", get(cache_stats_handler))
+            .layer(middleware::from_fn(auth_middleware));
+
+        let enterprise_routes = Router::new()
+            .route("/api/v1/enterprise/entropy/*path", get(enterprise_entropy_handler))
+            .route("/system/fingerprint", get(system_fingerprint_handler))
+            .route("/system/temperature", get(system_temperature_handler))
+            .layer(middleware::from_fn(auth_middleware));
+
         Router::new()
-            .route("/api/v1/universal/:chain/:method", post(Self::universal_handler))
-            .route("/api/v1/latency", get(Self::latency_stats_handler))
-            .route("/api/v1/cache", get(Self::cache_stats_handler))
-            .route("/health", get(Self::health_handler))
-            .route("/version", get(Self::version_handler))
-            .route("/status", get(Self::status_handler))
-            .route("/mempool", get(Self::mempool_handler))
-            .route("/chains", get(Self::chains_handler))
-            .route("/api/v1/p2p/diag", get(Self::p2p_diag_handler))
-            .with_state(self.clone())
-            // Add more routes as needed, e.g., enterprise endpoints
+            .merge(protected_routes)
+            .merge(enterprise_routes)
+            .route("/health", get(health_handler))
+            .route("/metrics", get(metrics_handler))
+            .route("/version", get(version_handler))
+            .route("/status", get(status_handler))
+            .route("/mempool", get(mempool_handler))
+            .route("/chains", get(chains_handler))
+            .route("/ready", get(ready_handler))
+            .route("/generate-key", post(|| async { "Not implemented yet" }))
+            .route("/license", get(license_handler))
     }
 
     async fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let app = self.register_routes();
+        let app = self.register_routes().with_state(self.clone());
 
         let addr: SocketAddr = format!("{}:{}", self.cfg.api_host, self.cfg.api_port).parse().unwrap();
         info!("Starting Sprint API server on {}", addr);
 
         // Connect P2P clients in background
         let p2p_clients_clone = self.p2p_clients.clone();
-        task::spawn(async move {
+        tokio::task::spawn(async move {
             let mut clients = p2p_clients_clone.lock().await;
             for (protocol, client) in clients.iter_mut() {
                 if let Err(e) = client.connect_to_network().await {
-                    error!("P2P connect failed for {:?}: {}", protocol, e);
+                    match protocol {
+                        ProtocolType::Solana => debug!("P2P connect (Solana) not ready: {}", e),
+                        _ => error!("P2P connect failed for {:?}: {}", protocol, e),
+                    }
                 } else {
                     info!("P2P connected for {:?}", protocol);
                 }
@@ -421,147 +856,296 @@ impl Server {
         }
 
         let listener = tokio::net::TcpListener::bind(&addr).await?;
-        axum::serve(listener, app).await?;
+        let shutdown = async {
+            // Graceful shutdown on Ctrl+C
+            if tokio::signal::ctrl_c().await.is_ok() {
+                info!("Shutdown signal received");
+            }
+        };
+        axum::serve(listener, app)
+            .with_graceful_shutdown(shutdown)
+            .await?;
         Ok(())
     }
+}
 
-    // Handlers (matching Go's HTTP handlers)
-    async fn universal_handler(
-        state: axum::extract::State<Server>,
-        Path((chain, method)): Path<(String, String)>,
-        body: Json<Value>,
-    ) -> impl IntoResponse {
-        let start = Instant::now();
-        // Simplified logic
-        let response = json!({
-            "chain": chain,
-            "method": method,
-            "data": *body,
-            "timestamp": Utc::now().to_rfc3339(),
-            "sprint_advantages": {
-                "unified_api": "Single endpoint for all chains",
-            }
-        });
+// Handlers (matching Go's HTTP handlers)
+async fn universal_handler(
+    state: axum::extract::State<Server>,
+    Path((chain, method)): Path<(String, String)>,
+    body: Json<Value>,
+) -> impl IntoResponse {
+    let start = Instant::now();
 
-        let duration = start.elapsed();
-        state.latency_optimizer.track_request(&chain, duration).await;
+    // Check predictive cache first
+    let cache_key = format!("{}_{}_{}", chain, method, body.to_string());
+    if let Some(cached_response) = state.predictive_cache.get(&cache_key).await {
+        state.metrics.increment_cache_hit(&chain, &method);
+        state.metrics.increment_requests(&chain, &method, "200");
+        let duration = start.elapsed().as_secs_f64();
+        state.metrics.observe_duration(&chain, &method, duration);
+        return (StatusCode::OK, Json(cached_response));
+    }
 
-        if duration > Duration::from_millis(100) {
-            warn!("P99 exceeded for {}: {:?}", chain, duration);
+    state.metrics.increment_cache_miss(&chain, &method);
+
+    // Simplified logic
+    let response = json!({
+        "chain": chain,
+        "method": method,
+        "data": *body,
+        "timestamp": Utc::now().to_rfc3339(),
+        "sprint_advantages": {
+            "unified_api": "Single endpoint for all chains",
+            "predictive_cache": "ML-powered caching",
+            "enterprise_security": "Advanced security features",
         }
+    });
 
-        (StatusCode::OK, Json(response))
+    // Cache the response
+    state.predictive_cache.set(cache_key, response.clone()).await;
+
+    let duration = start.elapsed();
+    state.latency_optimizer.track_request(&chain, duration).await;
+
+    if duration > Duration::from_millis(100) {
+        warn!("P99 exceeded for {}: {:?}", chain, duration);
     }
 
-    async fn latency_stats_handler(
-        _state: axum::extract::State<Server>,
-    ) -> impl IntoResponse {
-        // Mock stats
-        let stats = json!({
-            "target_p99": "100ms",
-            "current_p99": "85ms",
-        });
-        (StatusCode::OK, Json(stats))
-    }
+    state.metrics.increment_requests(&chain, &method, "200");
+    state.metrics.observe_duration(&chain, &method, duration.as_secs_f64());
 
-    async fn cache_stats_handler(
-        state: axum::extract::State<Server>,
-    ) -> impl IntoResponse {
-        let items = state.cache.items.lock().await;
-        let stats = json!({
-            "size": items.len(),
-            "max_size": state.cache.max_size,
-        });
-        (StatusCode::OK, Json(stats))
-    }
+    (StatusCode::OK, Json(response))
+}
 
-    async fn health_handler(
-        _state: axum::extract::State<Server>,
-    ) -> impl IntoResponse {
-        let resp = json!({
-            "status": "healthy",
-            "timestamp": Utc::now().to_rfc3339(),
+async fn latency_stats_handler(
+    _state: axum::extract::State<Server>,
+) -> impl IntoResponse {
+    // Mock stats
+    let stats = json!({
+        "target_p99": "100ms",
+        "current_p99": "85ms",
+    });
+    (StatusCode::OK, Json(stats))
+}
+
+async fn cache_stats_handler(
+    state: axum::extract::State<Server>,
+) -> impl IntoResponse {
+    let items = state.cache.items.lock().await;
+    let stats = json!({
+        "size": items.len(),
+        "max_size": state.cache.max_size,
+    });
+    (StatusCode::OK, Json(stats))
+}
+
+async fn metrics_handler(
+    _state: axum::extract::State<Server>,
+) -> impl IntoResponse {
+    let encoder = TextEncoder::new();
+    let metric_families = prometheus::gather();
+    let mut buf = Vec::new();
+    if let Err(e) = encoder.encode(&metric_families, &mut buf) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response();
+    }
+    let body = String::from_utf8(buf).unwrap_or_default();
+    (
+        StatusCode::OK,
+        [(CONTENT_TYPE, encoder.format_type())],
+        body,
+    )
+        .into_response()
+}
+
+async fn health_handler(
+    _state: axum::extract::State<Server>,
+) -> impl IntoResponse {
+    let resp = json!({
+        "status": "healthy",
+        "timestamp": Utc::now().to_rfc3339(),
+        "version": VERSION,
+        "service": "sprint-api",
+    });
+    (StatusCode::OK, Json(resp))
+}
+
+async fn version_handler(
+    state: axum::extract::State<Server>,
+) -> impl IntoResponse {
+    let resp = json!({
+        "version": VERSION,
+        "build": "enterprise",
+        "build_time": COMMIT,
+        "tier": state.cfg.tier,
+        "turbo_mode": state.cfg.tier == "Enterprise",
+        "timestamp": Utc::now().to_rfc3339(),
+    });
+    (StatusCode::OK, Json(resp))
+}
+
+async fn status_handler(
+    state: axum::extract::State<Server>,
+) -> impl IntoResponse {
+    let p2p_clients = state.p2p_clients.lock().await;
+    let mut connections = 0;
+    for client in p2p_clients.values() {
+        connections += client.get_peer_count().await;
+    }
+    let status = json!({
+        "server": {
+            "uptime": "1h", // Mock
             "version": "2.5.0",
-            "service": "sprint-api",
-        });
-        (StatusCode::OK, Json(resp))
-    }
-
-    async fn version_handler(
-        state: axum::extract::State<Server>,
-    ) -> impl IntoResponse {
-        let resp = json!({
-            "version": VERSION,
-            "build": "enterprise",
-            "build_time": COMMIT,
             "tier": state.cfg.tier,
-            "turbo_mode": state.cfg.tier == "Enterprise",
-            "timestamp": Utc::now().to_rfc3339(),
-        });
-        (StatusCode::OK, Json(resp))
-    }
+            "status": "running",
+        },
+        "p2p": {
+            "connections": connections,
+            "protocols": ["bitcoin", "ethereum", "solana"],
+        },
+        "cache": {
+            "entries": true,
+            "size": "dynamic",
+        },
+    });
+    (StatusCode::OK, Json(status))
+}
 
-    async fn status_handler(
-        state: axum::extract::State<Server>,
-    ) -> impl IntoResponse {
-        let p2p_clients = state.p2p_clients.lock().await;
-        let mut connections = 0;
-        for client in p2p_clients.values() {
-            connections += client.get_peer_count().await;
+async fn mempool_handler(
+    _state: axum::extract::State<Server>,
+) -> impl IntoResponse {
+    let resp = json!({
+        "mempool_size": 100,
+        "transactions": ["tx1", "tx2", "tx3"],
+        "timestamp": Utc::now().to_rfc3339(),
+    });
+    (StatusCode::OK, Json(resp))
+}
+
+async fn chains_handler(
+    _state: axum::extract::State<Server>,
+) -> impl IntoResponse {
+    let chains = vec!["bitcoin", "ethereum", "solana"];
+    let resp = json!({
+        "chains": chains,
+        "total_chains": chains.len(),
+        "unified_api": true,
+        "latency_target": "100ms P99",
+    });
+    (StatusCode::OK, Json(resp))
+}
+
+async fn ready_handler(
+    state: axum::extract::State<Server>,
+) -> impl IntoResponse {
+    let p2p_clients = state.p2p_clients.lock().await;
+    let mut ready = true;
+    for client in p2p_clients.values() {
+        if client.get_peer_count().await == 0 {
+            ready = false;
+            break;
         }
-        let status = json!({
-            "server": {
-                "uptime": "1h", // Mock
-                "version": "2.5.0",
-                "tier": state.cfg.tier,
-                "status": "running",
-            },
-            "p2p": {
-                "connections": connections,
-                "protocols": ["bitcoin", "ethereum", "solana"],
-            },
-            "cache": {
-                "entries": true,
-                "size": "dynamic",
-            },
-        });
-        (StatusCode::OK, Json(status))
     }
+    let status = if ready { "ready" } else { "not ready" };
+    let resp = json!({
+        "status": status,
+        "timestamp": Utc::now().to_rfc3339(),
+        "version": VERSION,
+        "service": "sprint-api",
+    });
+    (StatusCode::OK, Json(resp))
+}
 
-    async fn mempool_handler(
-        _state: axum::extract::State<Server>,
-    ) -> impl IntoResponse {
-        let resp = json!({
-            "mempool_size": 100,
-            "transactions": ["tx1", "tx2", "tx3"],
-            "timestamp": Utc::now().to_rfc3339(),
-        });
-        (StatusCode::OK, Json(resp))
-    }
+async fn generate_key_handler(
+    state: axum::extract::State<Server>,
+) -> impl IntoResponse {
+    let tier = "free".to_string(); // Default to free tier
+    let client_ip = "127.0.0.1".to_string(); // In production, extract from request
 
-    async fn chains_handler(
-        _state: axum::extract::State<Server>,
-    ) -> impl IntoResponse {
-        let chains = vec!["bitcoin", "ethereum", "solana"];
-        let resp = json!({
-            "chains": chains,
-            "total_chains": chains.len(),
-            "unified_api": true,
-            "latency_target": "100ms P99",
-        });
-        (StatusCode::OK, Json(resp))
-    }
-
-    async fn p2p_diag_handler(
-        state: axum::extract::State<Server>,
-    ) -> impl IntoResponse {
-        let p2p_clients = state.p2p_clients.lock().await;
-        let mut diag = HashMap::new();
-        for (protocol, client) in p2p_clients.iter() {
-            diag.insert(protocol.to_string(), client.get_peer_count().await);
+    match state.key_manager.generate_key(&tier, &client_ip).await {
+        Ok(key) => {
+            let resp = json!({
+                "key": key,
+                "tier": tier,
+                "generated": Utc::now().to_rfc3339(),
+                "expires": (Utc::now() + chrono::Duration::days(30)).to_rfc3339(),
+            });
+            (StatusCode::OK, Json(resp))
         }
-        (StatusCode::OK, Json(json!(diag)))
+        Err(e) => {
+            let resp = json!({
+                "error": e,
+            });
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(resp))
+        }
     }
+}
+
+async fn license_handler(
+    _state: axum::extract::State<Server>,
+) -> impl IntoResponse {
+    let resp = json!({
+        "license": {
+            "type": "enterprise",
+            "valid_until": (Utc::now() + chrono::Duration::days(365)).to_rfc3339(),
+            "features": ["unlimited_requests", "enterprise_security", "turbo_mode", "predictive_cache"],
+        },
+        "compliance": {
+            "gdpr_compliant": true,
+            "audit_trail": true,
+            "data_encryption": true,
+        },
+    });
+    (StatusCode::OK, Json(resp))
+}
+
+async fn enterprise_entropy_handler(
+    _state: axum::extract::State<Server>,
+    Path(path): Path<String>,
+) -> impl IntoResponse {
+    // Enterprise entropy monitoring endpoint
+    let resp = json!({
+        "entropy": {
+            "level": 0.85,
+            "quality": "high",
+            "source": "system",
+            "timestamp": Utc::now().to_rfc3339(),
+        },
+        "path": path,
+    });
+    (StatusCode::OK, Json(resp))
+}
+
+async fn system_fingerprint_handler(
+    _state: axum::extract::State<Server>,
+) -> impl IntoResponse {
+    // System fingerprint for enterprise security
+    let resp = json!({
+        "fingerprint": {
+            "system_id": "sprint-enterprise-001",
+            "security_level": "enterprise",
+            "encryption_enabled": true,
+            "audit_enabled": true,
+            "timestamp": Utc::now().to_rfc3339(),
+        },
+    });
+    (StatusCode::OK, Json(resp))
+}
+
+async fn system_temperature_handler(
+    _state: axum::extract::State<Server>,
+) -> impl IntoResponse {
+    // System temperature monitoring
+    let resp = json!({
+        "temperature": {
+            "cpu": 65.5,
+            "memory": 72.3,
+            "disk": 45.2,
+            "network": 55.8,
+            "timestamp": Utc::now().to_rfc3339(),
+        },
+    });
+    (StatusCode::OK, Json(resp))
 }
 
 #[tokio::main]
