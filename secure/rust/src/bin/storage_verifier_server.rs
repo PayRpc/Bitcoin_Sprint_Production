@@ -14,7 +14,8 @@ async fn main() -> std::io::Result<()> {
         .unwrap_or_else(|_| eprintln!("Logger already initialized"));
 
     log::info!("Starting Bitcoin Sprint Storage Verifier Web Server...");
-    log::info!("Server will be available at https://0.0.0.0:8443");
+    let port = std::env::var("PORT").ok().and_then(|s| s.parse::<u16>().ok()).unwrap_or(8443);
+    log::info!("Server will be available at http://0.0.0.0:{}", port);
 
     web_server::run_server().await
 }

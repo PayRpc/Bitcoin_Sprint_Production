@@ -868,7 +868,15 @@ fn handle_error(err: &actix_web::Error) -> HttpResponse {
 
 // --- Enhanced Server ---
 pub async fn run_server() -> std::io::Result<()> {
+    use std::env;
+
     info!("Starting Bitcoin Sprint Storage Verifier Service...");
+
+    // Determine port from environment or default to 8443
+    let port: u16 = env::var("PORT")
+        .ok()
+        .and_then(|s| s.parse::<u16>().ok())
+        .unwrap_or(8443);
 
     // Create storage verifier with rate limiting config
     let rate_config = RateLimitConfig {
@@ -887,63 +895,25 @@ pub async fn run_server() -> std::io::Result<()> {
         redis_rate_limiter: None, // Will be initialized if Redis is available
         #[cfg(feature = "hardened")]
         circuit_breakers: Arc::new(AsyncMutex::new(HashMap::new())),
-    });    info!("Server configured - Rate limit: 10 req/min, Binding to 0.0.0.0:8443");
+    });
 
-    #[cfg(feature = "hardened")]
-    {
-        // TLS-enabled server using axum-server
-        match configure_tls() {
-            Ok(tls_config) => {
-                info!("Starting HTTPS server with TLS 1.3 on 0.0.0.0:8443");
-                // For now, fall back to HTTP until we implement proper TLS
-                HttpServer::new(move || {
-                    App::new()
-                        .wrap(middleware::Logger::default())
-                        .wrap(add_security_headers())
-                        .app_data(state.clone())
-                        .route("/verify", web::post().to(verify))
-                        .route("/health", web::get().to(health))
-                        .route("/metrics", web::get().to(metrics))
-                })
-                .bind(("0.0.0.0", 8443))?
-                .workers(8)
-                .run()
-                .await
-            }
-            Err(e) => {
-                warn!("TLS configuration failed: {}. Starting HTTP server instead.", e);
-                HttpServer::new(move || {
-                    App::new()
-                        .wrap(middleware::Logger::default())
-                        .wrap(add_security_headers())
-                        .app_data(state.clone())
-                        .route("/verify", web::post().to(verify))
-                        .route("/health", web::get().to(health))
-                        .route("/metrics", web::get().to(metrics))
-                })
-                .bind(("0.0.0.0", 8443))?
-                .workers(8)
-                .run()
-                .await
-            }
-        }
-    }
+    info!(
+        "Server configured - Rate limit: 10 req/min, Binding to 0.0.0.0:{}",
+        port
+    );
 
-    #[cfg(not(feature = "hardened"))]
-    {
-        // Standard HTTP server
-        HttpServer::new(move || {
-            App::new()
-                .wrap(middleware::Logger::default())
-                .wrap(add_security_headers())
-                .app_data(state.clone())
-                .route("/verify", web::post().to(verify))
-                .route("/health", web::get().to(health))
-                .route("/metrics", web::get().to(metrics))
-        })
-        .bind(("0.0.0.0", 8443))?
-        .workers(8)
-        .run()
-        .await
-    }
+    // Single HTTP server path (TLS can be added later once certs are present)
+    HttpServer::new(move || {
+        App::new()
+            .wrap(middleware::Logger::default())
+            .wrap(add_security_headers())
+            .app_data(state.clone())
+            .route("/verify", web::post().to(verify))
+            .route("/health", web::get().to(health))
+            .route("/metrics", web::get().to(metrics))
+    })
+    .bind(("0.0.0.0", port))?
+    .workers(4)
+    .run()
+    .await
 }

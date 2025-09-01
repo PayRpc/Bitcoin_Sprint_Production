@@ -6,7 +6,7 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: 192.168.65.0/24
 
 volumes:
   bitcoin-data:
