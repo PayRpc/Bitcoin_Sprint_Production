@@ -7,24 +7,11 @@ import (
 	"net/url"
 	"sync"
 	"sync/atomic"
-	relayConfig := RelayConfig{
-		Network:           "ethereum",
-		Endpoints:         []string{
-			"18.138.108.67:30303",   // EF Bootnode (Singapore)
-			"3.209.45.79:30303",     // EF Bootnode (US-East)
-			"34.255.23.113:30303",   // EF Bootnode (Ireland)
-			"35.158.244.151:30303",  // EF Bootnode (Germany)
-			"52.74.57.123:30303",    // EF Bootnode (Singapore)
-		},
-		},
-		Timeout:           30 * time.Second,
-		RetryAttempts:     3,
-		RetryDelay:        5 * time.Second,
-		MaxConcurrency:    4,
-		BufferSize:        1000,
-		EnableCompression: true,
-	}"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
+	"time"
+
+	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )

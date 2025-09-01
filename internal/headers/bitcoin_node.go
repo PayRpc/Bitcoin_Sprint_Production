@@ -3,6 +3,8 @@ package headers
 
 import (
 	"context"
+	"crypto/tls"
+	"net"
 	"net/http"
 	"time"
 )
@@ -15,14 +17,34 @@ type BitcoinNode struct {
 	client  *http.Client
 }
 
-// NewBitcoinNode creates a new Bitcoin node client
+// NewBitcoinNode creates a new Bitcoin node client with optimized connection settings
 func NewBitcoinNode(rpcURL, rpcUser, rpcPass string) *BitcoinNode {
+	// Create optimized transport for Bitcoin RPC calls
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     false, // Bitcoin RPC typically uses HTTP/1.1
+		MaxIdleConns:          10,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		TLSClientConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			// Allow self-signed certificates for local Bitcoin nodes
+			InsecureSkipVerify: true,
+		},
+	}
+
 	return &BitcoinNode{
 		rpcURL:  rpcURL,
 		rpcUser: rpcUser,
 		rpcPass: rpcPass,
 		client: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout:   15 * time.Second, // Longer timeout for RPC calls
+			Transport: transport,
 		},
 	}
 }

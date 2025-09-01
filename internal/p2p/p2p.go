@@ -3,7 +3,6 @@ package p2p
 import (
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"runtime"
 	"sync"
@@ -13,6 +12,7 @@ import (
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/netkit"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/securebuf"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -321,10 +321,12 @@ func (c *Client) parallelConnect(address string, connectionChan chan<- *peer.Pee
 		return
 	}
 
-	// Set connection timeout
-	conn, err := net.DialTimeout("tcp", address, 30*time.Second)
+	// Set connection timeout with enhanced dialing
+	conn, err := netkit.DialHappy(address, 30*time.Second)
 	if err != nil {
-		c.logger.Warn("Failed to connect to peer", zap.String("address", address), zap.Error(err))
+		c.logger.Warn("Failed to connect to peer with enhanced dialing",
+			zap.String("address", address),
+			zap.Error(err))
 		connectionChan <- nil
 		return
 	}
@@ -770,10 +772,10 @@ func (c *Client) connectToPeer(address string) error {
 		return fmt.Errorf("failed to create peer: %w", err)
 	}
 
-	// Set connection timeout
-	conn, err := net.DialTimeout("tcp", address, 30*time.Second)
+	// Set connection timeout with enhanced dialing
+	conn, err := netkit.DialHappy(address, 30*time.Second)
 	if err != nil {
-		return fmt.Errorf("failed to connect: %w", err)
+		return fmt.Errorf("failed to connect with enhanced dialing: %w", err)
 	}
 
 	// If peer is in Sprint relay cluster list, enforce handshake

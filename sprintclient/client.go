@@ -2,10 +2,13 @@ package sprintclient
 
 import (
 	"bytes"
+	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"time"
 )
@@ -19,15 +22,33 @@ type SprintClient struct {
 	client    *http.Client
 }
 
-// NewSprintClient returns a new client
+// NewSprintClient returns a new client with optimized connection settings
 func NewSprintClient(sprintURL, coreURL, rpcUser, rpcPass string) *SprintClient {
+	// Create optimized transport with connection pooling and keepalive
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		TLSClientConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		},
+	}
+
 	return &SprintClient{
 		sprintURL: sprintURL,
 		coreURL:   coreURL,
 		rpcUser:   rpcUser,
 		rpcPass:   rpcPass,
 		client: &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout:   10 * time.Second,
+			Transport: transport,
 		},
 	}
 }

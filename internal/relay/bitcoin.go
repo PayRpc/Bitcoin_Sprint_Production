@@ -11,6 +11,11 @@ import (
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/netkit"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/peer"
+	"github.com/btcsuite/btcd/wire"
 	"go.uber.org/zap"
 )
 
@@ -316,9 +321,9 @@ func (br *BitcoinRelay) GetConfig() RelayConfig {
 
 // connectToPeer establishes connection to a single peer
 func (br *BitcoinRelay) connectToPeer(ctx context.Context, endpoint string) {
-	conn, err := net.DialTimeout("tcp", endpoint, br.relayConfig.Timeout)
+	conn, err := netkit.DialHappy(endpoint, br.relayConfig.Timeout)
 	if err != nil {
-		br.logger.Warn("Failed to connect to peer",
+		br.logger.Warn("Failed to connect to peer with enhanced dialing",
 			zap.String("endpoint", endpoint),
 			zap.Error(err))
 		return
