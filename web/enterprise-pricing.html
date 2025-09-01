@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Bitcoin Sprint - Enterprise Pricing</title>
+	<script src="https://js.stripe.com/v3/"></script>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: 'Inter', sans-serif;
+			background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+			color: #f8fafc;
+			line-height: 1.6;
+		}
+
+		.container {
+			max-width: 1200px;
+			margin: 0 auto;
+			padding: 20px;
+		}
+
+		.header {
+			text-align: center;
+			padding: 60px 0;
+			background: linear-gradient(135deg, #2563eb, #1d4ed8);
+			border-radius: 20px;
+			margin-bottom: 40px;
+			position: relative;
+			overflow: hidden;
+		}
+
+		.header::before {
+			content: '';
+			position: absolute;
+			top: 0;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="20" cy="20" r="1" fill="white" opacity="0.1"/><circle cx="80" cy="80" r="1" fill="white" opacity="0.1"/><circle cx="50" cy="30" r="0.5" fill="white" opacity="0.05"/></svg>');
+			opacity: 0.1;
+		}
+
+		.header h1 {
+			font-size: 3.5rem;
+			font-weight: 700;
+			margin-bottom: 20px;
+			position: relative;
+			z-index: 1;
+		}
+
+		.header p {
+			font-size: 1.3rem;
+			opacity: 0.9;
+			position: relative;
+			z-index: 1;
+			max-width: 600px;
+			margin: 0 auto;
+		}
+
+		.pricing-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+			gap: 30px;
+			margin: 40px 0;
+		}
+
+		.pricing-card {
+			background: #1e293b;
+			border: 1px solid #334155;
+			border-radius: 20px;
+			padding: 40px 30px;
+			position: relative;
+			transition: all 0.3s ease;
+			box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+		}
+
+		.pricing-card:hover {
+			transform: translateY(-5px);
+			box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+		}
+
+		.pricing-card.popular {
+			border-color: #2563eb;
+			box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+		}
+
+		.pricing-card.popular::before {
+			content: 'MOST POPULAR';
+			position: absolute;
+			top: -15px;
+			left: 50%;
+			transform: translateX(-50%);
+			background: linear-gradient(135deg, #2563eb, #1d4ed8);
+			color: white;
+			padding: 8px 20px;
+			border-radius: 25px;
+			font-size: 0.9rem;
+			font-weight: 600;
+			letter-spacing: 0.5px;
+			box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+		}
+
+		.plan-name {
+			font-size: 1.8rem;
+			font-weight: 700;
+			margin-bottom: 15px;
+			color: #2563eb;
+			text-align: center;
+		}
+
+		.plan-price {
+			text-align: center;
+			margin: 25px 0;
+		}
+
+		.plan-price .amount {
+			font-size: 4rem;
+			font-weight: 800;
+			color: #f8fafc;
+			display: block;
+		}
+
+		.plan-price .period {
+			font-size: 1.1rem;
+			color: #94a3b8;
+			font-weight: 400;
+		}
+
+		.plan-features {
+			list-style: none;
+			margin: 25px 0;
+		}
+
+		.plan-features li {
+			padding: 10px 0;
+			border-bottom: 1px solid #334155;
+			display: flex;
+			align-items: flex-start;
+		}
+
+		.plan-features li::before {
+			content: '✓';
+			color: #10b981;
+			font-weight: bold;
+			margin-right: 12px;
+			font-size: 1.1rem;
+			margin-top: 2px;
+		}
+
+		.plan-features li:last-child {
+			border-bottom: none;
+		}
+
+		.btn {
+			display: block;
+			width: 100%;
+			padding: 16px 24px;
+			background: linear-gradient(135deg, #2563eb, #1d4ed8);
+			color: white;
+			text-decoration: none;
+			border-radius: 12px;
+			font-weight: 600;
+			font-size: 1.1rem;
+			transition: all 0.3s ease;
+			border: none;
+			cursor: pointer;
+			text-align: center;
+			margin-top: 25px;
+		}
+
+		.btn:hover {
+			transform: translateY(-2px);
+			box-shadow: 0 8px 25px rgba(37, 99, 235, 0.4);
+		}
+
+		.btn.secondary {
+			background: #334155;
+			color: #f8fafc;
+		}
+
+		.btn.secondary:hover {
+			background: #475569;
+		}
+
+		.btn:disabled {
+			opacity: 0.6;
+			cursor: not-allowed;
+			transform: none;
+		}
+
+		.comparison-section {
+			background: #1e293b;
+			border-radius: 20px;
+			padding: 40px;
+			margin: 60px 0;
+			border: 1px solid #334155;
+		}
+
+		.comparison-section h2 {
+			text-align: center;
+			font-size: 2.5rem;
+			margin-bottom: 40px;
+			color: #f8fafc;
+		}
+
+		.comparison-table {
+			width: 100%;
+			border-collapse: collapse;
+			margin-top: 30px;
+		}
+
+		.comparison-table th,
+		.comparison-table td {
+			padding: 20px 15px;
+			text-align: left;
+			border-bottom: 1px solid #334155;
+		}
+
+		.comparison-table th {
+			background: #334155;
+			font-weight: 600;
+			color: #f8fafc;
+			font-size: 1.1rem;
+		}
+
+		.comparison-table .feature-name {
+			font-weight: 600;
+			color: #f8fafc;
+		}
+
+		.comparison-table .check {
+			color: #10b981;
+			font-weight: bold;
+			font-size: 1.2rem;
+		}
+
+		.comparison-table .cross {
+			color: #ef4444;
+			font-weight: bold;
+			font-size: 1.2rem;
+		}
+
+		.comparison-table .partial {
+			color: #f59e0b;
+			font-weight: bold;
+			font-size: 1.2rem;
+		}
+
+		.testimonials {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+			gap: 30px;
+			margin: 60px 0;
+		}
+
+		.testimonial-card {
+			background: #1e293b;
+			border: 1px solid #334155;
+			border-radius: 16px;
+			padding: 30px;
+			text-align: center;
+		}
+
+		.testimonial-quote {
+			font-style: italic;
+			color: #94a3b8;
+			margin-bottom: 20px;
+			font-size: 1.1rem;
+		}
+
+		.testimonial-author {
+			font-weight: 600;
+			color: #f8fafc;
+		}
+
+		.testimonial-company {
+			color: #64748b;
+			font-size: 0.9rem;
+		}
+
+		.faq-section {
+			margin: 60px 0;
+		}
+
+		.faq-section h2 {
+			text-align: center;
+			font-size: 2.5rem;
+			margin-bottom: 40px;
+		}
+
+		.faq-item {
+			background: #1e293b;
+			border: 1px solid #334155;
+			border-radius: 12px;
+			margin-bottom: 20px;
+			overflow: hidden;
+		}
+
+		.faq-question {
+			padding: 20px 30px;
+			font-weight: 600;
+			cursor: pointer;
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			transition: background 0.3s ease;
+		}
+
+		.faq-question:hover {
+			background: #334155;
+		}
+
+		.faq-question::after {
+			content: '+';
+			font-size: 1.5rem;
+			transition: transform 0.3s ease;
+		}
+
+		.faq-item.active .faq-question::after {
+			transform: rotate(45deg);
+		}
+
+		.faq-answer {
+			padding: 0 30px 20px;
+			color: #94a3b8;
+			max-height: 0;
+			overflow: hidden;
+			transition: max-height 0.3s ease;
+		}
+
+		.faq-item.active .faq-answer {
+			max-height: 200px;
+		}
+
+		.cta-section {
+			text-align: center;
+			padding: 60px 0;
+			background: linear-gradient(135deg, #2563eb, #1d4ed8);
+			border-radius: 20px;
+			margin: 60px 0;
+		}
+
+		.cta-section h2 {
+			font-size: 2.5rem;
+			margin-bottom: 20px;
+			color: white;
+		}
+
+		.cta-section p {
+			font-size: 1.2rem;
+			margin-bottom: 30px;
+			color: rgba(255, 255, 255, 0.9);
+			max-width: 600px;
+			margin-left: auto;
+			margin-right: auto;
+		}
+
+		.modal {
+			display: none;
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background: rgba(0, 0, 0, 0.8);
+			z-index: 1000;
+			align-items: center;
+			justify-content: center;
+		}
+
+		.modal.show {
+			display: flex;
+		}
+
+		.modal-content {
+			background: #1e293b;
+			border-radius: 20px;
+			padding: 40px;
+			max-width: 500px;
+			width: 90%;
+			position: relative;
+		}
+
+		.modal-close {
+			position: absolute;
+			top: 20px;
+			right: 20px;
+			font-size: 2rem;
+			cursor: pointer;
+			color: #94a3b8;
+		}
+
+		.modal h3 {
+			margin-bottom: 20px;
+			color: #f8fafc;
+		}
+
+		.form-group {
+			margin-bottom: 20px;
+		}
+
+		.form-group label {
+			display: block;
+			margin-bottom: 8px;
+			color: #f8fafc;
+			font-weight: 500;
+		}
+
+		.form-group input,
+		.form-group select {
+			width: 100%;
+			padding: 12px 16px;
+			border: 1px solid #334155;
+			border-radius: 8px;
+			background: #0f172a;
+			color: #f8fafc;
+			font-size: 1rem;
+		}
+
+		.form-group input:focus,
+		.form-group select:focus {
+			outline: none;
+			border-color: #2563eb;
+			box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+		}
+
+		@media (max-width: 768px) {
+			.header h1 {
+				font-size: 2.5rem;
+			}
+
+			.pricing-grid {
+				grid-template-columns: 1fr;
+			}
+
+			.comparison-section {
+				padding: 20px;
+			}
+
+			.comparison-table {
+				font-size: 0.9rem;
+			}
+
+			.testimonials {
+				grid-template-columns: 1fr;
+			}
+		}
+	</style>
+</head>
+
+<body>
+	<div class="container">
+		<!-- Header -->
+		<header class="header">
+			<h1>Choose Your Plan</h1>
+			<p>Start with a free trial and upgrade as your storage validation needs grow</p>
+		</header>
+
+		<!-- Pricing Cards -->
+		<section class="pricing-grid">
+			<div class="pricing-card">
+				<div class="plan-name">Free Trial</div>
+				<div class="plan-price">
+					<span class="amount">$0</span>
+					<span class="period">/month</span>
+				</div>
+				<ul class="plan-features">
+					<li>100 verifications/month</li>
+					<li>IPFS & Filecoin support</li>
+					<li>Basic validation</li>
+					<li>Email support</li>
+					<li>Community access</li>
+				</ul>
+				<button class="btn" onclick="selectPlan('free')">Start Free Trial</button>
+			</div>
+
+			<div class="pricing-card popular">
+				<div class="plan-name">Professional</div>
+				<div class="plan-price">
+					<span class="amount">$199</span>
+					<span class="period">/month</span>
+				</div>
+				<ul class="plan-features">
+					<li>50,000 verifications/month</li>
+					<li>All protocols supported</li>
+					<li>Advanced analytics</li>
+					<li>Webhook notifications</li>
+					<li>Priority support</li>
+					<li>SLA monitoring</li>
+					<li>API rate limiting</li>
+				</ul>
+				<button class="btn" onclick="selectPlan('professional')">Start Free Trial</button>
+			</div>
+
+			<div class="pricing-card">
+				<div class="plan-name">Enterprise</div>
+				<div class="plan-price">
+					<span class="amount">Custom</span>
+					<span class="period">pricing</span>
+				</div>
+				<ul class="plan-features">
+					<li>Unlimited verifications</li>
+					<li>White-label solution</li>
+					<li>On-premise deployment</li>
+					<li>Dedicated support</li>
+					<li>Custom integrations</li>
+					<li>Advanced security</li>
+					<li>24/7 phone support</li>
+				</ul>
+				<button class="btn secondary" onclick="contactSales()">Contact Sales</button>
+			</div>
+		</section>
+
+		<!-- Comparison Table -->
+		<section class="comparison-section">
+			<h2>Why Choose Bitcoin Sprint?</h2>
+			<table class="comparison-table">
+				<thead>
+					<tr>
+						<th>Feature</th>
+						<th>Bitcoin Sprint</th>
+						<th>IPFS Pinning</th>
+						<th>Filecoin</th>
+						<th>Arweave</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td class="feature-name">Cryptographic Proofs</td>
+						<td class="check">✓ SHA-256 + Merkle</td>
+						<td class="cross">✗ Basic pinning</td>
+						<td class="check">✓ Proof-of-Replication</td>
+						<td class="cross">✗ No verification</td>
+					</tr>
+					<tr>
+						<td class="feature-name">Real-time Validation</td>
+						<td class="check">✓ &lt;2s response</td>
+						<td class="cross">✗ Manual checks</td>
+						<td class="cross">✗ Batch processing</td>
+						<td class="cross">✗ No real-time</td>
+					</tr>
+					<tr>
+						<td class="feature-name">Multi-Protocol Support</td>
+						<td class="check">✓ Unified API</td>
+						<td class="cross">✗ IPFS only</td>
+						<td class="cross">✗ Filecoin only</td>
+						<td class="cross">✗ Arweave only</td>
+					</tr>
+					<tr>
+						<td class="feature-name">Enterprise Features</td>
+						<td class="check">✓ SLA, Audit, SOC 2</td>
+						<td class="cross">✗ Basic service</td>
+						<td class="cross">✗ Limited support</td>
+						<td class="cross">✗ No enterprise</td>
+					</tr>
+					<tr>
+						<td class="feature-name">AI-Powered Analytics</td>
+						<td class="check">✓ ML insights</td>
+						<td class="cross">✗ No analytics</td>
+						<td class="cross">✗ Basic metrics</td>
+						<td class="cross">✗ No analytics</td>
+					</tr>
+					<tr>
+						<td class="feature-name">API Rate Limits</td>
+						<td class="check">✓ Tiered limits</td>
+						<td class="cross">✗ Strict limits</td>
+						<td class="cross">✗ Network limits</td>
+						<td class="cross">✗ Protocol limits</td>
+					</tr>
+					<tr>
+						<td class="feature-name">Webhook Integration</td>
+						<td class="check">✓ Real-time alerts</td>
+						<td class="cross">✗ No webhooks</td>
+						<td class="cross">✗ Limited</td>
+						<td class="cross">✗ No webhooks</td>
+					</tr>
+					<tr>
+						<td class="feature-name">Custom Protocols</td>
+						<td class="check">✓ Plugin system</td>
+						<td class="cross">✗ Not supported</td>
+						<td class="cross">✗ Not supported</td>
+						<td class="cross">✗ Not supported</td>
+					</tr>
+				</tbody>
+			</table>
+		</section>
+
+		<!-- Testimonials -->
+		<section class="testimonials">
+			<div class="testimonial-card">
+				<div class="testimonial-quote">"Bitcoin Sprint's enterprise validation service has revolutionized how we
+					ensure data integrity across our decentralized storage infrastructure. The cryptographic proofs and
+					real-time validation are unmatched."</div>
+				<div class="testimonial-author">Sarah Chen</div>
+				<div class="testimonial-company">CTO, DeFi Protocol Inc.</div>
+			</div>
+			<div class="testimonial-card">
+				<div class="testimonial-quote">"The multi-protocol support and AI-powered analytics have given us
+					unprecedented visibility into our storage health. This is the future of decentralized storage
+					validation."</div>
+				<div class="testimonial-author">Marcus Rodriguez</div>
+				<div class="testimonial-company">Head of Infrastructure, NFT Marketplace</div>
+			</div>
+			<div class="testimonial-card">
+				<div class="testimonial-quote">"Enterprise-grade security with SOC 2 compliance and dedicated support.
+					Bitcoin Sprint delivers what other solutions only promise."</div>
+				<div class="testimonial-author">Dr. Emily Watson</div>
+				<div class="testimonial-company">Chief Security Officer, Healthcare Data Corp</div>
+			</div>
+		</section>
+
+		<!-- FAQ -->
+		<section class="faq-section">
+			<h2>Frequently Asked Questions</h2>
+			<div class="faq-item">
+				<div class="faq-question">How does Bitcoin Sprint compare to IPFS pinning services?</div>
+				<div class="faq-answer">Unlike basic IPFS pinning services that only store files, Bitcoin Sprint
+					provides cryptographic proof-of-storage with SHA-256 hashing and Merkle tree verification. We offer
+					real-time validation, multi-protocol support, and enterprise-grade security features that
+					traditional pinning services lack.</div>
+			</div>
+			<div class="faq-item">
+				<div class="faq-question">What makes your service better than Filecoin?</div>
+				<div class="faq-answer">While Filecoin focuses on storage mining incentives, Bitcoin Sprint provides
+					superior validation technology with faster response times (&lt;2s vs hours), unified API for
+					multiple protocols, AI-powered analytics, and enterprise features like SLA monitoring and webhook
+					integrations.</div>
+			</div>
+			<div class="faq-item">
+				<div class="faq-question">Do you support custom protocols?</div>
+				<div class="faq-answer">Yes! Our plugin-based architecture supports custom protocols. Enterprise
+					customers can integrate their proprietary storage solutions with our validation engine for
+					comprehensive proof-of-storage capabilities.</div>
+			</div>
+			<div class="faq-item">
+				<div class="faq-question">What security measures are in place?</div>
+				<div class="faq-answer">We implement end-to-end encryption, API key authentication, rate limiting,
+					circuit breakers, audit trails, and SOC 2 Type II compliance. All data is encrypted in transit and
+					at rest, with regular security audits and penetration testing.</div>
+			</div>
+			<div class="faq-item">
+				<div class="faq-question">Can I get a white-label solution?</div>
+				<div class="faq-answer">Absolutely! Our Enterprise plan includes white-label options where you can
+					customize the interface, branding, and domain. We also offer on-premise deployment for maximum
+					control and compliance.</div>
+			</div>
+		</section>
+
+		<!-- CTA Section -->
+		<section class="cta-section">
+			<h2>Ready to Upgrade Your Storage Validation?</h2>
+			<p>Join leading institutions and developers who trust Bitcoin Sprint for their decentralized storage
+				validation needs.</p>
+			<button class="btn" onclick="selectPlan('professional')" style="max-width: 300px; margin: 0 auto;">Start
+				Your Free Trial</button>
+		</section>
+	</div>
+
+	<!-- Contact Modal -->
+	<div class="modal" id="contactModal">
+		<div class="modal-content">
+			<span class="modal-close" onclick="closeModal()">&times;</span>
+			<h3>Contact Our Sales Team</h3>
+			<form id="contactForm">
+				<div class="form-group">
+					<label for="name">Full Name</label>
+					<input type="text" id="name" required>
+				</div>
+				<div class="form-group">
+					<label for="email">Email Address</label>
+					<input type="email" id="email" required>
+				</div>
+				<div class="form-group">
+					<label for="company">Company</label>
+					<input type="text" id="company" required>
+				</div>
+				<div class="form-group">
+					<label for="message">Message</label>
+					<textarea id="message" rows="4"
+						placeholder="Tell us about your storage validation needs..."></textarea>
+				</div>
+				<button type="submit" class="btn">Send Message</button>
+			</form>
+		</div>
+	</div>
+
+	<script>
+		// Stripe integration
+		const stripe = Stripe('pk_test_your_stripe_publishable_key');
+
+		// Plan selection and Stripe checkout
+		function selectPlan(plan) {
+			const planIds = {
+				'free': 'price_free_trial',
+				'professional': 'price_professional_monthly'
+			};
+
+			if (plan === 'free') {
+				// Redirect to free trial signup
+				window.location.href = '/web/enterprise-storage-validation.html';
+				return;
+			}
+
+			stripe.redirectToCheckout({
+				lineItems: [{ price: planIds[plan], quantity: 1 }],
+				mode: 'subscription',
+				successUrl: window.location.origin + '/success?plan=' + plan,
+				cancelUrl: window.location.origin + '/cancel'
+			});
+		}
+
+		// Contact sales modal
+		function contactSales() {
+			document.getElementById('contactModal').classList.add('show');
+		}
+
+		function closeModal() {
+			document.getElementById('contactModal').classList.remove('show');
+		}
+
+		// Contact form handling
+		document.getElementById('contactForm').addEventListener('submit', function (e) {
+			e.preventDefault();
+
+			const formData = new FormData(e.target);
+			const data = Object.fromEntries(formData);
+
+			// Send to your backend or email service
+			fetch('/api/contact-sales', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify(data)
+			})
+				.then(response => response.json())
+				.then(result => {
+					alert('Thank you! Our sales team will contact you within 24 hours.');
+					closeModal();
+					e.target.reset();
+				})
+				.catch(error => {
+					alert('There was an error sending your message. Please try again.');
+				});
+		});
+
+		// FAQ accordion
+		document.querySelectorAll('.faq-question').forEach(question => {
+			question.addEventListener('click', function () {
+				const faqItem = this.parentElement;
+				faqItem.classList.toggle('active');
+			});
+		});
+
+		// Close modal when clicking outside
+		window.addEventListener('click', function (e) {
+			const modal = document.getElementById('contactModal');
+			if (e.target === modal) {
+				closeModal();
+			}
+		});
+	</script>
+</body>
+
+</html>

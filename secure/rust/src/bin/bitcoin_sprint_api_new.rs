@@ -721,7 +721,7 @@ impl UniversalClient {
                 }
                 Err(_) => {
                     // Keep original entry as-is (may still resolve on connect)
-                    addr_list.push(seed);
+                    addr_list.push(seed.clone());
                 }
             }
         }
@@ -920,6 +920,19 @@ impl Server {
         let addr: SocketAddr = format!("{}:{}", self.cfg.api_host, self.cfg.api_port).parse().unwrap();
         info!("Starting Sprint API server on {}", addr);
 
+        // Create admin server on separate port if configured
+        let admin_addr: SocketAddr = format!("{}:{}", self.cfg.api_host, self.cfg.rust_admin_server_port).parse().unwrap();
+        info!("Starting Sprint Admin server on {}", admin_addr);
+
+        // Admin routes (health, metrics, status - no auth required for monitoring)
+        let admin_app = Router::new()
+            .route("/health", get(health_handler))
+            .route("/metrics", get(metrics_handler))
+            .route("/status", get(status_handler))
+            .route("/version", get(version_handler))
+            .route("/ready", get(ready_handler))
+            .with_state(self.clone());
+
         // Connect P2P clients in background
         let p2p_clients_clone = self.p2p_clients.clone();
         tokio::task::spawn(async move {
@@ -970,15 +983,41 @@ impl Server {
             // In real: spawn process with Command
         }
 
-        let listener = tokio::net::TcpListener::bind(&addr).await?;
+        // Start both servers concurrently
+        let main_listener = tokio::net::TcpListener::bind(&addr).await?;
+        let admin_listener = tokio::net::TcpListener::bind(&admin_addr).await?;
+
         let shutdown = async {
             // Graceful shutdown on Ctrl+C
             if tokio::signal::ctrl_c().await.is_ok() {
                 info!("Shutdown signal received");
             }
         };
-        axum::serve(listener, app)
-            .with_graceful_shutdown(shutdown)
+
+        // Create separate shutdown futures for each server
+        let shutdown1 = shutdown;
+        let shutdown2 = async {
+            // Graceful shutdown on Ctrl+C
+            if tokio::signal::ctrl_c().await.is_ok() {
+                info!("Shutdown signal received");
+            }
+        };
+
+        // Spawn admin server
+        let admin_app_clone = admin_app.clone();
+        tokio::task::spawn(async move {
+            info!("Admin server starting on {}", admin_addr);
+            if let Err(e) = axum::serve(admin_listener, admin_app_clone)
+                .with_graceful_shutdown(shutdown1)
+                .await
+            {
+                error!("Admin server error: {}", e);
+            }
+        });
+
+        // Start main server
+        axum::serve(main_listener, app)
+            .with_graceful_shutdown(shutdown2)
             .await?;
         Ok(())
     }

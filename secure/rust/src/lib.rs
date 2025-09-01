@@ -18,6 +18,9 @@ pub mod storage_verifier;
 #[cfg(feature = "web-server")]
 pub mod web_server;
 
+// Enterprise web server module for subscription-based storage validation
+pub mod enterprise_web_server;
+
 #[cfg(unix)]
 extern crate libc;
 

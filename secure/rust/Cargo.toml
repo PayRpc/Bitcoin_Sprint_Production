@@ -94,9 +94,9 @@ path = "src/bin/storage_verifier_server.rs"
 required-features = ["web-server"]
 
 [[bin]]
-name = "bitcoin_sprint_api"
-path = "src/bin/bitcoin_sprint_api_new.rs"
-required-features = ["axum-only"]
+name = "enterprise_server"
+path = "src/bin/enterprise_server.rs"
+required-features = ["hardened"]
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
