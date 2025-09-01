@@ -183,6 +183,77 @@ function Start-NextJsFrontend {
     }
 }
 
+# Function to start Rust Web Server
+function Start-RustWebServer {
+    Write-Host "[RUST] Starting Rust Web Server..." -ForegroundColor Blue
+
+    # Check if Rust binary exists
+    $rustBinary = Join-Path $ProjectRoot "bin\bitcoin-sprint-rust.exe"
+    if (!(Test-Path $rustBinary)) {
+        Write-Host "[WARN] Rust binary not found at $rustBinary" -ForegroundColor Yellow
+        Write-Host "[INFO] Building Rust web server..." -ForegroundColor Blue
+
+        Push-Location (Join-Path $ProjectRoot "secure\rust")
+        try {
+            # Build Rust binary
+            & "cargo" build --release --features hardened
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "[ERROR] Failed to build Rust web server" -ForegroundColor Red
+                return
+            }
+
+            # Copy binary to bin directory
+            $targetBinary = Join-Path $PSScriptRoot "target\release\bitcoin-sprint-rust.exe"
+            if (Test-Path $targetBinary) {
+                Copy-Item $targetBinary $rustBinary -Force
+                Write-Host "[OK] Rust binary built and copied" -ForegroundColor Green
+            } else {
+                Write-Host "[ERROR] Built binary not found" -ForegroundColor Red
+                return
+            }
+        } catch {
+            Write-Host "[ERROR] Failed to build Rust web server: $_" -ForegroundColor Red
+            return
+        } finally {
+            Pop-Location
+        }
+    }
+
+    # Set environment variables for Rust server
+    $env:RUST_LOG = "info"
+    $env:API_HOST = "0.0.0.0"
+    $env:API_PORT = "8443"
+    $env:ADMIN_PORT = "8444"
+    $env:PROMETHEUS_PORT = "9092"
+    $env:TLS_CERT_PATH = Join-Path $ProjectRoot "config\tls\cert.pem"
+    $env:TLS_KEY_PATH = Join-Path $ProjectRoot "config\tls\key.pem"
+    $env:REDIS_URL = "redis://localhost:6379"
+    $env:STORAGE_VERIFICATION_ENABLED = "true"
+    $env:ENTERPRISE_MODE = "true"
+
+    # Start Rust web server
+    Write-Host "[START] Starting Rust web server..." -ForegroundColor Blue
+    try {
+        $rustJob = Start-Job -ScriptBlock {
+            param($BinaryPath)
+            & $BinaryPath
+        } -ArgumentList $rustBinary
+
+        # Wait for Rust server to be ready
+        if (Wait-ForService "https://localhost:8443/health" "Rust Web Server" 30) {
+            Write-Host "[OK] Rust web server started successfully" -ForegroundColor Green
+        } else {
+            Write-Host "[WARN] Rust web server may not be fully ready, but continuing..." -ForegroundColor Yellow
+        }
+
+        # Store job for cleanup
+        $script:RustJob = $rustJob
+
+    } catch {
+        Write-Host "[ERROR] Failed to start Rust web server: $_" -ForegroundColor Red
+    }
+}
+
 # Function to show status
 function Show-Status {
     Write-Host "`n[STATUS] Service Status:" -ForegroundColor Cyan
@@ -191,7 +262,8 @@ function Show-Status {
     $services = @(
         @{Name="Grafana"; Url="http://localhost:3000"; Port=3000},
         @{Name="FastAPI"; Url="http://localhost:8000/health"; Port=8000},
-        @{Name="Next.js"; Url="http://localhost:3002"; Port=3002}
+        @{Name="Next.js"; Url="http://localhost:3002"; Port=3002},
+        @{Name="Rust Web Server"; Url="https://localhost:8443/health"; Port=8443}
     )
 
     foreach ($service in $services) {
@@ -203,6 +275,8 @@ function Show-Status {
     Write-Host "Frontend: http://localhost:3002" -ForegroundColor White
     Write-Host "FastAPI: http://localhost:8000/docs" -ForegroundColor White
     Write-Host "Grafana: http://localhost:3000 (admin/sprint123)" -ForegroundColor White
+    Write-Host "Rust Web Server: https://localhost:8443/health" -ForegroundColor White
+    Write-Host "Rust Admin API: https://localhost:8444/admin" -ForegroundColor White
 }
 
 # Function to cleanup on exit
@@ -219,6 +293,12 @@ function Cleanup {
         Write-Host "Stopping Next.js job..." -ForegroundColor Blue
         Stop-Job $script:NextJsJob -ErrorAction SilentlyContinue
         Remove-Job $script:NextJsJob -ErrorAction SilentlyContinue
+    }
+
+    if ($script:RustJob) {
+        Write-Host "Stopping Rust web server job..." -ForegroundColor Blue
+        Stop-Job $script:RustJob -ErrorAction SilentlyContinue
+        Remove-Job $script:RustJob -ErrorAction SilentlyContinue
     }
 
     Write-Host "[OK] Cleanup complete" -ForegroundColor Green
@@ -241,6 +321,9 @@ try {
     Start-Sleep -Seconds 3
 
     Start-NextJsFrontend
+    Start-Sleep -Seconds 3
+
+    Start-RustWebServer
 
     # Show final status
     Start-Sleep -Seconds 5

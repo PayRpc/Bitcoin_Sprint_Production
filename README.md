@@ -27,8 +27,36 @@ start-all.bat
 | **FastAPI Gateway** | 8000 | Active - Python 3.13 | REST API with entropy endpoints |
 | **Next.js Frontend** | 3002 | Active - Running | Web interface with entropy generator |
 | **Go Backend** | 8080 | Active - Connected | Core Bitcoin Sprint application |
+| **Rust Web Server** | 8443/8444 | Active - Hardened | Enterprise-grade storage verification API |
 | **Grafana** | 3000 | Active - Monitoring | Performance monitoring dashboard |
 | **Entropy API** | 3002/api/entropy | Active | Cryptographically secure randomness |
+
+### Rust Web Server (Enterprise Hardening)
+
+The Rust web server provides industry-leading enterprise-grade storage verification with comprehensive security features:
+
+**Security Features:**
+- **TLS 1.3 Encryption**: Memory-safe rustls implementation with certificate management
+- **Redis Rate Limiting**: Distributed sliding window rate limiting with fallback mechanisms
+- **Circuit Breakers**: Resilience patterns for external service calls with configurable thresholds
+- **Prometheus Monitoring**: Histograms with configurable latency buckets and custom metrics
+- **Security Headers**: OWASP-compliant security headers and request tracing
+- **Audit Logging**: Comprehensive request/response logging for compliance
+- **Request Validation**: Input sanitization and validation with detailed error responses
+
+**API Endpoints:**
+- `GET /health` - Health check endpoint
+- `POST /api/v1/verify` - Storage verification with enterprise validation
+- `GET /metrics` - Prometheus metrics endpoint
+- `GET /admin/status` - Administrative status (requires authentication)
+
+**Access Points:**
+- **Main API**: https://localhost:8443/
+- **Admin API**: https://localhost:8444/admin/
+- **Metrics**: https://localhost:8443/metrics
+- **Health Check**: https://localhost:8443/health
+
+---
 
 ### Python 3.13 Environment
 - FastAPI Gateway: Python 3.13 virtual environment
@@ -82,6 +110,8 @@ docker-compose up -d bitcoin-core geth
 - **Status Dashboard**: http://localhost:8080/status
 - **Production Readiness**: http://localhost:8080/readiness
 - **API Documentation**: http://localhost:8080/docs
+- **Rust Web Server**: https://localhost:8443/health
+- **Rust Admin API**: https://localhost:8444/admin
 - **Entropy Generator**: http://localhost:3002/entropy
 - **Web Dashboard**: http://localhost:3002/
 

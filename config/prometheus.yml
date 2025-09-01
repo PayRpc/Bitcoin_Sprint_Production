@@ -79,3 +79,14 @@ scrape_configs:
       - targets: ['bitcoin-sprint-web:3002']
     scrape_interval: 15s
     metrics_path: '/api/metrics'
+
+  # Rust Web Server (Hardened)
+  - job_name: 'bitcoin-sprint-rust'
+    static_configs:
+      - targets: ['bitcoin-sprint-rust:9092']
+    scrape_interval: 10s
+    metrics_path: '/metrics'
+    # TLS configuration for HTTPS metrics endpoint
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true  # For self-signed certificates in development

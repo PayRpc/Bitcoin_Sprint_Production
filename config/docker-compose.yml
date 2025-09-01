@@ -50,6 +50,41 @@ services:
     depends_on:
       - prometheus
 
+  # ===== RUST WEB SERVER (HARDENED) =====
+  bitcoin-sprint-rust:
+    build:
+      context: ..
+      dockerfile: Dockerfile.rust
+    container_name: bitcoin-sprint-rust
+    ports:
+      - "8443:8443"     # HTTPS API
+      - "8444:8444"     # HTTPS Admin API
+      - "9092:9092"     # Prometheus Metrics (different from Go metrics)
+    environment:
+      - RUST_LOG=info
+      - TLS_CERT_PATH=/app/config/tls/cert.pem
+      - TLS_KEY_PATH=/app/config/tls/key.pem
+      - REDIS_URL=redis://redis:6379
+      - PROMETHEUS_PORT=9092
+      - API_HOST=0.0.0.0
+      - API_PORT=8443
+      - ADMIN_PORT=8444
+      - STORAGE_VERIFICATION_ENABLED=true
+      - ENTERPRISE_MODE=true
+    volumes:
+      - ./config/tls:/app/config/tls:ro
+    depends_on:
+      - redis
+      - bitcoin-sprint
+    networks:
+      - sprint-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-k", "https://localhost:8443/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   bitcoin-sprint:
     build:
       context: ..

@@ -825,8 +825,8 @@ fn configure_tls() -> Result<rustls::ServerConfig, Box<dyn std::error::Error>> {
     use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
 
     // Load certificates from environment or default paths
-    let cert_path = std::env::var("TLS_CERT_PATH").unwrap_or_else(|_| "certs/server.crt".to_string());
-    let key_path = std::env::var("TLS_KEY_PATH").unwrap_or_else(|_| "certs/server.key".to_string());
+    let cert_path = std::env::var("TLS_CERT_PATH").unwrap_or_else(|_| "config/tls/cert.pem".to_string());
+    let key_path = std::env::var("TLS_KEY_PATH").unwrap_or_else(|_| "config/tls/key.pem".to_string());
 
     // Load certificate chain
     let cert_file = std::fs::File::open(&cert_path)?;
@@ -887,7 +887,7 @@ pub async fn run_server() -> std::io::Result<()> {
         redis_rate_limiter: None, // Will be initialized if Redis is available
         #[cfg(feature = "hardened")]
         circuit_breakers: Arc::new(AsyncMutex::new(HashMap::new())),
-    });    info!("Server configured - Rate limit: 10 req/min, Binding to 0.0.0.0:8080");
+    });    info!("Server configured - Rate limit: 10 req/min, Binding to 0.0.0.0:8443");
 
     #[cfg(feature = "hardened")]
     {
@@ -905,7 +905,7 @@ pub async fn run_server() -> std::io::Result<()> {
                         .route("/health", web::get().to(health))
                         .route("/metrics", web::get().to(metrics))
                 })
-                .bind(("0.0.0.0", 8080))?
+                .bind(("0.0.0.0", 8443))?
                 .workers(8)
                 .run()
                 .await
@@ -921,7 +921,7 @@ pub async fn run_server() -> std::io::Result<()> {
                         .route("/health", web::get().to(health))
                         .route("/metrics", web::get().to(metrics))
                 })
-                .bind(("0.0.0.0", 8080))?
+                .bind(("0.0.0.0", 8443))?
                 .workers(8)
                 .run()
                 .await
@@ -941,7 +941,7 @@ pub async fn run_server() -> std::io::Result<()> {
                 .route("/health", web::get().to(health))
                 .route("/metrics", web::get().to(metrics))
         })
-        .bind(("0.0.0.0", 8080))?
+        .bind(("0.0.0.0", 8443))?
         .workers(8)
         .run()
         .await

@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
 	"runtime"
 	"sort"
@@ -120,6 +121,16 @@ DatabaseURL               string        `json:"database_url"`
 DatabaseMaxConns          int           `json:"database_max_conns"`
 DatabaseMinConns          int           `json:"database_min_conns"`
 
+// Rust Web Server configuration
+RustWebServerEnabled      bool          `json:"rust_web_server_enabled"`
+RustWebServerHost         string        `json:"rust_web_server_host"`
+RustWebServerPort         int           `json:"rust_web_server_port"`
+RustAdminServerPort       int           `json:"rust_admin_server_port"`
+RustMetricsPort           int           `json:"rust_metrics_port"`
+RustTLSCertPath           string        `json:"rust_tls_cert_path"`
+RustTLSKeyPath            string        `json:"rust_tls_key_path"`
+RustRedisURL              string        `json:"rust_redis_url"`
+
 }
 
 
@@ -170,6 +181,16 @@ func LoadConfig() Config {
 		DatabaseURL:               getEnv("DATABASE_URL", "./sprint.db"),
 		DatabaseMaxConns:          getEnvInt("DATABASE_MAX_CONNS", 10),
 		DatabaseMinConns:          getEnvInt("DATABASE_MIN_CONNS", 2),
+
+		// Rust Web Server configuration
+		RustWebServerEnabled:      getEnv("RUST_WEB_SERVER_ENABLED", "true") == "true",
+		RustWebServerHost:         getEnv("RUST_WEB_SERVER_HOST", "0.0.0.0"),
+		RustWebServerPort:         getEnvInt("RUST_WEB_SERVER_PORT", 8443),
+		RustAdminServerPort:       getEnvInt("RUST_ADMIN_SERVER_PORT", 8444),
+		RustMetricsPort:           getEnvInt("RUST_METRICS_PORT", 9092),
+		RustTLSCertPath:           getEnv("RUST_TLS_CERT_PATH", "/app/config/tls/cert.pem"),
+		RustTLSKeyPath:            getEnv("RUST_TLS_KEY_PATH", "/app/config/tls/key.pem"),
+		RustRedisURL:              getEnv("RUST_REDIS_URL", "redis://redis:6379"),
 	}
 }
 
@@ -4213,6 +4234,81 @@ if cfg.DatabaseType == "postgres" || cfg.DatabaseType == "postgresql" {
 	logger.Info("Database integration disabled", zap.String("type", cfg.DatabaseType))
 }
 
+// Initialize Rust Web Server integration
+if cfg.RustWebServerEnabled {
+	logger.Info("Initializing Rust Web Server integration",
+		zap.String("host", cfg.RustWebServerHost),
+		zap.Int("port", cfg.RustWebServerPort),
+		zap.Int("admin_port", cfg.RustAdminServerPort),
+		zap.Int("metrics_port", cfg.RustMetricsPort))
+
+	// Start Rust web server in background
+	go func() {
+		cmd := exec.Command("./bitcoin-sprint-rust")
+		cmd.Env = append(os.Environ(),
+			fmt.Sprintf("API_HOST=%s", cfg.RustWebServerHost),
+			fmt.Sprintf("API_PORT=%d", cfg.RustWebServerPort),
+			fmt.Sprintf("ADMIN_PORT=%d", cfg.RustAdminServerPort),
+			fmt.Sprintf("PROMETHEUS_PORT=%d", cfg.RustMetricsPort),
+			fmt.Sprintf("TLS_CERT_PATH=%s", cfg.RustTLSCertPath),
+			fmt.Sprintf("TLS_KEY_PATH=%s", cfg.RustTLSKeyPath),
+			fmt.Sprintf("REDIS_URL=%s", cfg.RustRedisURL),
+			"RUST_LOG=info",
+			"STORAGE_VERIFICATION_ENABLED=true",
+			"ENTERPRISE_MODE=true")
+
+		if err := cmd.Start(); err != nil {
+			logger.Error("Failed to start Rust web server", zap.Error(err))
+			return
+		}
+
+		logger.Info("Rust web server started successfully",
+			zap.Int("pid", cmd.Process.Pid))
+
+		// Wait for process to finish
+		if err := cmd.Wait(); err != nil {
+			logger.Error("Rust web server exited with error", zap.Error(err))
+		}
+	}()
+
+	// Wait a moment for Rust server to start
+	time.Sleep(2 * time.Second)
+
+	// Health check for Rust web server
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		client := &http.Client{Timeout: 10 * time.Second}
+
+		for {
+			select {
+			case <-ticker.C:
+				rustHealthURL := fmt.Sprintf("https://%s:%d/health",
+					cfg.RustWebServerHost, cfg.RustWebServerPort)
+
+				resp, err := client.Get(rustHealthURL)
+				if err != nil {
+					logger.Warn("Rust web server health check failed",
+						zap.String("url", rustHealthURL), zap.Error(err))
+					continue
+				}
+				resp.Body.Close()
+
+				if resp.StatusCode == http.StatusOK {
+					logger.Debug("Rust web server health check passed")
+				} else {
+					logger.Warn("Rust web server health check failed",
+						zap.Int("status_code", resp.StatusCode))
+				}
+			}
+		}
+	}()
+
+	logger.Info("Rust Web Server integration enabled")
+} else {
+	logger.Info("Rust Web Server integration disabled")
+}
 
 // Start server
 
