@@ -184,7 +184,7 @@ func LoadConfig() Config {
 
 		// Rust Web Server configuration
 		RustWebServerEnabled:      getEnv("RUST_WEB_SERVER_ENABLED", "true") == "true",
-		RustWebServerHost:         getEnv("RUST_WEB_SERVER_HOST", "0.0.0.0"),
+		RustWebServerHost:         getEnv("RUST_WEB_SERVER_HOST", "127.0.0.1"),
 		RustWebServerPort:         getEnvInt("RUST_WEB_SERVER_PORT", 8443),
 		RustAdminServerPort:       getEnvInt("RUST_ADMIN_SERVER_PORT", 8444),
 		RustMetricsPort:           getEnvInt("RUST_METRICS_PORT", 9092),
@@ -1056,9 +1056,11 @@ case ProtocolEthereum:
 
 case ProtocolSolana:
 	return []string{
-		"http://5.9.10.2:8899",        // Solana Foundation node (EU)
-		"http://5.9.8.2:8899",         // Solana Foundation node (EU)
-		"http://139.178.65.155:8899",  // Community node (US)
+		"http://localhost:8899",       // Solana validator 1 (RPC)
+		"http://localhost:8901",       // Solana validator 2 (RPC)
+		"http://localhost:8903",       // Solana validator 3 (RPC)
+		"http://localhost:8904",       // Solana validator 4 (RPC)
+		"http://localhost:8905",       // Solana validator 5 (RPC)
 	}
 
 default:

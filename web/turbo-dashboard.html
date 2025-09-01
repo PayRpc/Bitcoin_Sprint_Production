@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 Bitcoin Sprint - TURBO DASHBOARD</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Orbitron', monospace;
+            background: #0a0a0a;
+            color: #00ff41;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+
+        .matrix-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.1;
+        }
+
+        .header {
+            text-align: center;
+            padding: 20px;
+            background: linear-gradient(45deg, #ff0080, #00ff80, #0080ff);
+            background-size: 400% 400%;
+            animation: gradient 3s ease infinite;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .header h1 {
+            font-size: 4em;
+            font-weight: 900;
+            text-shadow: 0 0 20px #00ff41;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .turbo-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 0, 128, 0.2);
+            border: 2px solid #ff0080;
+            border-radius: 10px;
+            padding: 15px;
+            font-weight: bold;
+            animation: glow 1s infinite alternate;
+        }
+
+        @keyframes glow {
+            from { box-shadow: 0 0 20px #ff0080; }
+            to { box-shadow: 0 0 40px #ff0080, 0 0 60px #ff0080; }
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .cyber-card {
+            background: linear-gradient(135deg, rgba(0, 255, 65, 0.1), rgba(0, 128, 255, 0.1));
+            border: 2px solid #00ff41;
+            border-radius: 15px;
+            padding: 25px;
+            position: relative;
+            overflow: hidden;
+            transform-style: preserve-3d;
+            transition: all 0.3s ease;
+        }
+
+        .cyber-card:hover {
+            transform: rotateY(5deg) rotateX(5deg) scale(1.05);
+            border-color: #ff0080;
+            box-shadow: 0 20px 40px rgba(0, 255, 65, 0.3);
+        }
+
+        .cyber-card::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, #00ff41, #ff0080, #0080ff, #00ff41);
+            border-radius: 15px;
+            z-index: -1;
+            animation: borderRotate 4s linear infinite;
+        }
+
+        @keyframes borderRotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .metric-title {
+            font-size: 1.4em;
+            margin-bottom: 15px;
+            color: #00ff41;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            position: relative;
+        }
+
+        .metric-value {
+            font-size: 3.5em;
+            font-weight: bold;
+            background: linear-gradient(45deg, #00ff41, #ff0080);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 30px #00ff41;
+            animation: valueFlicker 0.1s infinite alternate;
+        }
+
+        @keyframes valueFlicker {
+            0% { opacity: 1; }
+            100% { opacity: 0.8; }
+        }
+
+        .metric-subtitle {
+            font-size: 1em;
+            color: #0080ff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 10px;
+        }
+
+        .network-section {
+            margin: 40px 20px;
+        }
+
+        .network-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .network-card {
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid;
+            border-radius: 10px;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .bitcoin-card { 
+            border-color: #f7931a;
+            box-shadow: 0 0 20px rgba(247, 147, 26, 0.5);
+        }
+        .ethereum-card { 
+            border-color: #627eea;
+            box-shadow: 0 0 20px rgba(98, 126, 234, 0.5);
+        }
+        .rust-card { 
+            border-color: #ce422b;
+            box-shadow: 0 0 20px rgba(206, 66, 43, 0.5);
+        }
+
+        .connection-viz {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+        }
+
+        .pulse-dot {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            margin-right: 10px;
+            animation: pulse-dot 1s infinite;
+        }
+
+        .pulse-dot.online { background: #00ff41; }
+        .pulse-dot.offline { background: #ff4444; }
+
+        @keyframes pulse-dot {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .live-chart {
+            height: 100px;
+            background: rgba(0, 255, 65, 0.1);
+            border: 1px solid #00ff41;
+            border-radius: 5px;
+            position: relative;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+
+        .chart-line {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 60%;
+            width: 3px;
+            background: #00ff41;
+            animation: chartMove 2s linear infinite;
+        }
+
+        @keyframes chartMove {
+            0% { left: 0%; height: 60%; }
+            25% { left: 25%; height: 80%; }
+            50% { left: 50%; height: 40%; }
+            75% { left: 75%; height: 90%; }
+            100% { left: 100%; height: 60%; }
+        }
+
+        .terminal-section {
+            background: #000;
+            border: 2px solid #00ff41;
+            border-radius: 10px;
+            margin: 20px;
+            padding: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .terminal-header {
+            color: #00ff41;
+            font-size: 1.2em;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .terminal-content {
+            font-family: 'Courier New', monospace;
+            color: #00ff41;
+            line-height: 1.4;
+            white-space: pre-wrap;
+        }
+
+        .typing-effect {
+            border-right: 2px solid #00ff41;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { border-color: #00ff41; }
+            51%, 100% { border-color: transparent; }
+        }
+
+        .performance-bars {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 0;
+        }
+
+        .perf-bar {
+            width: 30%;
+            height: 20px;
+            background: rgba(0, 255, 65, 0.2);
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .perf-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff41, #ff0080);
+            border-radius: 10px;
+            animation: barFill 3s ease-in-out infinite alternate;
+        }
+
+        @keyframes barFill {
+            0% { width: 60%; }
+            100% { width: 95%; }
+        }
+
+        .crypto-ticker {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.9);
+            border-top: 2px solid #00ff41;
+            padding: 10px;
+            font-family: 'Orbitron', monospace;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        .ticker-content {
+            display: inline-block;
+            animation: scroll 30s linear infinite;
+        }
+
+        @keyframes scroll {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+
+        .hack-mode {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: #00ff41;
+            padding: 40px;
+            border: 3px solid #00ff41;
+            border-radius: 10px;
+            font-size: 1.5em;
+            text-align: center;
+            display: none;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <canvas class="matrix-bg" id="matrix"></canvas>
+    
+    <div class="turbo-status">
+        <div>🚀 TURBO MODE ACTIVE</div>
+        <div id="systemStatus">ONLINE</div>
+    </div>
+
+    <div class="header">
+        <h1>⚡ BITCOIN SPRINT TURBO ⚡</h1>
+        <p>REAL-TIME BLOCKCHAIN SURVEILLANCE SYSTEM</p>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="cyber-card">
+            <div class="metric-title">⚡ ACTIVE CONNECTIONS</div>
+            <div class="metric-value" id="connections">--</div>
+            <div class="metric-subtitle">LIVE P2P PEERS</div>
+            <div class="live-chart">
+                <div class="chart-line"></div>
+            </div>
+        </div>
+
+        <div class="cyber-card">
+            <div class="metric-title">🔥 SYSTEM UPTIME</div>
+            <div class="metric-value" id="uptime">--</div>
+            <div class="metric-subtitle">SECONDS ONLINE</div>
+            <div class="performance-bars">
+                <div class="perf-bar"><div class="perf-fill"></div></div>
+                <div class="perf-bar"><div class="perf-fill"></div></div>
+                <div class="perf-bar"><div class="perf-fill"></div></div>
+            </div>
+        </div>
+
+        <div class="cyber-card">
+            <div class="metric-title">💾 MEMORY USAGE</div>
+            <div class="metric-value" id="memory">--</div>
+            <div class="metric-subtitle">MEGABYTES ALLOCATED</div>
+            <div class="live-chart">
+                <div class="chart-line" style="animation-delay: 0.5s;"></div>
+            </div>
+        </div>
+
+        <div class="cyber-card">
+            <div class="metric-title">🧠 GOROUTINES</div>
+            <div class="metric-value" id="goroutines">--</div>
+            <div class="metric-subtitle">ACTIVE PROCESSES</div>
+            <div class="live-chart">
+                <div class="chart-line" style="animation-delay: 1s;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="network-section">
+        <h2 style="text-align: center; color: #00ff41; font-size: 2em; margin-bottom: 20px;">🌐 NETWORK STATUS</h2>
+        <div class="network-grid">
+            <div class="network-card bitcoin-card">
+                <h3>🟠 BITCOIN MAINNET</h3>
+                <div class="connection-viz">
+                    <div class="pulse-dot online" id="btcDot"></div>
+                    <div id="bitcoinStatus">CONNECTING...</div>
+                </div>
+                <div>⚡ Real-time P2P monitoring</div>
+                <div>🔗 Peer discovery active</div>
+            </div>
+
+            <div class="network-card ethereum-card">
+                <h3>🔵 ETHEREUM MAINNET</h3>
+                <div class="connection-viz">
+                    <div class="pulse-dot online" id="ethDot"></div>
+                    <div id="ethereumStatus">CONNECTED</div>
+                </div>
+                <div>⚡ Smart contract monitoring</div>
+                <div>🔗 Web3 integration active</div>
+            </div>
+
+            <div class="network-card rust-card">
+                <h3>🦀 RUST STORAGE ENGINE</h3>
+                <div class="connection-viz">
+                    <div class="pulse-dot" id="rustDot"></div>
+                    <div id="rustStatus">CHECKING...</div>
+                </div>
+                <div>⚡ Zero-copy storage verification</div>
+                <div>🔗 High-performance I/O</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="terminal-section">
+        <div class="terminal-header">
+            <span>💻 LIVE SYSTEM TERMINAL</span>
+            <span style="margin-left: auto;">REFRESH: <span id="refreshCounter">0</span></span>
+        </div>
+        <div class="terminal-content" id="terminal"></div>
+    </div>
+
+    <div class="crypto-ticker">
+        <div class="ticker-content">
+            🟠 BTC: $43,267.89 (+2.1%) | 🔵 ETH: $2,634.12 (+1.8%) | ⚡ BITCOIN SPRINT: TURBO MODE ACTIVE | 🚀 P2P CONNECTIONS: <span id="tickerConnections">0</span> | 💾 MEMORY: <span id="tickerMemory">0</span>MB | ⏱️ UPTIME: <span id="tickerUptime">0</span>s
+        </div>
+    </div>
+
+    <div class="hack-mode" id="hackMode">
+        <div>🔓 HACKING THE MAINFRAME...</div>
+        <div>ACCESS GRANTED</div>
+        <div>⚡ TURBO MODE ACTIVATED ⚡</div>
+    </div>
+
+    <script>
+        // Matrix rain effect
+        const canvas = document.getElementById('matrix');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const katakana = 'アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブヅプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const latin = katakana;
+        const alphabet = latin;
+
+        const fontSize = 16;
+        const columns = canvas.width / fontSize;
+
+        const rainDrops = [];
+
+        for (let x = 0; x < columns; x++) {
+            rainDrops[x] = 1;
+        }
+
+        const draw = () => {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#00ff41';
+            ctx.font = fontSize + 'px monospace';
+
+            for (let i = 0; i < rainDrops.length; i++) {
+                const text = alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+                ctx.fillText(text, i * fontSize, rainDrops[i] * fontSize);
+
+                if (rainDrops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                    rainDrops[i] = 0;
+                }
+                rainDrops[i]++;
+            }
+        };
+
+        setInterval(draw, 30);
+
+        // Terminal simulation
+        let terminalLines = [];
+        let refreshCount = 0;
+
+        function addTerminalLine(text, className = '') {
+            const timestamp = new Date().toLocaleTimeString();
+            terminalLines.unshift(`[${timestamp}] ${text}`);
+            if (terminalLines.length > 15) {
+                terminalLines = terminalLines.slice(0, 15);
+            }
+            
+            const terminal = document.getElementById('terminal');
+            terminal.innerHTML = terminalLines.join('\n') + '\n<span class="typing-effect">█</span>';
+        }
+
+        // Data fetching and updates
+        async function fetchSystemData() {
+            refreshCount++;
+            document.getElementById('refreshCounter').textContent = refreshCount;
+            
+            try {
+                // Health check
+                const healthResponse = await fetch('http://localhost:8080/health');
+                if (healthResponse.ok) {
+                    const healthData = await healthResponse.json();
+                    document.getElementById('systemStatus').textContent = 'ONLINE';
+                    addTerminalLine(`✅ BITCOIN SPRINT API v${healthData.version} ONLINE`);
+                    
+                    // Metrics
+                    const metricsResponse = await fetch('http://localhost:8080/metrics');
+                    if (metricsResponse.ok) {
+                        const metricsText = await metricsResponse.text();
+                        parseAndUpdateMetrics(metricsText);
+                    }
+                } else {
+                    throw new Error(`HTTP ${healthResponse.status}`);
+                }
+            } catch (error) {
+                document.getElementById('systemStatus').textContent = 'ERROR';
+                addTerminalLine(`❌ CONNECTION FAILED: ${error.message}`);
+                document.getElementById('btcDot').className = 'pulse-dot offline';
+            }
+
+            // Check Rust server
+            try {
+                const rustResponse = await fetch('http://localhost:8443/health');
+                if (rustResponse.ok) {
+                    document.getElementById('rustStatus').textContent = 'TURBO ACTIVE';
+                    document.getElementById('rustDot').className = 'pulse-dot online';
+                    addTerminalLine('🦀 RUST STORAGE ENGINE: MAXIMUM PERFORMANCE');
+                } else {
+                    throw new Error('Rust server offline');
+                }
+            } catch (error) {
+                document.getElementById('rustStatus').textContent = 'OFFLINE';
+                document.getElementById('rustDot').className = 'pulse-dot offline';
+            }
+        }
+
+        function parseAndUpdateMetrics(metricsText) {
+            const lines = metricsText.split('\n');
+            let connections = 0;
+            let uptime = 0;
+            let memory = 0;
+            let goroutines = 0;
+
+            lines.forEach(line => {
+                if (line.includes('bitcoin_sprint_active_connections')) {
+                    connections = parseInt(line.split(' ')[1]) || 0;
+                }
+                if (line.includes('bitcoin_sprint_uptime_seconds')) {
+                    uptime = parseInt(parseFloat(line.split(' ')[1])) || 0;
+                }
+                if (line.includes('go_memstats_heap_alloc_bytes')) {
+                    memory = Math.round(parseFloat(line.split(' ')[1]) / 1024 / 1024) || 0;
+                }
+                if (line.includes('go_goroutines')) {
+                    goroutines = parseInt(line.split(' ')[1]) || 0;
+                }
+            });
+
+            // Update main displays
+            document.getElementById('connections').textContent = connections;
+            document.getElementById('uptime').textContent = uptime;
+            document.getElementById('memory').textContent = memory;
+            document.getElementById('goroutines').textContent = goroutines;
+
+            // Update ticker
+            document.getElementById('tickerConnections').textContent = connections;
+            document.getElementById('tickerMemory').textContent = memory;
+            document.getElementById('tickerUptime').textContent = uptime;
+
+            // Update Bitcoin status
+            if (connections > 0) {
+                document.getElementById('bitcoinStatus').textContent = `${connections} PEERS CONNECTED`;
+                document.getElementById('btcDot').className = 'pulse-dot online';
+                addTerminalLine(`🟠 BITCOIN: ${connections} ACTIVE P2P CONNECTIONS`);
+            } else {
+                document.getElementById('bitcoinStatus').textContent = 'SEARCHING FOR PEERS...';
+                document.getElementById('btcDot').className = 'pulse-dot offline';
+            }
+
+            addTerminalLine(`📊 METRICS: ${connections} CONN | ${memory}MB RAM | ${uptime}s UP`);
+        }
+
+        // Startup sequence
+        function startupSequence() {
+            const hackMode = document.getElementById('hackMode');
+            hackMode.style.display = 'block';
+            
+            setTimeout(() => {
+                hackMode.style.display = 'none';
+                addTerminalLine('🚀 BITCOIN SPRINT TURBO DASHBOARD INITIALIZED');
+                addTerminalLine('⚡ SCANNING FOR BLOCKCHAIN NETWORKS...');
+                addTerminalLine('🔗 ESTABLISHING P2P CONNECTIONS...');
+                fetchSystemData();
+            }, 3000);
+        }
+
+        // Initialize
+        startupSequence();
+        setInterval(fetchSystemData, 2000); // Update every 2 seconds for more responsive feel
+
+        // Add some random terminal activity
+        setInterval(() => {
+            const activities = [
+                '🔍 SCANNING MEMPOOL...',
+                '⚡ PROCESSING BLOCK DATA...',
+                '🌐 P2P HEARTBEAT CHECK...',
+                '🔒 VALIDATING TRANSACTIONS...',
+                '📊 UPDATING METRICS...',
+                '🚀 TURBO MODE: OPTIMAL PERFORMANCE'
+            ];
+            addTerminalLine(activities[Math.floor(Math.random() * activities.length)]);
+        }, 8000);
+    </script>
+</body>
+</html>

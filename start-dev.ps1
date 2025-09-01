@@ -188,27 +188,27 @@ function Start-RustWebServer {
     Write-Host "[RUST] Starting Rust Web Server..." -ForegroundColor Blue
 
     # Check if Rust binary exists
-    $rustBinary = Join-Path $ProjectRoot "bin\bitcoin-sprint-rust.exe"
+    $rustBinary = Join-Path $ProjectRoot "bin\bitcoin_sprint_api.exe"
     if (!(Test-Path $rustBinary)) {
         Write-Host "[WARN] Rust binary not found at $rustBinary" -ForegroundColor Yellow
         Write-Host "[INFO] Building Rust web server..." -ForegroundColor Blue
 
         Push-Location (Join-Path $ProjectRoot "secure\rust")
         try {
-            # Build Rust binary
-            & "cargo" build --release --features hardened
+            # Build Rust binary with correct features
+            & "cargo" build --release --bin bitcoin_sprint_api --features web-server
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "[ERROR] Failed to build Rust web server" -ForegroundColor Red
                 return
             }
 
-            # Copy binary to bin directory
-            $targetBinary = Join-Path $PSScriptRoot "target\release\bitcoin-sprint-rust.exe"
+            # Copy binary to bin directory with correct name
+            $targetBinary = Join-Path $PSScriptRoot "target\release\bitcoin_sprint_api.exe"
             if (Test-Path $targetBinary) {
                 Copy-Item $targetBinary $rustBinary -Force
                 Write-Host "[OK] Rust binary built and copied" -ForegroundColor Green
             } else {
-                Write-Host "[ERROR] Built binary not found" -ForegroundColor Red
+                Write-Host "[ERROR] Built binary not found at $targetBinary" -ForegroundColor Red
                 return
             }
         } catch {

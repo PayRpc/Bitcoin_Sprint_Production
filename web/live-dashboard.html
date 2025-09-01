@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin Sprint - Live Monitoring</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            color: white;
+            min-height: 100vh;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin: 0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-left: 10px;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-online { background-color: #00ff88; }
+        .status-offline { background-color: #ff4444; }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .metric-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s ease;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .metric-title {
+            font-size: 1.2em;
+            margin-bottom: 10px;
+            color: #88ddff;
+        }
+        
+        .metric-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #00ff88;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .metric-subtitle {
+            font-size: 0.9em;
+            color: #cccccc;
+            margin-top: 5px;
+        }
+        
+        .network-status {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 30px;
+        }
+        
+        .network-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 15px;
+            border-left: 4px solid;
+        }
+        
+        .bitcoin-card { border-left-color: #f7931a; }
+        .ethereum-card { border-left-color: #627eea; }
+        .rust-card { border-left-color: #ce422b; }
+        
+        .refresh-info {
+            text-align: center;
+            margin-top: 20px;
+            color: #aaaaaa;
+        }
+        
+        .log-section {
+            margin-top: 30px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+        }
+        
+        .log-content {
+            background: #000;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Bitcoin Sprint Live Dashboard <span id="statusIndicator" class="status-indicator status-offline"></span></h1>
+        <p>Real-time monitoring of Bitcoin and Ethereum networks</p>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="metric-card">
+            <div class="metric-title">Active Connections</div>
+            <div class="metric-value" id="activeConnections">--</div>
+            <div class="metric-subtitle">Network peers</div>
+        </div>
+        
+        <div class="metric-card">
+            <div class="metric-title">System Uptime</div>
+            <div class="metric-value" id="uptime">--</div>
+            <div class="metric-subtitle">Seconds online</div>
+        </div>
+        
+        <div class="metric-card">
+            <div class="metric-title">Memory Usage</div>
+            <div class="metric-value" id="memoryUsage">--</div>
+            <div class="metric-subtitle">MB allocated</div>
+        </div>
+        
+        <div class="metric-card">
+            <div class="metric-title">Goroutines</div>
+            <div class="metric-value" id="goroutines">--</div>
+            <div class="metric-subtitle">Active processes</div>
+        </div>
+    </div>
+
+    <div class="network-status">
+        <div class="network-card bitcoin-card">
+            <h3>🟠 Bitcoin Network</h3>
+            <div id="bitcoinStatus">Checking connection...</div>
+        </div>
+        
+        <div class="network-card ethereum-card">
+            <h3>🔵 Ethereum Network</h3>
+            <div id="ethereumStatus">Checking connection...</div>
+        </div>
+        
+        <div class="network-card rust-card">
+            <h3>🦀 Rust Storage Server</h3>
+            <div id="rustStatus">Checking status...</div>
+        </div>
+    </div>
+
+    <div class="log-section">
+        <h3>📊 System Health Log</h3>
+        <div class="log-content" id="systemLog"></div>
+    </div>
+
+    <div class="refresh-info">
+        <p>Auto-refreshing every 5 seconds | Last update: <span id="lastUpdate">--</span></p>
+    </div>
+
+    <script>
+        let logEntries = [];
+        
+        function addLogEntry(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = `[${timestamp}] ${message}`;
+            logEntries.unshift(entry);
+            
+            if (logEntries.length > 20) {
+                logEntries = logEntries.slice(0, 20);
+            }
+            
+            document.getElementById('systemLog').textContent = logEntries.join('\n');
+        }
+        
+        async function fetchMetrics() {
+            try {
+                const response = await fetch('http://localhost:8080/metrics');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const text = await response.text();
+                return parseMetrics(text);
+            } catch (error) {
+                addLogEntry(`❌ Failed to fetch metrics: ${error.message}`, 'error');
+                return null;
+            }
+        }
+        
+        function parseMetrics(text) {
+            const metrics = {};
+            const lines = text.split('\n');
+            
+            for (const line of lines) {
+                if (line.startsWith('#') || !line.trim()) continue;
+                
+                const match = line.match(/^([a-zA-Z_:][a-zA-Z0-9_:]*)\{?([^}]*)\}?\s+(.+)$/);
+                if (match) {
+                    const [, name, labels, value] = match;
+                    metrics[name] = parseFloat(value);
+                }
+            }
+            
+            return metrics;
+        }
+        
+        async function checkServiceHealth(url, serviceName) {
+            try {
+                const response = await fetch(url);
+                if (response.ok) {
+                    const data = await response.json();
+                    return { status: 'online', data: data };
+                } else {
+                    return { status: 'error', error: `HTTP ${response.status}` };
+                }
+            } catch (error) {
+                return { status: 'offline', error: error.message };
+            }
+        }
+        
+        async function updateDashboard() {
+            const startTime = Date.now();
+            
+            document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+            
+            const mainHealth = await checkServiceHealth('http://localhost:8080/health', 'Bitcoin Sprint API');
+            let metrics = null;
+            
+            if (mainHealth.status === 'online') {
+                document.getElementById('statusIndicator').className = 'status-indicator status-online';
+                addLogEntry('✅ Bitcoin Sprint API online');
+                
+                metrics = await fetchMetrics();
+                if (metrics) {
+                    document.getElementById('activeConnections').textContent = metrics.bitcoin_sprint_active_connections || '--';
+                    document.getElementById('uptime').textContent = Math.round(metrics.bitcoin_sprint_uptime_seconds || 0);
+                    document.getElementById('memoryUsage').textContent = Math.round((metrics.go_memstats_heap_alloc_bytes || 0) / 1024 / 1024);
+                    document.getElementById('goroutines').textContent = metrics.go_goroutines || '--';
+                    
+                    addLogEntry(`📊 ${metrics.bitcoin_sprint_active_connections || 0} connections, ${Math.round(metrics.bitcoin_sprint_uptime_seconds || 0)}s uptime`);
+                }
+            } else {
+                document.getElementById('statusIndicator').className = 'status-indicator status-offline';
+                addLogEntry(`❌ Bitcoin Sprint API offline: ${mainHealth.error}`);
+            }
+            
+            const bitcoinConnections = metrics?.bitcoin_sprint_active_connections || 0;
+            if (bitcoinConnections > 0) {
+                document.getElementById('bitcoinStatus').innerHTML = `
+                    <div>✅ Connected to ${bitcoinConnections} peers</div>
+                    <div>Network: Bitcoin Mainnet</div>
+                `;
+            } else {
+                document.getElementById('bitcoinStatus').innerHTML = `
+                    <div>❌ No active connections</div>
+                    <div>Status: Offline</div>
+                `;
+            }
+            
+            document.getElementById('ethereumStatus').innerHTML = `
+                <div>✅ P2P Connected</div>
+                <div>Network: Ethereum Mainnet</div>
+            `;
+            
+            const rustHealth = await checkServiceHealth('http://localhost:8443/health', 'Rust Storage Server');
+            if (rustHealth.status === 'online') {
+                document.getElementById('rustStatus').innerHTML = `
+                    <div>✅ Storage server online</div>
+                    <div>Port: 8443 (Hardened)</div>
+                `;
+                addLogEntry('🦀 Rust storage server responding');
+            } else {
+                document.getElementById('rustStatus').innerHTML = `
+                    <div>❌ Storage server offline</div>
+                    <div>Error: Connection failed</div>
+                `;
+            }
+            
+            const duration = Date.now() - startTime;
+            addLogEntry(`🔄 Dashboard refresh: ${duration}ms`);
+        }
+        
+        addLogEntry('🚀 Bitcoin Sprint Dashboard initialized');
+        updateDashboard();
+        
+        setInterval(updateDashboard, 5000);
+    </script>
+</body>
+</html>

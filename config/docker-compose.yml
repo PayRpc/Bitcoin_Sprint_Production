@@ -91,10 +91,10 @@ services:
       dockerfile: Dockerfile
     container_name: bitcoin-sprint-core
     ports:
-      - "8080:8080"     # Main API
-      - "8081:8081"     # Admin API
-      - "9090:9090"     # Metrics
-      - "6060:6060"     # pprof debugging
+      - "8082:8080"     # Main API (changed from 8080 to avoid conflict)
+      - "8083:8081"     # Admin API (changed from 8081 to avoid conflict)
+      - "9091:9090"     # Metrics (changed from 9090 to avoid conflict)
+      - "6061:6060"     # pprof debugging (changed from 6060 to avoid conflict)
     environment:
       - SPRINT_TIER=enterprise
       - SPRINT_API_HOST=0.0.0.0

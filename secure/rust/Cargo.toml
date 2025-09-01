@@ -49,6 +49,15 @@ actix-rt = { version = "2.9", optional = true }
 uuid = { version = "1.0", features = ["v4", "serde"], optional = true }
 futures = { version = "0.3", optional = true }
 
+# Axum web framework (modern alternative)
+axum = { version = "0.7", features = ["json", "query", "tracing"], optional = true }
+axum-extra = { version = "0.9", features = ["typed-header"], optional = true }
+
+# Additional dependencies for the new server
+chrono = { version = "0.4", features = ["serde"], optional = true }
+dotenvy = { version = "0.15", optional = true }
+num_cpus = { version = "1.16", optional = true }
+
 # TLS and Security
 axum-server = { version = "0.6", features = ["tls-rustls"], optional = true }
 rustls-pemfile = { version = "2.0", optional = true }
@@ -70,13 +79,23 @@ lazy_static = "1.4"
 [features]
 default = []
 ipfs = ["reqwest"]
-web-server = ["actix-web", "actix-rt", "uuid", "futures"]
+web-server = ["actix-web", "actix-rt", "uuid", "futures", "axum", "axum-extra", "chrono", "dotenvy", "num_cpus"]
 hardened = ["web-server", "axum-server", "rustls-pemfile", "redis", "tower", "tower-http"]
 
 [[bin]]
 name = "storage_demo"
 path = "../../storage_verification_demo.rs"
 required-features = ["ipfs"]
+
+[[bin]]
+name = "storage_verifier_server"
+path = "src/bin/storage_verifier_server.rs"
+required-features = ["web-server"]
+
+[[bin]]
+name = "bitcoin_sprint_api"
+path = "src/bin/bitcoin_sprint_api_new.rs"
+required-features = ["web-server"]
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

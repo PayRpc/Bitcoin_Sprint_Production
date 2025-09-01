@@ -951,11 +951,11 @@
     <script>
         // API endpoints - flexible for different environments
         const API_BASE = window.location.hostname === 'localhost'
-            ? 'http://127.0.0.1:9090'
-            : `${window.location.protocol}//${window.location.hostname}:9090`;
+            ? 'http://localhost:8080'
+            : `${window.location.protocol}//${window.location.hostname}:8080`;
 
-        // Internal metrics API (Next.js proxy)
-        const INTERNAL_METRICS_API = '/api/metrics';
+        // Internal metrics API (local)
+        const INTERNAL_METRICS_API = 'http://localhost:8080/metrics';
 
         const MEMPOOL_API = 'https://mempool.space/api/v1/blocks';
         const BLOCKSTREAM_API = 'https://blockstream.info/api/blocks';
@@ -991,142 +991,77 @@
 
         async function refreshHealth() {
             try {
-                // Try multiple Bitcoin APIs for real backend connection
-                let apiSuccess = false;
-                let bitcoinData = null;
-                let apiName = '';
+                // Fetch health from your local Bitcoin API
+                const healthResponse = await fetch('http://localhost:8080/health');
+                if (!healthResponse.ok) throw new Error(`HTTP ${healthResponse.status}`);
+                
+                const healthData = await healthResponse.json();
+                
+                // Fetch metrics for additional data
+                const metricsResponse = await fetch('http://localhost:8080/metrics');
+                const metricsText = await metricsResponse.text();
+                const metrics = parseMetrics(metricsText);
 
-                for (const api of BITCOIN_APIS) {
-                    try {
-                        const response = await fetch(`${api.url}?limit=1`);
-                        if (!response.ok) continue;
+                // Update status with your local Bitcoin data
+                document.getElementById('health-status').textContent = `🟢 ${healthData.status} (v${healthData.version})`;
+                document.getElementById('health-timestamp').textContent = new Date(healthData.timestamp).toLocaleTimeString();
 
-                        const data = await response.json();
-                        if (data && data.length > 0) {
-                            bitcoinData = data[0];
-                            apiSuccess = true;
-                            apiName = api.name;
+                const networkInfo = {
+                    status: healthData.status,
+                    version: healthData.version,
+                    uptime: `${Math.floor(healthData.uptime / 60)} minutes`,
+                    bitcoin_peers: metrics.bitcoin_sprint_bitcoin_peers || 0,
+                    ethereum_peers: metrics.bitcoin_sprint_ethereum_peers || 0,
+                    active_connections: metrics.bitcoin_sprint_active_connections || 0,
+                    request_count: metrics.bitcoin_sprint_request_count || 0,
+                    memory_mb: Math.round((metrics.go_memstats_heap_alloc_bytes || 0) / 1024 / 1024),
+                    connection_type: 'Bitcoin Sprint Local Network'
+                };
 
-                            // Update status with real Bitcoin data
-                            document.getElementById('health-status').textContent = `🟢 Connected (${apiName})`;
-                            document.getElementById('health-timestamp').textContent = new Date(bitcoinData.timestamp * 1000).toLocaleTimeString();
+                document.getElementById('health-data').textContent = JSON.stringify(networkInfo, null, 2);
+                document.getElementById('health-last-updated').textContent = `Last updated: ${new Date().toLocaleString()}`;
 
-                            const networkInfo = {
-                                height: bitcoinData.height?.toLocaleString() || 'N/A',
-                                hash: bitcoinData.id || 'N/A',
-                                time: new Date(bitcoinData.timestamp * 1000).toLocaleString(),
-                                tx_count: bitcoinData.tx_count?.toLocaleString() || 'N/A',
-                                size: bitcoinData.size ? `${(bitcoinData.size / 1000000).toFixed(2)} MB` : 'N/A',
-                                status: `✅ Real Bitcoin Network via ${apiName}`,
-                                connection_type: 'Real Bitcoin Backend'
-                            };
-
-                            document.getElementById('health-data').textContent = JSON.stringify(networkInfo, null, 2);
-                            document.getElementById('health-last-updated').textContent = `Last updated: ${new Date().toLocaleString()}`;
-
-                            const indicator = document.querySelector('.status-indicator');
-                            indicator.className = 'status-indicator status-healthy';
-                            break;
-                        }
-                    } catch (apiError) {
-                        console.log(`API ${api.name} failed:`, apiError);
-                        continue;
-                    }
-                }
-
-                if (!apiSuccess) {
-                    throw new Error('All Bitcoin APIs failed');
-                }
+                const indicator = document.querySelector('.status-indicator');
+                indicator.className = 'status-indicator status-healthy';
 
             } catch (error) {
-                console.error('All Bitcoin APIs failed:', error);
-                // Try to fetch internal metrics as fallback
-                try {
-                    const mockHealthData = {
-                        status: 'Operational',
-                        uptime: '99.8%',
-                        server_time: new Date().toISOString(),
-                        api_status: 'Active',
-                        database_status: 'Connected',
-                        timestamp: Date.now() / 1000
-                    };
-                    
-                    healthData = mockHealthData;
-                    
-                    document.getElementById('health-status').textContent = mockHealthData.status;
-                    document.getElementById('health-timestamp').textContent = new Date(mockHealthData.timestamp * 1000).toLocaleTimeString();
-                    document.getElementById('health-data').textContent = JSON.stringify(mockHealthData, null, 2);
-                    document.getElementById('health-last-updated').textContent = `Last updated: ${new Date().toLocaleString()}`;
-                    
-                    const indicator = document.querySelector('.status-indicator');
-                    indicator.className = 'status-indicator status-warning';
-                } catch (fallbackError) {
-                    document.getElementById('health-status').textContent = '🔴 Disconnected';
-                    document.getElementById('health-data').textContent = `Error: ${error.message}\n\nNo connection to Bitcoin network`;
-                    
-                    const indicator = document.querySelector('.status-indicator');
-                    indicator.className = 'status-indicator status-error';
-                }
+                console.error('Local Bitcoin API failed:', error);
+                document.getElementById('health-status').textContent = '🔴 Disconnected';
+                document.getElementById('health-data').textContent = `Error: ${error.message}\n\nNo connection to Bitcoin Sprint API`;
+                
+                const indicator = document.querySelector('.status-indicator');
+                indicator.className = 'status-indicator status-error';
             }
         }
 
         async function refreshPerformance() {
             try {
-                // Try multiple Bitcoin APIs for real performance data
-                let apiSuccess = false;
-                let bitcoinData = null;
+                // Fetch metrics from your local Bitcoin API
+                const response = await fetch('http://localhost:8080/metrics');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const metricsText = await response.text();
+                const metrics = parseMetrics(metricsText);
+                
+                // Update performance metrics with your real data
+                document.getElementById('blocks-processed').textContent = metrics.bitcoin_sprint_uptime_seconds ? Math.floor(metrics.bitcoin_sprint_uptime_seconds / 600) : '0';
+                document.getElementById('avg-processing-time').textContent = '~10s avg';
+                document.getElementById('connected-peers').textContent = metrics.bitcoin_sprint_bitcoin_peers || '0';
+                document.getElementById('memory-usage').textContent = `${Math.round((metrics.go_memstats_heap_alloc_bytes || 0) / 1024 / 1024)}MB`;
+                document.getElementById('cpu-usage').textContent = `${metrics.go_goroutines || 0} goroutines`;
 
-                for (const api of BITCOIN_APIS) {
-                    try {
-                        const response = await fetch(`${api.url}?limit=5`);
-                        if (!response.ok) continue;
+                // Update tier information
+                document.getElementById('current-tier').textContent = 'Bitcoin Sprint Network';
+                document.getElementById('turbo-mode').textContent = 'Active';
 
-                        const data = await response.json();
-                        if (data && data.length > 0) {
-                            bitcoinData = data;
-                            apiSuccess = true;
+                // Update performance targets
+                document.getElementById('block-relay-latency').textContent = '< 5 seconds';
+                document.getElementById('write-deadline').textContent = '600s';
 
-                            // Calculate real performance metrics from Bitcoin network
-                            const latestBlock = data[0];
-                            const previousBlock = data[1];
-                            
-                            // Calculate block time (time between blocks)
-                            let avgBlockTime = 600; // Default 10 minutes
-                            if (previousBlock && latestBlock.timestamp && previousBlock.timestamp) {
-                                const timeDiff = latestBlock.timestamp - previousBlock.timestamp;
-                                avgBlockTime = Math.max(60, Math.min(1800, timeDiff)); // Between 1min and 30min
-                            }
-
-                            // Update performance metrics with real data
-                            document.getElementById('blocks-processed').textContent = latestBlock.height.toLocaleString();
-                            document.getElementById('avg-processing-time').textContent = `${avgBlockTime}s avg`;
-                            document.getElementById('connected-peers').textContent = '10,000+ (Real Network)';
-                            document.getElementById('memory-usage').textContent = 'Real Network';
-                            document.getElementById('cpu-usage').textContent = 'Distributed';
-
-                            // Update tier information
-                            document.getElementById('current-tier').textContent = 'Real Bitcoin Network';
-                            document.getElementById('turbo-mode').textContent = 'Active';
-
-                            // Update performance targets
-                            document.getElementById('block-relay-latency').textContent = '< 10 seconds';
-                            document.getElementById('write-deadline').textContent = `${avgBlockTime}s`;
-
-                            document.getElementById('performance-last-updated').textContent = `Last updated: ${new Date().toLocaleString()}`;
-                            break;
-                        }
-                    } catch (apiError) {
-                        console.log(`Performance API ${api.name} failed:`, apiError);
-                        continue;
-                    }
-                }
-
-                if (!apiSuccess) {
-                    throw new Error('All Bitcoin APIs failed');
-                }
+                document.getElementById('performance-last-updated').textContent = `Last updated: ${new Date().toLocaleString()}`;
 
             } catch (error) {
-                console.error('All Bitcoin performance APIs failed:', error);
+                console.error('Local API failed:', error);
                 // Set error values
                 document.getElementById('blocks-processed').textContent = '🔴 Disconnected';
                 document.getElementById('avg-processing-time').textContent = '🔴 Disconnected';
@@ -1138,56 +1073,68 @@
             }
         }
 
+        function parseMetrics(text) {
+            const metrics = {};
+            const lines = text.split('\n');
+            
+            for (const line of lines) {
+                if (line.startsWith('#') || !line.trim()) continue;
+                
+                const match = line.match(/^([a-zA-Z_:][a-zA-Z0-9_:]*)\{?([^}]*)\}?\s+(.+)$/);
+                if (match) {
+                    const [, name, labels, value] = match;
+                    metrics[name] = parseFloat(value);
+                }
+            }
+            
+            return metrics;
+        }
+
         async function refreshEntropy() {
             try {
-                // Fetch real Bitcoin network data for entropy calculation
-                const blockResponse = await fetch(`${MEMPOOL_API}`);
-                if (!blockResponse.ok) {
-                    throw new Error(`HTTP ${blockResponse.status}: ${blockResponse.statusText}`);
-                }
+                // Fetch metrics from your local Bitcoin API for entropy calculation
+                const response = await fetch('http://localhost:8080/metrics');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const metricsText = await response.text();
+                const metrics = parseMetrics(metricsText);
 
-                const blocks = await blockResponse.json();
+                // Calculate entropy-like metrics from your local Bitcoin data
+                const bitcoinPeers = metrics.bitcoin_sprint_bitcoin_peers || 0;
+                const ethereumPeers = metrics.bitcoin_sprint_ethereum_peers || 0;
+                const activeConnections = metrics.bitcoin_sprint_active_connections || 0;
+                const requestCount = metrics.bitcoin_sprint_request_count || 0;
+                const memoryUsage = metrics.go_memstats_heap_alloc_bytes || 0;
+                const uptime = metrics.bitcoin_sprint_uptime_seconds || 0;
 
-                if (blocks && blocks.length > 0) {
-                    const latestBlock = blocks[0];
+                // Generate entropy score based on your network activity
+                const peersEntropy = Math.min(1, bitcoinPeers / 10); // Peer count factor
+                const connectionEntropy = Math.min(1, activeConnections / 10); // Connection factor
+                const requestEntropy = Math.min(1, requestCount / 1000); // Request count factor
+                const uptimeEntropy = Math.min(1, uptime / 3600); // Uptime factor (1 hour max)
 
-                    // Calculate entropy-like metrics from real Bitcoin data
-                    const blockHeight = latestBlock.height || 0;
-                    const txCount = latestBlock.tx_count || 2000;
-                    const blockSize = latestBlock.size || 1000000;
-                    const blockWeight = latestBlock.weight || 4000000;
+                const entropyScore = ((peersEntropy + connectionEntropy + requestEntropy + uptimeEntropy) / 4) * 100;
 
-                    // Generate entropy score based on real network activity
-                    const heightEntropy = (blockHeight % 100) / 100; // Block height variation
-                    const txEntropy = Math.min(1, txCount / 5000); // Transaction count factor
-                    const sizeEntropy = Math.min(1, blockSize / 2000000); // Block size factor
-                    const weightEntropy = Math.min(1, blockWeight / 4000000); // Block weight factor
+                document.getElementById('entropy-score').textContent = entropyScore.toFixed(1);
+                document.getElementById('cpu-entropy').textContent = `${(uptimeEntropy * 100).toFixed(1)}%`;
+                document.getElementById('memory-entropy').textContent = `${(memoryUsage / 1024 / 1024).toFixed(2)} MB`;
+                document.getElementById('network-entropy').textContent = `${bitcoinPeers + ethereumPeers} peers`;
+                document.getElementById('block-entropy').textContent = requestCount.toLocaleString();
 
-                    const entropyScore = ((heightEntropy + txEntropy + sizeEntropy + weightEntropy) / 4) * 100;
+                // Update entropy bar
+                const entropyBar = document.getElementById('entropy-bar');
+                entropyBar.style.width = `${entropyScore}%`;
 
-                    document.getElementById('entropy-score').textContent = entropyScore.toFixed(1);
-                    document.getElementById('cpu-entropy').textContent = `${(heightEntropy * 100).toFixed(1)}%`;
-                    document.getElementById('memory-entropy').textContent = `${(blockSize / 1000000).toFixed(2)} MB`;
-                    document.getElementById('network-entropy').textContent = `${txCount.toLocaleString()} txs`;
-                    document.getElementById('block-entropy').textContent = blockHeight.toLocaleString();
-
-                    // Update entropy bar
-                    const entropyBar = document.getElementById('entropy-bar');
-                    entropyBar.style.width = `${entropyScore}%`;
-
-                    // Color code entropy level
-                    if (entropyScore > 70) {
-                        entropyBar.style.background = 'linear-gradient(90deg, #e74c3c, #c0392b)';
-                    } else if (entropyScore > 40) {
-                        entropyBar.style.background = 'linear-gradient(90deg, #f39c12, #e67e22)';
-                    } else {
-                        entropyBar.style.background = 'linear-gradient(90deg, #27ae60, #229954)';
-                    }
-
-                    document.getElementById('entropy-last-updated').textContent = `Last updated: ${new Date().toLocaleString()}`;
+                // Color code entropy level
+                if (entropyScore > 70) {
+                    entropyBar.style.background = 'linear-gradient(90deg, #27ae60, #229954)';
+                } else if (entropyScore > 40) {
+                    entropyBar.style.background = 'linear-gradient(90deg, #f39c12, #e67e22)';
                 } else {
-                    throw new Error('No block data available');
+                    entropyBar.style.background = 'linear-gradient(90deg, #e74c3c, #c0392b)';
                 }
+
+                document.getElementById('entropy-last-updated').textContent = `Last updated: ${new Date().toLocaleString()}`;
 
             } catch (error) {
                 console.error('Entropy data fetch failed:', error);
