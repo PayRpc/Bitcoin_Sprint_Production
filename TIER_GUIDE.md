@@ -47,10 +47,8 @@ This guide explains the 5 official tiers available in Bitcoin Sprint and how to 
 # Using PowerShell (recommended for Windows)
 .\switch-tier.ps1 turbo
 .\switch-tier.ps1 enterprise
-
-# Using Batch
-switch-tier.bat free
-switch-tier.bat pro
+.\switch-tier.ps1 free
+.\switch-tier.ps1 pro
 ```
 
 ### Method 2: Manual Environment Setup
@@ -69,7 +67,7 @@ export TIER=enterprise
 
 ```bash
 # Set tier at runtime
-TIER=turbo ./start-dev.bat
+TIER=turbo .\start-dev.ps1
 TIER=enterprise go run cmd/sprintd/main.go
 ```
 
@@ -118,11 +116,11 @@ Each tier has its own environment file:
 | Requests/sec | 1 | 10 | 50 | 100 | 500 |
 | Concurrent Streams | 1 | 5 | 20 | 50 | 100 |
 | Data Limit (MB) | 10 | 100 | 500 | 1000 | 5000 |
-| Direct P2P | ❌ | ✅ | ✅ | ✅ | ✅ |
-| Memory Channel | ❌ | ❌ | ✅ | ✅ | ✅ |
-| Kernel Bypass | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Hardware Monitoring | ❌ | ❌ | ✅ | ✅ | ✅ |
-| TLS/mTLS | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Direct P2P | No | Yes | Yes | Yes | Yes |
+| Memory Channel | No | No | Yes | Yes | Yes |
+| Kernel Bypass | No | No | No | No | Yes |
+| Hardware Monitoring | No | No | Yes | Yes | Yes |
+| TLS/mTLS | No | No | No | No | Yes |
 
 ## Monitoring Tier Performance
 
