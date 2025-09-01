@@ -42,12 +42,12 @@ function Test-EntropyEndpoint {
             TimeoutSec = 5
             Method = $Method
         }
-        
+
         if ($Body) {
             $params["Body"] = $Body
             $params["ContentType"] = "application/json"
         }
-        
+
         $response = Invoke-RestMethod @params
 
         Write-Host "  ✅ $description available" -ForegroundColor Green
@@ -58,49 +58,8 @@ function Test-EntropyEndpoint {
     }
 }
 
-function Monitor-EntropyMetrics {
-    Write-MonitorSection "🔐 ENTROPY METRICS MONITOR"
-
-    try {
-        $headers = @{ "X-API-Key" = $ApiKey }
-        $metrics = Invoke-RestMethod -Uri "$ApiUrl/metrics" -Headers $headers -TimeoutSec 5
-
-        # Parse metrics (simple text parsing)
-        $metricsLines = $metrics -split "`n"
-
-        Write-Host "📊 Current Entropy Metrics:" -ForegroundColor Cyan
-        Write-Host ""
-
-        foreach ($line in $metricsLines) {
-            if ($line -match "^relay_cpu_temperature\s+(.+)$") {
-                $temp = [float]$matches[1]
-                $status = if ($temp -gt 0) { "good" } else { "warning" }
-                Write-Metric "CPU Temperature" $temp "°C" $status
-            }
-            elseif ($line -match "^entropy_sources_active\s+(\d+)$") {
-                $sources = [int]$matches[1]
-                $status = if ($sources -ge 2) { "good" } elseif ($sources -ge 1) { "warning" } else { "error" }
-                Write-Metric "Active Entropy Sources" $sources "" $status
-            }
-            elseif ($line -match "^entropy_system_fingerprint_available\s+(\d+)$") {
-                $available = [int]$matches[1]
-                $status = if ($available -eq 1) { "good" } else { "warning" }
-                Write-Metric "System Fingerprint" $(if ($available -eq 1) { "Available" } else { "Unavailable" }) "" $status
-            }
-            elseif ($line -match "^entropy_hardware_sources_available\s+(\d+)$") {
-                $hwSources = [int]$matches[1]
-                $status = if ($hwSources -ge 1) { "good" } else { "warning" }
-                Write-Metric "Hardware Sources" $hwSources "" $status
-            }
-        }
-
-    } catch {
-        Write-Host "❌ Failed to fetch metrics: $($_.Exception.Message)" -ForegroundColor Red
-    }
-}
-
 function Test-EntropyFunctions {
-    Write-MonitorSection "🧪 ENTROPY FUNCTION TESTS"
+    Write-MonitorSection "ENTROPY FUNCTION TESTS"
 
     Write-Host "Testing enhanced entropy functions..." -ForegroundColor Cyan
     Write-Host ""
@@ -131,46 +90,10 @@ function Test-EntropyFunctions {
         Write-Metric "Hybrid Entropy Length" "$($hybridEntropy.size) bytes" "" "good"
         Write-Host "    Sample: $($hybridEntropy.entropy.Substring(0, [Math]::Min(32, $hybridEntropy.entropy.Length)))..." -ForegroundColor Gray
     }
-
-    # Test enhanced entropy with fingerprint
-    $enhancedEntropy = Test-EntropyEndpoint "/api/v1/entropy/enhanced" "Enhanced Entropy"
-    if ($enhancedEntropy) {
-        Write-Metric "Enhanced Entropy Length" "$($enhancedEntropy.Length) bytes" "" "good"
-    }
-}
-
-function Show-EntropySecurityStatus {
-    Write-MonitorSection "🔒 ENTROPY SECURITY STATUS"
-
-    Write-Host "🛡️  Security Features:" -ForegroundColor Cyan
-    Write-Host ""
-
-    Write-Host "  ✅ Hardware Fingerprinting" -ForegroundColor Green
-    Write-Host "     • CPU detection for system uniqueness" -ForegroundColor Gray
-    Write-Host "     • VM cloning resistance" -ForegroundColor Gray
-    Write-Host "     • Process and timestamp entropy" -ForegroundColor Gray
-    Write-Host ""
-
-    Write-Host "  ✅ CPU Temperature Monitoring" -ForegroundColor Green
-    Write-Host "     • Thermal entropy source" -ForegroundColor Gray
-    Write-Host "     • System activity correlation" -ForegroundColor Gray
-    Write-Host "     • Hardware-based randomness" -ForegroundColor Gray
-    Write-Host ""
-
-    Write-Host "  ✅ Hybrid Entropy Sources" -ForegroundColor Green
-    Write-Host "     • OS RNG + Jitter + Blockchain + Hardware" -ForegroundColor Gray
-    Write-Host "     • Multiple entropy layers" -ForegroundColor Gray
-    Write-Host "     • Fallback mechanisms" -ForegroundColor Gray
-    Write-Host ""
-
-    Write-Host "  ✅ Live Metrics & Monitoring" -ForegroundColor Green
-    Write-Host "     • Prometheus-compatible metrics" -ForegroundColor Gray
-    Write-Host "     • Real-time entropy quality monitoring" -ForegroundColor Gray
-    Write-Host "     • Attack detection capabilities" -ForegroundColor Gray
 }
 
 # Main execution
-Write-MonitorSection "🚀 BITCOIN SPRINT ENTROPY MONITOR"
+Write-MonitorSection "BITCOIN SPRINT ENTROPY MONITOR"
 
 Write-Host "API Endpoint: $ApiUrl" -ForegroundColor Gray
 Write-Host "API Key: $($ApiKey.Substring(0, [Math]::Min(8, $ApiKey.Length)))..." -ForegroundColor Gray
@@ -178,7 +101,7 @@ Write-Host "Update Interval: $IntervalSeconds seconds" -ForegroundColor Gray
 Write-Host ""
 
 # Test connection first
-Write-Host "🔍 Testing API connectivity..." -ForegroundColor Cyan
+Write-Host "Testing API connectivity..." -ForegroundColor Cyan
 try {
     $headers = @{ "X-API-Key" = $ApiKey }
     $health = Invoke-RestMethod -Uri "$ApiUrl/health" -Headers $headers -TimeoutSec 5
@@ -198,24 +121,6 @@ if ($TestEntropyFunctions) {
     Test-EntropyFunctions
 }
 
-Show-EntropySecurityStatus
-
-# Continuous monitoring loop
-if ($Continuous) {
     Write-Host ""
-    Write-Host "🔄 Starting continuous monitoring (Ctrl+C to stop)..." -ForegroundColor Cyan
-    Write-Host ""
-
-    while ($true) {
-        Monitor-EntropyMetrics
-        Start-Sleep -Seconds $IntervalSeconds
-    }
-} else {
-    # Single monitoring run
-    Monitor-EntropyMetrics
-
-    Write-Host ""
-    Write-Host "💡 Use -Continuous switch for real-time monitoring" -ForegroundColor Cyan
-    Write-Host "💡 Use -TestEntropyFunctions to test all entropy functions" -ForegroundColor Cyan
-}</content>
-<parameter name="filePath">c:\Projects\Bitcoin_Sprint_final_1\BItcoin_Sprint\monitor-entropy.ps1
+    Write-Host "Use -Continuous switch for real-time monitoring" -ForegroundColor Cyan
+    Write-Host "Use -TestEntropyFunctions to test all entropy functions" -ForegroundColor Cyan
