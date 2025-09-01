@@ -1,0 +1,55 @@
+{
+	"dashboard": {
+		"id": null,
+		"title": "Ethereum Network Metrics",
+		"tags": [
+			"ethereum",
+			"blockchain"
+		],
+		"timezone": "browser",
+		"panels": [
+			{
+				"id": 1,
+				"title": "Block Height",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "ethereum_block_height",
+						"legendFormat": "Block Height"
+					}
+				]
+			},
+			{
+				"id": 2,
+				"title": "Gas Price",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "ethereum_gas_price",
+						"legendFormat": "Gas Price (wei)"
+					}
+				]
+			},
+			{
+				"id": 3,
+				"title": "Transaction Pool",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "ethereum_tx_pool_pending",
+						"legendFormat": "Pending TX"
+					},
+					{
+						"expr": "ethereum_tx_pool_queued",
+						"legendFormat": "Queued TX"
+					}
+				]
+			}
+		],
+		"time": {
+			"from": "now-1h",
+			"to": "now"
+		},
+		"refresh": "30s"
+	}
+}

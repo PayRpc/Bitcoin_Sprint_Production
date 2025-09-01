@@ -1,0 +1,105 @@
+{
+	"dashboard": {
+		"id": null,
+		"title": "Bitcoin Sprint - Multi-Chain Overview",
+		"tags": [
+			"bitcoin",
+			"solana",
+			"ethereum",
+			"blockchain"
+		],
+		"timezone": "browser",
+		"panels": [
+			{
+				"id": 1,
+				"title": "Bitcoin Block Height",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "bitcoin_block_height",
+						"legendFormat": "Block Height"
+					}
+				],
+				"gridPos": {
+					"h": 8,
+					"w": 12,
+					"x": 0,
+					"y": 0
+				}
+			},
+			{
+				"id": 2,
+				"title": "Solana Slot Height",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "solana_slot_height",
+						"legendFormat": "Slot Height"
+					}
+				],
+				"gridPos": {
+					"h": 8,
+					"w": 12,
+					"x": 12,
+					"y": 0
+				}
+			},
+			{
+				"id": 3,
+				"title": "Ethereum Block Height",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "ethereum_block_height",
+						"legendFormat": "Block Height"
+					}
+				],
+				"gridPos": {
+					"h": 8,
+					"w": 12,
+					"x": 0,
+					"y": 8
+				}
+			},
+			{
+				"id": 5,
+				"title": "Entropy Score",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "sprint_entropy_score",
+						"legendFormat": "Entropy Score"
+					}
+				],
+				"gridPos": {
+					"h": 8,
+					"w": 12,
+					"x": 0,
+					"y": 16
+				}
+			},
+			{
+				"id": 6,
+				"title": "Entropy Sources",
+				"type": "table",
+				"targets": [
+					{
+						"expr": "sprint_entropy_sources_active",
+						"legendFormat": "{{source}}"
+					}
+				],
+				"gridPos": {
+					"h": 8,
+					"w": 12,
+					"x": 12,
+					"y": 16
+				}
+			}
+		],
+		"time": {
+			"from": "now-1h",
+			"to": "now"
+		},
+		"refresh": "30s"
+	}
+}

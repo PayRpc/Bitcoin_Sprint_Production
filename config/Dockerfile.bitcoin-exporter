@@ -1,11 +1,54 @@
+# Bitcoin Exporter - Prometheus Metrics Exporter for Bitcoin Core
+# ========================================================
+# This Dockerfile builds a production-ready Prometheus exporter that collects
+# real-time metrics from Bitcoin Core nodes for monitoring and observability.
+# It provides metrics on block height, mempool, peers, and network status.
+
+# Use slim Python image for smaller footprint
 FROM python:3.9-slim
 
+# Add metadata labels for better container management
+LABEL maintainer="Bitcoin Sprint Team" \
+      description="Prometheus exporter for Bitcoin Core node metrics" \
+      version="1.0.0" \
+      org.opencontainers.image.title="Bitcoin Exporter" \
+      org.opencontainers.image.description="Collects and exposes Bitcoin Core metrics for Prometheus monitoring"
+
+# Install system dependencies and security updates
+RUN apt-get update && apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends \
+        curl \
+        && rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
+
+# Create non-root user for security
+RUN groupadd -r exporter && useradd -r -g exporter -s /bin/bash -m exporter
+
+# Set working directory
 WORKDIR /app
 
+# Copy requirements file first for better Docker layer caching
+COPY requirements.txt .
+
+# Install Python dependencies with pinned versions
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy the exporter script
 COPY bitcoin-exporter.py .
 
-RUN pip install requests prometheus_client
+# Change ownership to non-root user
+RUN chown -R exporter:exporter /app
 
+# Switch to non-root user
+USER exporter
+
+# Health check to verify the exporter is responding
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/metrics || exit 1
+
+# Expose the metrics port
 EXPOSE 8080
 
+# Default command with clear logging
 CMD ["python", "bitcoin-exporter.py"]

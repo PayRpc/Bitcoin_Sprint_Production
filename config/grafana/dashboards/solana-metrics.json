@@ -1,0 +1,62 @@
+{
+	"dashboard": {
+		"id": null,
+		"title": "Solana Network Metrics",
+		"tags": [
+			"solana",
+			"blockchain"
+		],
+		"timezone": "browser",
+		"panels": [
+			{
+				"id": 1,
+				"title": "Slot Height",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "solana_slot_height",
+						"legendFormat": "Slot Height"
+					}
+				]
+			},
+			{
+				"id": 2,
+				"title": "Block Height",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "solana_block_height",
+						"legendFormat": "Block Height"
+					}
+				]
+			},
+			{
+				"id": 3,
+				"title": "Transactions Per Second",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "solana_tps",
+						"legendFormat": "TPS"
+					}
+				]
+			},
+			{
+				"id": 4,
+				"title": "Validator Count",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "solana_validator_count",
+						"legendFormat": "Validators"
+					}
+				]
+			}
+		],
+		"time": {
+			"from": "now-1h",
+			"to": "now"
+		},
+		"refresh": "30s"
+	}
+}

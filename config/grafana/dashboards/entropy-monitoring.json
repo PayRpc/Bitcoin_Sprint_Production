@@ -1,0 +1,121 @@
+{
+	"dashboard": {
+		"id": null,
+		"title": "Entropy Monitoring Dashboard",
+		"tags": [
+			"entropy",
+			"security",
+			"monitoring"
+		],
+		"timezone": "browser",
+		"panels": [
+			{
+				"id": 1,
+				"title": "Entropy Score",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "sprint_entropy_score",
+						"legendFormat": "Entropy Score"
+					}
+				],
+				"gridPos": {
+					"h": 8,
+					"w": 12,
+					"x": 0,
+					"y": 0
+				}
+			},
+			{
+				"id": 2,
+				"title": "Entropy Quality",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "sprint_entropy_quality",
+						"legendFormat": "Quality"
+					}
+				],
+				"gridPos": {
+					"h": 8,
+					"w": 12,
+					"x": 12,
+					"y": 0
+				}
+			},
+			{
+				"id": 3,
+				"title": "Active Entropy Sources",
+				"type": "table",
+				"targets": [
+					{
+						"expr": "sprint_entropy_sources_active",
+						"legendFormat": "{{source}}"
+					}
+				],
+				"gridPos": {
+					"h": 8,
+					"w": 12,
+					"x": 0,
+					"y": 8
+				}
+			},
+			{
+				"id": 4,
+				"title": "Hardware Temperature",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "sprint_hardware_temperature",
+						"legendFormat": "Temperature (°C)"
+					}
+				],
+				"gridPos": {
+					"h": 8,
+					"w": 12,
+					"x": 12,
+					"y": 8
+				}
+			},
+			{
+				"id": 5,
+				"title": "Entropy Pool Size",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "sprint_entropy_pool_size",
+						"legendFormat": "Pool Size"
+					}
+				],
+				"gridPos": {
+					"h": 8,
+					"w": 12,
+					"x": 0,
+					"y": 16
+				}
+			},
+			{
+				"id": 6,
+				"title": "Security Alerts",
+				"type": "table",
+				"targets": [
+					{
+						"expr": "sprint_entropy_security_alerts",
+						"legendFormat": "{{alert}}"
+					}
+				],
+				"gridPos": {
+					"h": 8,
+					"w": 12,
+					"x": 12,
+					"y": 16
+				}
+			}
+		],
+		"time": {
+			"from": "now-1h",
+			"to": "now"
+		},
+		"refresh": "30s"
+	}
+}

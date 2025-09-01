@@ -1,0 +1,12 @@
+# Placeholder SSL certificate
+# Replace with actual certificates for production
+# Generate with: openssl req -x509 -newkey rsa:4096 -keyout nginx.key -out nginx.crt -days 365 -nodes -subj "/CN=localhost"
+
+-----BEGIN CERTIFICATE-----
+MIICiTCCAg+gAwIBAgIJAJ8l4HnPq7F8MAOGA1UEBhMCVVMxCzAJBgNVBAgTAkNB
+MRYwFAYDVQQHEw1TYW4gRnJhbmNpc2NvMRowGAYDVQQKExFCaXRjb2luIFNwcmlud
+CBEZXZlbG9wMRowGAYDVQQDExFCaXRjb2luIFNwcmludCBMb2NhbGhvc3QwHhcN
+MjUwODMxMjMyMzQ3WhcNMjYwODMxMjMyMzQ3WjAeMBwwGgYDVQQDExNCaXRjb2lu
+IFNwcmludCBMb2NhbGhvc3QwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARqQ7vF
+example certificate content - replace with actual cert
+-----END CERTIFICATE-----

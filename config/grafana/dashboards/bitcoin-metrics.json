@@ -1,0 +1,51 @@
+{
+	"dashboard": {
+		"id": null,
+		"title": "Bitcoin Network Metrics",
+		"tags": [
+			"bitcoin",
+			"blockchain"
+		],
+		"timezone": "browser",
+		"panels": [
+			{
+				"id": 1,
+				"title": "Block Height",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "bitcoin_block_height",
+						"legendFormat": "Block Height"
+					}
+				]
+			},
+			{
+				"id": 2,
+				"title": "Mempool Size",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "bitcoin_mempool_size",
+						"legendFormat": "Mempool Size"
+					}
+				]
+			},
+			{
+				"id": 3,
+				"title": "Peer Connections",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "bitcoin_peer_count",
+						"legendFormat": "Peers"
+					}
+				]
+			}
+		],
+		"time": {
+			"from": "now-1h",
+			"to": "now"
+		},
+		"refresh": "30s"
+	}
+}
