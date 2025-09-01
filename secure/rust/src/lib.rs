@@ -936,33 +936,52 @@ pub unsafe extern "C" fn fast_entropy_with_fingerprint_c(output: *mut u8) -> c_i
     0 // Success
 }
 
-/// Generate hybrid entropy with hardware fingerprint (32 bytes) - Direct FFI export
+/// Generate admin secret as raw bytes - Direct FFI export
 #[no_mangle]
-pub unsafe extern "C" fn hybrid_entropy_with_fingerprint_c(
-    headers: *const *const u8,
-    header_lengths: *const usize,
-    header_count: usize,
-    output: *mut u8,
-) -> c_int {
-    if output.is_null() {
-        return -1; // Null pointer error
+pub unsafe extern "C" fn generate_admin_secret_c(output: *mut u8, output_len: usize) -> c_int {
+    if output.is_null() || output_len < 32 {
+        return -1; // Invalid parameters
     }
 
-    let mut header_vec = Vec::new();
-    
-    if !headers.is_null() && !header_lengths.is_null() && header_count > 0 {
-        for i in 0..header_count {
-            let header_ptr = *headers.add(i);
-            let header_len = *header_lengths.add(i);
-            
-            if !header_ptr.is_null() && header_len > 0 {
-                let header_slice = std::slice::from_raw_parts(header_ptr, header_len);
-                header_vec.push(header_slice.to_vec());
-            }
-        }
-    }
-
-    let entropy_data = entropy::hybrid_entropy_with_fingerprint(&header_vec);
+    let entropy_data = entropy::generate_admin_secret_raw();
     std::ptr::copy_nonoverlapping(entropy_data.as_ptr(), output, 32);
+    0 // Success
+}
+
+/// Generate admin secret as base64 string - Direct FFI export
+#[no_mangle]
+pub unsafe extern "C" fn generate_admin_secret_base64_c(output: *mut c_char, output_len: usize) -> c_int {
+    if output.is_null() || output_len < 45 { // 32 bytes base64 encoded + null
+        return -1; // Invalid parameters
+    }
+
+    let secret_b64 = entropy::generate_admin_secret_base64();
+    let secret_bytes = secret_b64.as_bytes();
+
+    if secret_bytes.len() >= output_len {
+        return -2; // Buffer too small
+    }
+
+    std::ptr::copy_nonoverlapping(secret_bytes.as_ptr(), output as *mut u8, secret_bytes.len());
+    *output.add(secret_bytes.len()) = 0; // Null terminator
+    0 // Success
+}
+
+/// Generate admin secret as hex string - Direct FFI export
+#[no_mangle]
+pub unsafe extern "C" fn generate_admin_secret_hex_c(output: *mut c_char, output_len: usize) -> c_int {
+    if output.is_null() || output_len < 65 { // 32 bytes hex encoded + null
+        return -1; // Invalid parameters
+    }
+
+    let secret_hex = entropy::generate_admin_secret_hex();
+    let secret_bytes = secret_hex.as_bytes();
+
+    if secret_bytes.len() >= output_len {
+        return -2; // Buffer too small
+    }
+
+    std::ptr::copy_nonoverlapping(secret_bytes.as_ptr(), output as *mut u8, secret_bytes.len());
+    *output.add(secret_bytes.len()) = 0; // Null terminator
     0 // Success
 }

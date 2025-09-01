@@ -8,6 +8,8 @@ use rand::rngs::OsRng;
 #[cfg(target_family = "unix")]
 use libc;
 use sysinfo::{System, RefreshKind, CpuRefreshKind};
+use base64;
+use hex;
 
 // Static jitter accumulator for CPU timing entropy
 static JITTER_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -560,4 +562,37 @@ pub extern "C" fn hybrid_entropy_with_fingerprint_ffi(headers_ptr: *const *const
         std::ptr::copy_nonoverlapping(entropy.as_ptr(), output, 32);
     }
     0
+}
+
+/// Generate admin secret as raw bytes (32 bytes)
+pub fn generate_admin_secret_raw() -> [u8; 32] {
+    let mut collector = EntropyCollector::new();
+    let mut secret = [0u8; 32];
+
+    // Use high-quality entropy for admin secrets
+    if let Err(_) = collector.get_os_entropy(&mut secret) {
+        // Fallback to system fingerprint if OS entropy fails
+        secret = system_fingerprint();
+    }
+
+    // Mix with additional entropy sources
+    let jitter = collector.collect_jitter();
+    for i in 0..8 {
+        let jitter_byte = ((jitter >> (i * 4)) & 0xFF) as u8;
+        secret[i] ^= jitter_byte;
+    }
+
+    secret
+}
+
+/// Generate admin secret as base64 string
+pub fn generate_admin_secret_base64() -> String {
+    let secret = generate_admin_secret_raw();
+    base64::encode(&secret)
+}
+
+/// Generate admin secret as hex string
+pub fn generate_admin_secret_hex() -> String {
+    let secret = generate_admin_secret_raw();
+    hex::encode(&secret)
 }

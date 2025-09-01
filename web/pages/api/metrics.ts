@@ -3,6 +3,24 @@ import os from 'os';
 import type { AuthenticatedRequest } from '../../lib/auth';
 import { withAuth } from './_withAuth';
 
+// Dynamic import for Rust entropy bridge (optional)
+let rustBridge: any = null;
+let rustBridgeLoaded = false;
+
+async function loadRustBridge() {
+  if (rustBridgeLoaded) return rustBridge;
+  try {
+    const bridge = await import('../../rust-entropy-bridge.js');
+    rustBridge = bridge;
+    rustBridgeLoaded = true;
+    console.log('✅ Rust entropy bridge loaded successfully');
+  } catch (error) {
+    console.warn('⚠️ Rust entropy bridge not available:', error instanceof Error ? error.message : String(error));
+    rustBridgeLoaded = true; // Don't try again
+  }
+  return rustBridge;
+}
+
 // Import tier config for development mock
 const TIER_CONFIG = {
   FREE: { rateLimit: 100, blocksPerDay: 100, endpoints: [], latencyTarget: 1000, mempoolAccess: false, burstable: false },
@@ -45,11 +63,31 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
   // Calculate CPU usage (simplified - in production you'd use a proper monitoring library)
   const cpuUsagePercent = Math.min((systemInfo.loadAverage?.[0] || 0) * 100 / systemInfo.cpus, 100);
 
+  // Try to use Rust entropy bridge for enhanced entropy
+  let rustEntropyAvailable = false;
+  let rustSecretHex = '';
+
+  try {
+    const bridge = await loadRustBridge();
+    if (bridge && rustBridge) {
+      const entropyBridge = await rustBridge.getEntropyBridge();
+      if (entropyBridge && entropyBridge.isAvailable()) {
+        rustSecretHex = await entropyBridge.generateAdminSecret('hex');
+        rustEntropyAvailable = true;
+        console.log('🔐 Generated entropy using Rust bridge');
+      }
+    }
+  } catch (error) {
+    console.warn('Rust entropy generation failed, using Node.js fallback');
+  }
+
   // Mock entropy generation stats (in production, these would come from your backend)
   const entropyStats = {
     totalGenerated: Math.floor(Math.random() * 50000) + 10000,
     totalRequests: Math.floor(Math.random() * 10000) + 5000,
-    avgGenerationTime: Math.floor(Math.random() * 10) + 5
+    avgGenerationTime: Math.floor(Math.random() * 10) + 5,
+    rustEntropyAvailable,
+    rustSecretHex
   };
 
   // Return Prometheus-compatible metrics format
@@ -72,6 +110,7 @@ entropy_total_generated_bytes ${entropyStats.totalGenerated}
 entropy_total_requests ${entropyStats.totalRequests}
 entropy_average_generation_time_ms ${entropyStats.avgGenerationTime}
 entropy_generation_rate_per_second ${Math.floor(entropyStats.totalRequests / Math.max(systemInfo.uptime, 1))}
+entropy_rust_available ${entropyStats.rustEntropyAvailable ? 1 : 0}
 
 # API Usage Metrics
 api_requests_today{tier="${apiKey.tier}"} ${apiKey.requests || 0}
