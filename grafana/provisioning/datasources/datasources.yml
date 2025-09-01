@@ -4,7 +4,7 @@ datasources:
   - name: Prometheus
     type: prometheus
     access: proxy
-    url: http://prometheus:9090
+    url: http://localhost:9091
     isDefault: true
     editable: true
     jsonData:
@@ -36,13 +36,15 @@ datasources:
       timeField: "@timestamp"
       esVersion: 8
       
-  - name: Bitcoin Sprint Web API
-    type: json
+  - name: Bitcoin Sprint Direct
+    type: prometheus
     access: proxy
-    url: http://bitcoin-sprint-web:3002/api
+    url: http://localhost:8082
     isDefault: false
     editable: true
     jsonData:
       httpMethod: GET
-      keepCookies: []
-      queryParams: ""
+      prometheusType: Prometheus
+      prometheusVersion: 2.45.0
+      queryTimeout: 60s
+      timeInterval: 15s

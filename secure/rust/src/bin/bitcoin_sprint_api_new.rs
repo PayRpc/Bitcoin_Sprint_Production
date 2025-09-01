@@ -314,11 +314,13 @@ impl UniversalClient {
                 "52.74.57.123:30303".to_string(),
             ],
             ProtocolType::Solana => vec![
-                "http://localhost:8899".to_string(),
-                "http://localhost:8901".to_string(),
-                "http://localhost:8903".to_string(),
-                "http://localhost:8904".to_string(),
-                "http://localhost:8905".to_string(),
+                // Use raw host:port for TCP probing; JSON-RPC is HTTP but initial connectivity
+                // checks should avoid URL schemes here.
+                "127.0.0.1:8899".to_string(),
+                "127.0.0.1:8901".to_string(),
+                "127.0.0.1:8903".to_string(),
+                "127.0.0.1:8904".to_string(),
+                "127.0.0.1:8905".to_string(),
             ],
         }
     }
@@ -385,7 +387,6 @@ impl Server {
             .route("/api/v1/p2p/diag", get(Self::p2p_diag_handler))
             .with_state(self.clone())
             // Add more routes as needed, e.g., enterprise endpoints
-            .with_state(self.clone())
     }
 
     async fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
@@ -570,5 +571,8 @@ async fn main() {
     info!("Starting Sprint API server, tier: {}", cfg.tier);
 
     let server = Server::new(cfg).await;
-    server.start().await;
+    if let Err(e) = server.start().await {
+        error!("Server failed to start or crashed: {}", e);
+        std::process::exit(1);
+    }
 }
