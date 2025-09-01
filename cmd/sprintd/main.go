@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -16,6 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
+	"io"
 	"log"
 	"math"
 	"net"
@@ -1349,7 +1351,7 @@ func (esm *EnterpriseSecurityManager) RegisterEnterpriseRoutes() {
 	esm.logger.Info("Enterprise Security API endpoints registered")
 }
 
-// handleFastEntropy generates fast entropy using hardware sources
+// handleFastEntropy proxies to Rust server for entropy generation
 func (esm *EnterpriseSecurityManager) handleFastEntropy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		esm.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -1369,31 +1371,25 @@ func (esm *EnterpriseSecurityManager) handleFastEntropy(w http.ResponseWriter, r
 		req.Size = 32 // Default size
 	}
 
-	// Generate fast entropy
-	entropy, err := esm.generateFastEntropy(req.Size)
+	// Proxy to Rust entropy server
+	rustURL := fmt.Sprintf("http://%s:%d/entropy/fast",
+		esm.server.cfg.RustWebServerHost, esm.server.cfg.RustWebServerPort)
+
+	resp, err := http.Post(rustURL, "application/json",
+		bytes.NewBufferString(fmt.Sprintf(`{"size":%d}`, req.Size)))
 	if err != nil {
-		esm.logger.Error("Failed to generate fast entropy", zap.Error(err))
-		esm.jsonError(w, http.StatusInternalServerError, "Failed to generate entropy")
+		esm.logger.Error("Failed to proxy to Rust entropy server", zap.Error(err))
+		esm.jsonError(w, http.StatusInternalServerError, "Entropy service unavailable")
 		return
 	}
-
-	response := struct {
-		Entropy   string    `json:"entropy"`
-		Size      int       `json:"size"`
-		Timestamp time.Time `json:"timestamp"`
-		Source    string    `json:"source"`
-	}{
-		Entropy:   hex.EncodeToString(entropy),
-		Size:      len(entropy),
-		Timestamp: time.Now(),
-		Source:    "hardware",
-	}
+	defer resp.Body.Close()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
 }
 
-// handleHybridEntropy generates entropy using system sources mixed with Bitcoin headers
+// handleHybridEntropy proxies to Rust server for hybrid entropy generation
 func (esm *EnterpriseSecurityManager) handleHybridEntropy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		esm.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -1414,28 +1410,22 @@ func (esm *EnterpriseSecurityManager) handleHybridEntropy(w http.ResponseWriter,
 		req.Size = 32 // Default size
 	}
 
-	// Generate hybrid entropy
-	entropy, err := esm.generateHybridEntropy(req.Size, req.Headers)
+	// Proxy to Rust entropy server
+	rustURL := fmt.Sprintf("http://%s:%d/entropy/hybrid",
+		esm.server.cfg.RustWebServerHost, esm.server.cfg.RustWebServerPort)
+
+	// Forward the request body as-is to Rust server
+	resp, err := http.Post(rustURL, "application/json", r.Body)
 	if err != nil {
-		esm.logger.Error("Failed to generate hybrid entropy", zap.Error(err))
-		esm.jsonError(w, http.StatusInternalServerError, "Failed to generate entropy")
+		esm.logger.Error("Failed to proxy to Rust entropy server", zap.Error(err))
+		esm.jsonError(w, http.StatusInternalServerError, "Entropy service unavailable")
 		return
 	}
-
-	response := struct {
-		Entropy   string    `json:"entropy"`
-		Size      int       `json:"size"`
-		Timestamp time.Time `json:"timestamp"`
-		Source    string    `json:"source"`
-	}{
-		Entropy:   hex.EncodeToString(entropy),
-		Size:      len(entropy),
-		Timestamp: time.Now(),
-		Source:    "hybrid",
-	}
+	defer resp.Body.Close()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
 }
 
 // handleSystemFingerprint returns system fingerprint
@@ -4015,7 +4005,7 @@ func main() {
 			for {
 				select {
 				case <-ticker.C:
-					rustHealthURL := fmt.Sprintf("https://%s:%d/health",
+					rustHealthURL := fmt.Sprintf("http://%s:%d/health",
 						cfg.RustWebServerHost, cfg.RustWebServerPort)
 
 					resp, err := client.Get(rustHealthURL)

@@ -117,9 +117,9 @@ git push origin main
 ### 4. Monitor & Optimize
 ```bash
 # Use the management script:
-.\cicd-manager.ps1 -Setup    # Initial validation
-.\cicd-manager.ps1 -Test     # Test components
-.\cicd-manager.ps1 -Validate # Configuration check
+.\tools\cicd-manager.ps1 -Setup    # Initial validation
+.\tools\cicd-manager.ps1 -Test     # Test components
+.\tools\cicd-manager.ps1 -Validate # Configuration check
 ```
 
 ## 📊 Success Metrics Dashboard
