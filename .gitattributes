@@ -1,59 +1,314 @@
-# Bitcoin Sprint - Git Attributes File
-# Updated for cross-platform development and proper file handling
+# ────────── Bitcoin Sprint - Git Attributes ──────────
+# Comprehensive file handling for Go, Rust, Python, and web development
+# Ensures consistent line endings and proper file type detection
 
+# ────────── Core Settings ──────────
 # Auto detect text files and perform LF normalization
 * text=auto
 
-# Go source files
-*.go text eol=lf
+# Default behavior for unspecified files
+* text eol=lf
+
+# ────────── Programming Languages ──────────
+# Go
+*.go text eol=lf diff=go
 go.mod text eol=lf
 go.sum text eol=lf
+go.work text eol=lf
+go.work.sum text eol=lf
+*.go.txt text eol=lf
+*.go.html text eol=lf
 
-# Rust source files
-*.rs text eol=lf
+# Rust
+*.rs text eol=lf diff=rust
 Cargo.toml text eol=lf
-Cargo.lock text eol=lf
+Cargo.lock text eol=lf -diff
+*.rs.txt text eol=lf
 
-# Configuration files
+# Python
+*.py text eol=lf diff=python
+*.pyx text eol=lf
+*.pxd text eol=lf
+*.pxi text eol=lf
+pyproject.toml text eol=lf
+setup.py text eol=lf
+setup.cfg text eol=lf
+requirements*.txt text eol=lf
+Pipfile text eol=lf
+Pipfile.lock text eol=lf
+*.ipynb text eol=lf
+
+# JavaScript/TypeScript
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+package.json text eol=lf
+package-lock.json text eol=lf
+yarn.lock text eol=lf
+tsconfig.json text eol=lf
+*.d.ts text eol=lf
+
+# Web Assets
+*.html text eol=lf
+*.htm text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+*.sass text eol=lf
+*.less text eol=lf
+*.vue text eol=lf
+*.svelte text eol=lf
+
+# ────────── Configuration Files ──────────
+# General config formats
 *.json text eol=lf
 *.yaml text eol=lf
 *.yml text eol=lf
 *.toml text eol=lf
+*.ini text eol=lf
+*.cfg text eol=lf
+*.conf text eol=lf
+*.config text eol=lf
+*.properties text eol=lf
 
-# Documentation
-*.md text eol=lf
-*.txt text eol=lf
-README* text eol=lf
-LICENSE* text eol=lf
+# Docker
+Dockerfile* text eol=lf
+docker-compose*.yml text eol=lf
+docker-compose*.yaml text eol=lf
+.dockerignore text eol=lf
 
-# Scripts
+# Infrastructure as Code
+*.tf text eol=lf
+*.tfvars text eol=lf
+*.hcl text eol=lf
+
+# Kubernetes
+*.yaml text eol=lf
+*.yml text eol=lf
+
+# ────────── Scripts and Shell ──────────
+# Windows scripts
 *.ps1 text eol=crlf
 *.bat text eol=crlf
 *.cmd text eol=crlf
-*.sh text eol=lf
+*.vbs text eol=crlf
 
-# Binary files (don't normalize line endings)
+# Unix/Linux scripts
+*.sh text eol=lf
+*.bash text eol=lf
+*.zsh text eol=lf
+*.fish text eol=lf
+*.awk text eol=lf
+*.sed text eol=lf
+
+# Python scripts
+*.py text eol=lf
+
+# ────────── Documentation ──────────
+*.md text eol=lf
+*.markdown text eol=lf
+*.txt text eol=lf
+*.rst text eol=lf
+*.adoc text eol=lf
+*.asciidoc text eol=lf
+README* text eol=lf
+CHANGELOG* text eol=lf
+LICENSE* text eol=lf
+CONTRIBUTING* text eol=lf
+CODE_OF_CONDUCT* text eol=lf
+
+# ────────── Data Files ──────────
+# Text-based data formats
+*.csv text eol=lf
+*.tsv text eol=lf
+*.xml text eol=lf
+*.svg text eol=lf
+
+# Configuration data
+*.env text eol=lf
+*.env.* text eol=lf
+!*.env.example text eol=lf
+!*.env.template text eol=lf
+
+# ────────── Binary Files ──────────
+# Executables and libraries
 *.exe binary
 *.dll binary
 *.so binary
 *.dylib binary
 *.rlib binary
+*.a binary
+*.lib binary
+*.o binary
+*.obj binary
+
+# Archives and compressed files
+*.zip binary
+*.tar binary
+*.gz binary
+*.bz2 binary
+*.xz binary
+*.7z binary
+*.rar binary
+*.jar binary
+*.war binary
+*.ear binary
+
+# Images
 *.png binary
 *.jpg binary
 *.jpeg binary
 *.gif binary
+*.bmp binary
+*.tiff binary
 *.ico binary
-*.pdf binary
-*.zip binary
-*.tar binary
-*.gz binary
+*.svg text eol=lf
+*.webp binary
 
-# Git files
+# Documents
+*.pdf binary
+*.doc binary
+*.docx binary
+*.xls binary
+*.xlsx binary
+*.ppt binary
+*.pptx binary
+
+# Media files
+*.mp4 binary
+*.avi binary
+*.mkv binary
+*.mov binary
+*.wmv binary
+*.flv binary
+*.webm binary
+*.m4v binary
+*.mp3 binary
+*.wav binary
+*.flac binary
+*.aac binary
+*.ogg binary
+
+# Database files
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
+*.db-journal binary
+*.db-shm binary
+*.db-wal binary
+
+# Certificates and keys
+*.key binary
+*.pem binary
+*.crt binary
+*.cer binary
+*.p12 binary
+*.pfx binary
+*.jks binary
+*.keystore binary
+id_rsa binary
+id_dsa binary
+*.pub text eol=lf
+
+# ────────── Git and Version Control ──────────
 .gitignore text eol=lf
 .gitattributes text eol=lf
+.gitmodules text eol=lf
+.gitkeep text eol=lf
+.git-blame-ignore-revs text eol=lf
 
-# Project structure specific patterns
+# ────────── Project Structure Patterns ──────────
+# Go project structure
 cmd/**/*.go text eol=lf
 internal/**/*.go text eol=lf
+pkg/**/*.go text eol=lf
+api/**/*.go text eol=lf
+web/**/*.go text eol=lf
+scripts/**/*.go text eol=lf
+
+# Rust project structure
 secure/rust/**/*.rs text eol=lf
 secure/rust/**/Cargo.toml text eol=lf
+secure/rust/**/Cargo.lock text eol=lf -diff
+
+# Python project structure
+src/**/*.py text eol=lf
+tests/**/*.py text eol=lf
+scripts/**/*.py text eol=lf
+
+# Web project structure
+web/**/*.js text eol=lf
+web/**/*.ts text eol=lf
+web/**/*.html text eol=lf
+web/**/*.css text eol=lf
+web/**/*.scss text eol=lf
+
+# Configuration directories
+config/**/*.json text eol=lf
+config/**/*.yaml text eol=lf
+config/**/*.yml text eol=lf
+config/**/*.toml text eol=lf
+config/**/*.ini text eol=lf
+
+# Documentation directories
+docs/**/*.md text eol=lf
+docs/**/*.txt text eol=lf
+docs/**/*.rst text eol=lf
+
+# ────────── Special File Types ──────────
+# Makefiles
+Makefile* text eol=lf
+makefile* text eol=lf
+*.mk text eol=lf
+
+# CMake
+CMakeLists.txt text eol=lf
+*.cmake text eol=lf
+
+# Protocol Buffers
+*.proto text eol=lf
+
+# GraphQL
+*.graphql text eol=lf
+*.gql text eol=lf
+
+# SQL
+*.sql text eol=lf
+
+# CSV data files
+*.csv text eol=lf
+
+# Log files (treat as text for diff purposes)
+*.log text eol=lf
+
+# ────────── Platform-specific ──────────
+# Windows-specific
+*.sln text eol=crlf
+*.csproj text eol=crlf
+*.vbproj text eol=crlf
+*.fsproj text eol=crlf
+*.vcxproj text eol=crlf
+
+# macOS-specific
+*.pbxproj text eol=lf
+
+# ────────── Generated Files ──────────
+# Auto-generated files
+*_generated.go text eol=lf
+*_generated.rs text eol=lf
+*_generated.py text eol=lf
+*_generated.js text eol=lf
+*_generated.ts text eol=lf
+generated/** text eol=lf
+auto-generated/** text eol=lf
+
+# Build artifacts (should be in .gitignore, but good to be explicit)
+build/** binary
+dist/** binary
+target/** binary
+*.min.js binary
+*.min.css binary
+
+# ────────── End of .gitattributes ──────────

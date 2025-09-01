@@ -32,11 +32,23 @@ function Write-Metric($label, $value, $unit = "", $status = "info") {
 }
 
 function Test-EntropyEndpoint {
-    param($endpoint, $description)
+    param($endpoint, $description, $Method = "GET", $Body = $null)
 
     try {
         $headers = @{ "X-API-Key" = $ApiKey }
-        $response = Invoke-RestMethod -Uri "$ApiUrl$endpoint" -Headers $headers -TimeoutSec 5
+        $params = @{
+            Uri = "$ApiUrl$endpoint"
+            Headers = $headers
+            TimeoutSec = 5
+            Method = $Method
+        }
+        
+        if ($Body) {
+            $params["Body"] = $Body
+            $params["ContentType"] = "application/json"
+        }
+        
+        $response = Invoke-RestMethod @params
 
         Write-Host "  ✅ $description available" -ForegroundColor Green
         return $response
@@ -94,28 +106,30 @@ function Test-EntropyFunctions {
     Write-Host ""
 
     # Test system fingerprint
-    $fingerprint = Test-EntropyEndpoint "/api/v1/entropy/fingerprint" "System Fingerprint"
+    $fingerprint = Test-EntropyEndpoint "/api/v1/enterprise/system/fingerprint" "System Fingerprint"
     if ($fingerprint) {
-        Write-Metric "Fingerprint Length" "$($fingerprint.Length) bytes" "" "good"
-        Write-Host "    Sample: $($fingerprint.Substring(0, [Math]::Min(32, $fingerprint.Length)))..." -ForegroundColor Gray
+        Write-Metric "Fingerprint Length" "$($fingerprint.fingerprint.Length/2) bytes" "" "good"
+        Write-Host "    Sample: $($fingerprint.fingerprint.Substring(0, [Math]::Min(32, $fingerprint.fingerprint.Length)))..." -ForegroundColor Gray
     }
 
     # Test CPU temperature
-    $temperature = Test-EntropyEndpoint "/api/v1/entropy/temperature" "CPU Temperature"
+    $temperature = Test-EntropyEndpoint "/api/v1/enterprise/system/temperature" "CPU Temperature"
     if ($temperature) {
-        Write-Metric "Current Temperature" "$temperature" "°C" "good"
+        Write-Metric "Current Temperature" "$($temperature.temperature)" "°C" "good"
     }
 
     # Test fast entropy
-    $fastEntropy = Test-EntropyEndpoint "/api/v1/entropy/fast" "Fast Entropy"
+    $fastEntropy = Test-EntropyEndpoint "/api/v1/enterprise/entropy/fast" "Fast Entropy" -Method "POST" -Body '{"size": 32}'
     if ($fastEntropy) {
-        Write-Metric "Fast Entropy Length" "$($fastEntropy.Length) bytes" "" "good"
+        Write-Metric "Fast Entropy Length" "$($fastEntropy.size) bytes" "" "good"
+        Write-Host "    Sample: $($fastEntropy.entropy.Substring(0, [Math]::Min(32, $fastEntropy.entropy.Length)))..." -ForegroundColor Gray
     }
 
     # Test hybrid entropy
-    $hybridEntropy = Test-EntropyEndpoint "/api/v1/entropy/hybrid" "Hybrid Entropy"
+    $hybridEntropy = Test-EntropyEndpoint "/api/v1/enterprise/entropy/hybrid" "Hybrid Entropy" -Method "POST" -Body '{"size": 32, "headers": []}'
     if ($hybridEntropy) {
-        Write-Metric "Hybrid Entropy Length" "$($hybridEntropy.Length) bytes" "" "good"
+        Write-Metric "Hybrid Entropy Length" "$($hybridEntropy.size) bytes" "" "good"
+        Write-Host "    Sample: $($hybridEntropy.entropy.Substring(0, [Math]::Min(32, $hybridEntropy.entropy.Length)))..." -ForegroundColor Gray
     }
 
     # Test enhanced entropy with fingerprint

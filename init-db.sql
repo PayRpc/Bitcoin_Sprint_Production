@@ -45,8 +45,8 @@ CREATE TABLE sprint_core.request_logs (
 );
 
 -- Create partitioned table for request logs (by month)
-CREATE TABLE sprint_core.request_logs_y2024m01 PARTITION OF sprint_core.request_logs
-    FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
+CREATE TABLE sprint_core.request_logs_y2025m09 PARTITION OF sprint_core.request_logs
+    FOR VALUES FROM ('2025-09-01') TO ('2025-10-01');
 
 -- ===== ENTERPRISE SECURITY TABLES =====
 
@@ -171,16 +171,34 @@ CREATE INDEX idx_request_logs_api_key ON sprint_core.request_logs(api_key_id);
 CREATE INDEX idx_request_logs_chain ON sprint_core.request_logs(chain);
 CREATE INDEX idx_request_logs_created_at ON sprint_core.request_logs(created_at);
 CREATE INDEX idx_request_logs_method ON sprint_core.request_logs(method);
+CREATE INDEX idx_request_logs_status_code ON sprint_core.request_logs(status_code);
+CREATE INDEX idx_request_logs_ip_address ON sprint_core.request_logs(ip_address);
+
+-- API keys indexes
+CREATE INDEX idx_api_keys_tier ON sprint_core.api_keys(tier);
+CREATE INDEX idx_api_keys_is_active ON sprint_core.api_keys(is_active);
+CREATE INDEX idx_api_keys_expires_at ON sprint_core.api_keys(expires_at);
 
 -- Audit logs indexes
 CREATE INDEX idx_audit_logs_event_type ON sprint_enterprise.audit_logs(event_type);
 CREATE INDEX idx_audit_logs_user_id ON sprint_enterprise.audit_logs(user_id);
 CREATE INDEX idx_audit_logs_created_at ON sprint_enterprise.audit_logs(created_at);
+CREATE INDEX idx_audit_logs_risk_score ON sprint_enterprise.audit_logs(risk_score);
+
+-- Security sessions indexes
+CREATE INDEX idx_security_sessions_api_key ON sprint_enterprise.security_sessions(api_key_id);
+CREATE INDEX idx_security_sessions_expires_at ON sprint_enterprise.security_sessions(expires_at);
+CREATE INDEX idx_security_sessions_is_active ON sprint_enterprise.security_sessions(is_active);
 
 -- Chain data indexes
 CREATE INDEX idx_transaction_cache_chain_hash ON sprint_chains.transaction_cache(chain, tx_hash);
+CREATE INDEX idx_transaction_cache_expires_at ON sprint_chains.transaction_cache(expires_at);
 CREATE INDEX idx_block_cache_chain_height ON sprint_chains.block_cache(chain, block_height);
+CREATE INDEX idx_chain_status_chain_name ON sprint_chains.chain_status(chain_name);
+
+-- Analytics indexes
 CREATE INDEX idx_chain_metrics_chain_recorded ON sprint_analytics.chain_metrics(chain, recorded_at);
+CREATE INDEX idx_api_metrics_endpoint ON sprint_analytics.api_metrics(endpoint);
 
 -- ===== FUNCTIONS AND TRIGGERS =====
 
@@ -198,6 +216,23 @@ CREATE TRIGGER update_api_keys_modtime
     BEFORE UPDATE ON sprint_core.api_keys 
     FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 
+CREATE TRIGGER update_chain_status_modtime 
+    BEFORE UPDATE ON sprint_chains.chain_status 
+    FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+
+-- Add check constraints
+ALTER TABLE sprint_core.api_keys 
+    ADD CONSTRAINT check_tier_values 
+    CHECK (tier IN ('basic', 'professional', 'enterprise'));
+
+ALTER TABLE sprint_enterprise.entropy_usage 
+    ADD CONSTRAINT check_entropy_type 
+    CHECK (entropy_type IN ('fast', 'hybrid', 'quantum'));
+
+ALTER TABLE sprint_chains.chain_status 
+    ADD CONSTRAINT check_health_score_range 
+    CHECK (health_score >= 0.0 AND health_score <= 100.0);
+
 -- Cache cleanup function
 CREATE OR REPLACE FUNCTION cleanup_expired_cache()
 RETURNS void AS $$
@@ -206,6 +241,30 @@ BEGIN
     DELETE FROM sprint_enterprise.security_sessions WHERE expires_at < NOW();
 END;
 $$ LANGUAGE plpgsql;
+
+-- Function to create monthly partitions for request logs
+CREATE OR REPLACE FUNCTION create_request_log_partition(target_month DATE)
+RETURNS void AS $$
+DECLARE
+    partition_name TEXT;
+    start_date DATE;
+    end_date DATE;
+BEGIN
+    partition_name := 'sprint_core.request_logs_y' || TO_CHAR(target_month, 'YYYY') || 'm' || TO_CHAR(target_month, 'MM');
+    start_date := DATE_TRUNC('month', target_month);
+    end_date := start_date + INTERVAL '1 month';
+
+    EXECUTE format('CREATE TABLE IF NOT EXISTS %I PARTITION OF sprint_core.request_logs FOR VALUES FROM (%L) TO (%L)',
+                   partition_name, start_date, end_date);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create partitions for next 6 months
+SELECT create_request_log_partition(generate_series(
+    DATE_TRUNC('month', CURRENT_DATE),
+    DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '5 months',
+    INTERVAL '1 month'
+)::DATE);
 
 -- Create cleanup job (requires pg_cron extension in production)
 -- SELECT cron.schedule('cache-cleanup', '0 */6 * * *', 'SELECT cleanup_expired_cache();');
@@ -261,4 +320,4 @@ GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA sprint_analytics TO sprint;
 
 -- Create initial admin API key
 INSERT INTO sprint_core.api_keys (key_hash, name, tier, rate_limit) VALUES
-(encode(digest('sprint-admin-key-2024', 'sha256'), 'hex'), 'Admin Key', 'enterprise', 10000);
+(encode(digest('sprint-admin-key-2025', 'sha256'), 'hex'), 'Admin Key', 'enterprise', 10000);

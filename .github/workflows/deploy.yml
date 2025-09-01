@@ -1,0 +1,126 @@
+# Multi-Environment Deployment CI/CD
+# Automated deployment to staging, production, and custom environments
+
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+          - development
+      version:
+        description: 'Version to deploy (leave empty for latest)'
+        required: false
+        type: string
+      rollback:
+        description: 'Rollback to previous version'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  validate:
+    name: Validate Deployment
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate environment
+        run: |
+          echo "Deploying to: ${{ inputs.environment }}"
+          echo "Version: ${{ inputs.version || 'latest' }}"
+          echo "Rollback: ${{ inputs.rollback }}"
+
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    needs: [validate]
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Fly.io CLI
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Configure deployment environment
+        run: |
+          # Set environment-specific variables
+          case "${{ inputs.environment }}" in
+            "staging")
+              echo "FLY_APP_NAME=sprint-staging" >> $GITHUB_ENV
+              echo "CONFIG_FILE=fly.staging.toml" >> $GITHUB_ENV
+              ;;
+            "production")
+              echo "FLY_APP_NAME=sprint-production" >> $GITHUB_ENV
+              echo "CONFIG_FILE=fly.production.toml" >> $GITHUB_ENV
+              ;;
+            "development")
+              echo "FLY_APP_NAME=sprint-dev" >> $GITHUB_ENV
+              echo "CONFIG_FILE=fly.dev.toml" >> $GITHUB_ENV
+              ;;
+          esac
+
+      - name: Deploy to Fly.io
+        run: |
+          if [ "${{ inputs.rollback }}" = "true" ]; then
+            echo "Performing rollback..."
+            flyctl deploy --app $FLY_APP_NAME --strategy immediate
+          else
+            echo "Deploying new version..."
+            flyctl deploy --app $FLY_APP_NAME --config $CONFIG_FILE --strategy rolling
+          fi
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Verify deployment
+        run: |
+          echo "Waiting for deployment to be healthy..."
+          flyctl status --app $FLY_APP_NAME
+
+      - name: Run smoke tests
+        run: |
+          # Wait for app to be ready
+          sleep 30
+
+          # Run basic health checks
+          curl -f https://$FLY_APP_NAME.fly.dev/health || exit 1
+          curl -f https://$FLY_APP_NAME.fly.dev/version || exit 1
+
+      - name: Notify deployment status
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: ${{ job.status }}
+          text: "Deployment to ${{ inputs.environment }} ${{ job.status == 'success' && 'succeeded' || 'failed' }}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  cleanup:
+    name: Cleanup old deployments
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: inputs.environment == 'production'
+
+    steps:
+      - name: Setup Fly.io CLI
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Remove old machines
+        run: |
+          # Keep only last 3 versions
+          flyctl machines list --app sprint-production --json |
+          jq -r '.[] | select(.state == "stopped") | .id' |
+          head -n -3 |
+          xargs -I {} flyctl machines destroy {} --app sprint-production --force
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

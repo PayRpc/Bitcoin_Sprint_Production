@@ -10,7 +10,7 @@ scrape_configs:
   # Bitcoin Sprint Core Service
   - job_name: 'bitcoin-sprint'
     static_configs:
-      - targets: ['bitcoin-sprint:9090']
+      - targets: ['host.docker.internal:8080']
     scrape_interval: 5s
     metrics_path: '/metrics'
 

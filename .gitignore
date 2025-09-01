@@ -1,5 +1,5 @@
 # ────────── Core Build Artifacts ──────────
-# Go
+# Go binaries and build outputs
 /bin/
 /cmd/**/bin/
 /*.exe
@@ -13,8 +13,13 @@ sprint*.exe
 selfcheck*.exe
 debug-check*.exe
 test-*.exe
+validate*.exe
+build/
+__pycache__/
+*.pyc
+*.pyo
 
-# Rust
+# Rust build artifacts
 /target/
 /secure/rust/target/
 /secure/rust/Cargo.lock
@@ -23,8 +28,14 @@ test-*.exe
 *.dSYM/
 *.profraw
 *.profdata
-
-# Node / Next.js
+# C/C++ build artifacts
+*.a
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+# Node.js / Next.js
 /node_modules/
 /web/node_modules/
 /web/.next/
@@ -32,26 +43,50 @@ test-*.exe
 /web/dist/
 /web/.turbo/
 /web/.vercel/
-
+/web/public/sw.js
+/web/public/workbox-*.js
+# Python
+*.py[cod]
+*$py.class
+.Python
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 # Blanket ignores (safety net)
 **/node_modules/
 **/.next/
 **/dist/
 **/out/
 **/.turbo/
-
-# CMake
-/CMakeFiles/
-/CMakeCache.txt
-/cmake_install.cmake
-/Makefile
-/_cmake_build/
-/build/
-/cpp-example
-*.a
-*.o
-*.obj
-
+**/build/
+**/__pycache__/
+# ────────── Docker ──────────
+.dockerignore
+Dockerfile.*
+docker-compose.override.yml
+.env.docker
+# ────────── Database ──────────
+*.db
+*.sqlite
+*.sqlite3
+postgres_data/
+pgdata/
+init-db.sql.backup
+database.db
+*.db-journal
+*.db-shm
+*.db-wal
 # ────────── Logs / Temp / Debug ──────────
 *.log
 logs/
@@ -65,87 +100,308 @@ temp/
 *~
 debug/
 coverage.html
-*.out
 *.pprof
 *.prof
-
-# Audit and session logs
+*.trace
+*.heap
+# Application logs
 audit-*.json
 session-*.json
 enterprise-*.log
-
+api_performance_*.json
+current_dashboard.json
+dashboard_backup.json
+updated_dashboard.json
+prometheus_counters.txt
+# Test outputs
+test_output.log
+test-*.log
+*_test.go.out
 # ────────── Local Config & Secrets ──────────
 # DO NOT COMMIT sensitive configs (RPC nodes, creds, secrets)
 *.env
 .env
 .env.local
 .env.*.local
+.env.production
+.env.staging
+.env.development
 !*.env.example
-
+!.env.template
+# Configuration files
 config.json
 config-*.json
 config-local.json
 config-turbo.json
-cmd/sprint/config.json
-cmd/sprint/config-local.json
+cmd/sprintd/config.json
+cmd/sprintd/config-local.json
 license.json
 zmq-config.json
-
+bitcoin-*.conf
+service-config.toml
+enterprise-api-config.json
+nginx.conf
+prometheus.yml
+grafana-dashboard-*.json
 # Safe templates allowed
 !config.example.json
 !license.example.json
-
+!*.env.template
+!config.template.json
+# ────────── Deployment & Infrastructure ──────────
+# Fly.io
+fly.toml.backup
+deploy-fly.sh.backup
+validate-deployment.sh.backup
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+terraform.tfvars
+# Kubernetes
+*.yaml.backup
+*.yml.backup
 # ────────── OS / Editor Files ──────────
+# macOS
 .DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
 ehthumbs.db
+# Windows
 Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+# Linux
+.directory
+.Trash-*
+# Editors and IDEs
 .vscode/
 .vscode/*
+!.vscode/settings.json.template
+!.vscode/launch.json.template
+!.vscode/tasks.json.template
 .idea/
 *.iml
-
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+*.tmproj
+*.tmproject
+tmtags
+*.tmbundle
 # ────────── Project-specific ──────────
-# Binaries
-cmd/sprint/bitcoin-sprint
-cmd/sprint/bitcoin-sprint.exe
-
-# Scripts that are not source-only
+# Bitcoin Sprint specific binaries
+cmd/sprintd/bitcoin-sprint
+cmd/sprintd/bitcoin-sprint.exe
+sprintd
+sprintd.exe
+sprintd_new.exe
+sprintd_updated.exe
+# Build scripts and installers
 install-*.ps1
 install-*.bat
 install-*.cmd
+install-*.sh
 Install-*.vbs
 Run-Installer.ps1
 BUILD-*.ps1
 build-*.ps1
+build-*.sh
 quick-install.ps1
 run-sprint-zmq.ps1
 start-bitcoin-testnet4.ps1
 start-sprint-testnet4.ps1
 Start-MockServer.ps1
-
+switch-tier.ps1
+check-status.ps1
+setup-fast-sync.ps1
 # Demo and test scripts (generated)
 *-demo*.ps1
+*-demo*.sh
 customer-*.ps1
+customer-*.sh
 production-demo*.ps1
+production-demo*.sh
 integration-test*.ps1
+integration-test*.sh
 test-*.ps1
-
-# Third-party installers
+test-*.sh
+validate-*.ps1
+validate-*.sh
+# Third-party installers and tools
 rustup-init.exe
 *-installer.exe
-
+*-installer.msi
+mingw-get-setup.exe
+git-*.exe
 # Tool outputs and enterprise logs
 tools/*.log
 tools/audit-*.json
 tools/session-*.json
-
+tools/*.exe
+tools/*.dll
+# Grafana and monitoring
+grafana/
+!grafana/dashboards/
+grafana/dashboards/*.json
+!grafana/provisioning/
+# Documentation artifacts
+*.pdf
+*.doc
+*.docx
+docs/build/
+docs/.doctrees/
+# Performance and benchmark data
+benchmarks/
+perf.data
+*.perf
 # Command line artifacts and stray files
 --version
 --help
 --*
 -v
 -h
+*.stackdump
+# ────────── Security & Keys ──────────
+# Private keys and certificates
+*.key
+*.pem
+*.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_dsa
+*.pub
+# Secrets and tokens
+secrets/
+.secrets/
+*.secret
+*_secret
+token
+tokens
+credentials
+credentials.json
+# ────────── Temporary Files ──────────
+# System temp files
+/tmp/
+/temp/
+/tmp
+/temp
+.cache/
+*.cache
+*.lock
+*.pid
+*.pid.lock
+# Application temp files
+tmp/
+# ────────── Archives and Backups ──────────
+*.zip
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.7z
+*.rar
+*.gz
+*.bz2
+*.xz
+*.old
+*.orig
+*_backup
+*_bak
+*_old
+# ────────── CI/CD ──────────
+.github/workflows/*.log
+.github/workflows/*.tmp
+.circleci/
+.travis.yml
+appveyor.yml
+azure-pipelines.yml
+# ────────── Package Managers ──────────
+# Go modules (cache)
+/go/pkg/mod/
+/go/bin/
+# Cargo (Rust)
+/usr/local/cargo/
+/home/*/.cargo/registry/
+/home/*/.cargo/git/
+# NPM/Yarn
+.yarn/
+.yarnrc.yml
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pip_cache/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+# ────────── Miscellaneous ──────────
+# Generated files
+generated/
+auto-generated/
+*_generated.go
+*_generated.rs
+# Screenshots and media
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.ico
+*.svg
+screenshots/
+media/
+# Notes and drafts
+notes/
+drafts/
+*.draft
+*.note
+TODO
+README-draft.md
+# ────────── Large Files ──────────
+# Git LFS (if used)
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.iso
+*.dmg
+*.deb
+*.rpm
+# ────────── Additional Cleanup Patterns ──────────
+# Specific patterns for build artifacts and temp files found during cleanup
+target/
+.next/
+secure/rust/target/
+web/.next/
+web/node_modules/
+node_modules/
+# Temporary test and debug files
+sprintd-test
+# Rust-specific artifacts
+secure/rust/Cargo.lock
+# Go build cache and temp files
+# Python additional patterns
+# ────────── End of .gitignore ──────────

@@ -1,10 +1,14 @@
 package config
 
 import (
+	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 // TierRateLimit defines rate limits for each tier
@@ -94,6 +98,9 @@ type Config struct {
 
 // Load reads config from env
 func Load() Config {
+	// Load environment variables from .env files
+	loadEnvironmentConfig()
+
 	tier := Tier(getEnv("TIER", "free"))
 
 	cfg := Config{
@@ -285,4 +292,34 @@ func getEnvSlice(key string, def []string) []string {
 		return result
 	}
 	return def
+}
+
+// loadEnvironmentConfig loads .env files with tier-specific support
+func loadEnvironmentConfig() {
+	// First, try to load default .env file
+	if err := godotenv.Load(); err == nil {
+		log.Printf("Config: Loaded default .env file")
+	} else {
+		log.Printf("Config: No default .env file found, using system environment variables")
+	}
+
+	// Check for tier-specific .env file
+	tier := getEnv("TIER", "")
+	if tier != "" {
+		tierEnvFile := fmt.Sprintf(".env.%s", tier)
+		if err := godotenv.Load(tierEnvFile); err == nil {
+			log.Printf("Config: Loaded tier-specific .env file: %s", tierEnvFile)
+		} else {
+			log.Printf("Config: No tier-specific .env file found: %s", tierEnvFile)
+		}
+	}
+
+	// Also check for RELAY_TIER (legacy support)
+	relayTier := getEnv("RELAY_TIER", "")
+	if relayTier != "" && relayTier != tier {
+		relayTierEnvFile := fmt.Sprintf(".env.%s", strings.ToLower(relayTier))
+		if err := godotenv.Load(relayTierEnvFile); err == nil {
+			log.Printf("Config: Loaded relay tier .env file: %s", relayTierEnvFile)
+		}
+	}
 }

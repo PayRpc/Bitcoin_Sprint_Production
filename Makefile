@@ -25,7 +25,7 @@ endif
 # Build Configuration
 RUST_DIR := secure/rust
 RUST_LIB := $(RUST_DIR)/target/release/$(LIB_PREFIX)securebuffer$(LIB_EXT)
-GO_MAIN := cmd/sprint
+GO_MAIN := cmd/sprintd
 BINARY_NAME := bitcoin-sprint$(EXE_EXT)
 BUILD_DIR := build
 CGO_CFLAGS := -I$(RUST_DIR)/include
@@ -34,10 +34,9 @@ CGO_LDFLAGS := -L$(RUST_DIR)/target/release -lsecurebuffer
 # Version Information
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-BUILDTIME := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
 
 # Go Build Flags
-GO_LDFLAGS := -X main.Version=$(VERSION) -X main.Commit=$(COMMIT) -X main.BuildTime=$(BUILDTIME)
+GO_LDFLAGS := -X main.Version=$(VERSION) -X main.Commit=$(COMMIT)
 
 .PHONY: all clean rust go test install deps check help
 
@@ -173,14 +172,3 @@ dev: clean all
 release: VERSION := $(shell git describe --tags --exact-match 2>/dev/null || echo "v0.0.0")
 release: clean all
 	@echo "Release build complete: $(VERSION)"
-
-# C++ example (if needed for extensions)
-cpp-example:
-	@echo "Building C++ example..."
-	@mkdir -p $(BUILD_DIR)
-	@$(CXX) -std=c++17 -I$(RUST_DIR)/include \
-		-L$(RUST_DIR)/target/release \
-		-lsecurebuffer \
-		-o $(BUILD_DIR)/cpp-example$(EXE_EXT) \
-		examples/cpp/main.cpp
-	@echo "C++ example built: $(BUILD_DIR)/cpp-example$(EXE_EXT)"

@@ -13,9 +13,9 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-APP_NAME="bitcoin-sprint-fastapi"
+APP_NAME="bitcoin-sprint"
 PRIMARY_REGION="iad"
-DOCKERFILE_PATH="fly/fastapi/Dockerfile"
+DOCKERFILE_PATH="Dockerfile"
 
 # Logging functions
 log() {
@@ -68,16 +68,27 @@ validate_config() {
         exit 1
     fi
 
-    # Check if Go binary exists
-    if [ ! -f "bin/sprintd" ] && [ ! -f "bin/sprintd.exe" ]; then
-        error "Go binary not found in bin/ directory"
+    # Check if Go modules exist
+    if [ ! -f "go.mod" ]; then
+        error "go.mod not found. This doesn't appear to be a Go project."
         exit 1
     fi
 
-    # Check if FastAPI code exists
-    if [ ! -d "Bitcoin_Sprint_fastapi/fastapi-gateway" ]; then
-        error "FastAPI gateway code not found"
+    # Check if Go source exists
+    if [ ! -d "cmd/sprintd" ]; then
+        error "Go source code not found in cmd/sprintd/"
         exit 1
+    fi
+
+    # Check if main.go exists
+    if [ ! -f "cmd/sprintd/main.go" ]; then
+        error "main.go not found in cmd/sprintd/"
+        exit 1
+    fi
+
+    # Validate Go module
+    if ! go mod verify &> /dev/null; then
+        warn "Go modules may be corrupted. Consider running 'go mod tidy'"
     fi
 
     log "Configuration validation passed"
@@ -88,15 +99,15 @@ deploy_app() {
     log "Starting deployment process..."
 
     # Build and deploy
-    info "Building and deploying to Fly.io..."
-    flyctl deploy \
+    info "Building and deploying Bitcoin Sprint Go application to Fly.io..."
+    if flyctl deploy \
         --dockerfile "$DOCKERFILE_PATH" \
         --remote-only \
         --push \
-        --verbose
+        --verbose; then
 
-    if [ $? -eq 0 ]; then
         log "Deployment completed successfully!"
+        return 0
     else
         error "Deployment failed"
         exit 1
@@ -141,12 +152,24 @@ setup_database() {
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         log "Setting up PostgreSQL database..."
 
+        # Create PostgreSQL database
         flyctl postgres create --name "${APP_NAME}-db" --region "$PRIMARY_REGION"
 
         # Attach database to app
         flyctl postgres attach "${APP_NAME}-db" --app "$APP_NAME"
 
-        log "Database setup completed"
+        # Get database connection string
+        DB_CONNECTION_STRING=$(flyctl postgres status --app "${APP_NAME}-db" | grep 'Connection string:' | sed 's/.*Connection string: //')
+
+        if [ -n "$DB_CONNECTION_STRING" ]; then
+            # Set database environment variables
+            flyctl secrets set DATABASE_TYPE=postgres
+            flyctl secrets set DATABASE_URL="$DB_CONNECTION_STRING"
+            log "Database setup completed successfully"
+        else
+            error "Failed to get database connection string"
+            exit 1
+        fi
     fi
 }
 
@@ -160,7 +183,10 @@ show_post_deploy_info() {
     echo "2. Check application health:"
     echo "   curl https://YOUR_APP_URL/health"
     echo ""
-    echo "3. View application logs:"
+    echo "3. Check API version:"
+    echo "   curl https://YOUR_APP_URL/version"
+    echo ""
+    echo "4. View application logs:"
     echo "   flyctl logs"
     echo ""
     echo "4. Scale the application:"
@@ -175,8 +201,8 @@ show_post_deploy_info() {
 
 # Main deployment function
 main() {
-    log "Bitcoin Sprint Fly.io Deployment Script"
-    log "======================================"
+    log "Bitcoin Sprint Go Application Fly.io Deployment Script"
+    log "===================================================="
 
     # Pre-deployment checks
     check_flyctl
