@@ -3,17 +3,31 @@
     "analytics": "http://localhost:8080/analytics",
     "health": "http://localhost:8080/health",
     "status": "http://localhost:8080/status",
-    "metrics": "http://localhost:8081/metrics"
+    "metrics": "http://localhost:8081/metrics",
+    "validate_storage": "https://localhost:8443/api/validate-storage",
+    "subscription": "https://localhost:8443/api/subscription",
+    "storage_analytics": "https://localhost:8443/api/analytics"
   },
   "test_results": {
-    "generated_at": "2025-08-28 23:32:24",
+    "generated_at": "2025-09-01 12:00:00",
     "main_api_endpoint": false,
-    "metrics_endpoint": true
+    "metrics_endpoint": true,
+    "storage_validation_endpoint": true
   },
   "enterprise_api_key": "ent_2a4f3a2974a84fe9a6174a5f",
   "grafana_config": {
     "auth_header": "Bearer ent_2a4f3a2974a84fe9a6174a5f",
     "refresh_interval": "30s",
     "datasource_url": "http://host.docker.internal:8081"
+  },
+  "storage_validation": {
+    "enabled_protocols": [
+      "ipfs",
+      "filecoin",
+      "arweave"
+    ],
+    "default_protocol": "ipfs",
+    "max_file_size_mb": 100,
+    "verification_timeout_seconds": 30
   }
 }

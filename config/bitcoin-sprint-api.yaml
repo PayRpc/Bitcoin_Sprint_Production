@@ -205,6 +205,74 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimitError'
 
+  /api/validate-storage:
+    post:
+      tags:
+        - Storage Validation
+      summary: Validate decentralized storage
+      description: Validate file integrity across IPFS, Filecoin, and Arweave
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateStorageRequest'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidateStorageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/subscription:
+    get:
+      tags:
+        - Subscription Management
+      summary: Get subscription information
+      description: Returns current subscription tier and credit information
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Subscription information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/analytics:
+    get:
+      tags:
+        - Analytics
+      summary: Get storage validation analytics
+      description: Returns analytics for storage validation operations (Professional+ tier)
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Analytics data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -426,6 +494,214 @@ components:
           example:
             error: "Invalid API key"
             code: 401
+
+    ValidateStorageRequest:
+      type: object
+      required:
+        - file_id
+        - protocol
+      properties:
+        file_id:
+          type: string
+          description: Unique identifier for the file to validate
+          example: "QmYwAPJzv5CZsnAqt4QE4r8..."
+        protocol:
+          type: string
+          enum: [ipfs, filecoin, arweave, custom]
+          description: Storage protocol to use
+          example: "ipfs"
+        provider:
+          type: string
+          description: Storage provider identifier
+          example: "pinata"
+        file_size:
+          type: integer
+          description: File size in bytes
+          example: 1048576
+        tier:
+          type: string
+          description: Subscription tier override
+          example: "professional"
+        webhook_url:
+          type: string
+          format: uri
+          description: Webhook URL for real-time notifications
+          example: "https://api.example.com/webhook"
+        merkle_proof:
+          $ref: '#/components/schemas/MerkleProofData'
+
+    ValidateStorageResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [verified, failed, pending]
+          example: "verified"
+        verified:
+          type: boolean
+          example: true
+        verification_score:
+          type: number
+          minimum: 0
+          maximum: 1
+          example: 0.95
+        response_time_ms:
+          type: integer
+          example: 150
+        challenge_id:
+          type: string
+          example: "chall_abc123_1234567890"
+        protocol:
+          type: string
+          example: "ipfs"
+        provider:
+          type: string
+          example: "pinata"
+        tier_used:
+          type: string
+          example: "professional"
+        credits_used:
+          type: integer
+          example: 1
+        credits_remaining:
+          type: integer
+          example: 49999
+        merkle_root:
+          type: string
+          description: Merkle root hash if provided
+          example: "0x1234567890abcdef..."
+        merkle_proof_valid:
+          type: boolean
+          example: true
+        timestamp:
+          type: integer
+          example: 1693526400
+        webhook_sent:
+          type: boolean
+          example: true
+
+    SubscriptionInfo:
+      type: object
+      properties:
+        tier:
+          type: string
+          example: "professional"
+        credits_remaining:
+          type: integer
+          example: 49999
+        monthly_limit:
+          type: integer
+          example: 50000
+        reset_date:
+          type: integer
+          example: 1696118400
+        features:
+          type: array
+          items:
+            type: string
+          example: ["storage_validation", "analytics", "webhooks"]
+
+    AnalyticsResponse:
+      type: object
+      properties:
+        total_verifications:
+          type: integer
+          example: 1250
+        success_rate:
+          type: number
+          example: 0.98
+        average_response_time:
+          type: number
+          example: 145.5
+        protocol_usage:
+          type: object
+          additionalProperties:
+            type: integer
+          example:
+            ipfs: 800
+            filecoin: 350
+            arweave: 100
+        daily_stats:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyStat'
+        top_providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderStat'
+
+    MerkleProofData:
+      type: object
+      properties:
+        root:
+          type: string
+          description: Merkle root hash
+          example: "0x1234567890abcdef..."
+        proof:
+          type: array
+          items:
+            $ref: '#/components/schemas/MerkleProofElement'
+        leaf:
+          type: string
+          example: "0xabcdef1234567890..."
+        index:
+          type: integer
+          example: 5
+        total_chunks:
+          type: integer
+          example: 16
+        chunk_size:
+          type: integer
+          example: 65536
+        leaf_hashes:
+          type: array
+          items:
+            type: string
+          description: Optional array of leaf hashes for verification
+
+    MerkleProofElement:
+      type: object
+      properties:
+        hash:
+          type: string
+          example: "0x1234567890abcdef..."
+        position:
+          type: string
+          enum: [left, right]
+          example: "left"
+
+    DailyStat:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2025-09-01"
+        verifications:
+          type: integer
+          example: 150
+        success_rate:
+          type: number
+          example: 0.97
+        average_response_time:
+          type: number
+          example: 142.3
+
+    ProviderStat:
+      type: object
+      properties:
+        provider:
+          type: string
+          example: "pinata"
+        verifications:
+          type: integer
+          example: 450
+        success_rate:
+          type: number
+          example: 0.99
+        average_response_time:
+          type: number
+          example: 138.7
 
 tags:
   - name: System Status

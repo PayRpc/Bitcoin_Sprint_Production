@@ -16,6 +16,14 @@ api_key_required = true
 rate_limiting_enabled = true
 circuit_breaker_enabled = true
 
+[storage_validation]
+enabled = true
+supported_protocols = ["ipfs", "filecoin", "arweave", "custom"]
+default_protocol = "ipfs"
+max_file_size_mb = 100
+verification_timeout_seconds = 30
+merkle_proof_required = false
+
 [redis]
 enabled = true
 url = "redis://localhost:6379"
