@@ -85,15 +85,15 @@ func (db *DB) Ping(ctx context.Context) error {
 
 // APIKey represents an API key in the database
 type APIKey struct {
-	ID          string    `json:"id"`
-	KeyHash     string    `json:"key_hash"`
-	Name        string    `json:"name"`
-	Tier        string    `json:"tier"`
-	RateLimit   int       `json:"rate_limit"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-	ExpiresAt   *time.Time `json:"expires_at"`
-	IsActive    bool      `json:"is_active"`
+	ID        string     `json:"id"`
+	KeyHash   string     `json:"key_hash"`
+	Name      string     `json:"name"`
+	Tier      string     `json:"tier"`
+	RateLimit int        `json:"rate_limit"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	ExpiresAt *time.Time `json:"expires_at"`
+	IsActive  bool       `json:"is_active"`
 }
 
 // GetAPIKey retrieves an API key by hash
@@ -174,14 +174,14 @@ func (db *DB) GetChainStatus(ctx context.Context, chainName string) (map[string]
 	}
 
 	result := map[string]interface{}{
-		"chain_name":        chainNameResult.String,
-		"rpc_endpoint":      rpcEndpoint.String,
+		"chain_name":         chainNameResult.String,
+		"rpc_endpoint":       rpcEndpoint.String,
 		"websocket_endpoint": wsEndpoint.String,
-		"block_height":      blockHeight.Int64,
-		"is_synced":         isSynced.Bool,
-		"avg_block_time":    avgBlockTime.Float64,
-		"peer_count":        peerCount.Int32,
-		"health_score":      healthScore.Float64,
+		"block_height":       blockHeight.Int64,
+		"is_synced":          isSynced.Bool,
+		"avg_block_time":     avgBlockTime.Float64,
+		"peer_count":         peerCount.Int32,
+		"health_score":       healthScore.Float64,
 	}
 
 	if lastBlockTime.Valid {

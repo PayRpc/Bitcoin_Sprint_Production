@@ -12,12 +12,22 @@ use tokio::sync::Mutex;
 use std::time::{Duration, Instant};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
+use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 use axum::http::header::CONTENT_TYPE;
 use prometheus::{Encoder, TextEncoder, register_counter_vec, CounterVec, register_gauge_vec, GaugeVec, register_histogram_vec, HistogramVec};
 use uuid::Uuid;
 use rand;
+use rand::seq::SliceRandom;
 use hex;
+
+// Entropy module
+use securebuffer::entropy::{
+    fast_entropy,
+    fast_entropy_with_fingerprint,
+    hybrid_entropy,
+    hybrid_entropy_with_fingerprint,
+};
 
 // Version information
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -164,10 +174,10 @@ impl Config {
             rust_tls_cert_path: env::var("RUST_TLS_CERT_PATH").unwrap_or("/app/config/tls/cert.pem".to_string()),
             rust_tls_key_path: env::var("RUST_TLS_KEY_PATH").unwrap_or("/app/config/tls/key.pem".to_string()),
             rust_redis_url: env::var("RUST_REDIS_URL").unwrap_or("redis://redis:6379".to_string()),
-            // Protocol toggles (default: only Bitcoin enabled)
+            // Protocol toggles (default: enable all; can disable via env)
             enable_bitcoin: env::var("ENABLE_BITCOIN").map(|s| s == "true").unwrap_or(true),
-            enable_ethereum: env::var("ENABLE_ETHEREUM").map(|s| s == "true").unwrap_or(false),
-            enable_solana: env::var("ENABLE_SOLANA").map(|s| s == "true").unwrap_or(false),
+            enable_ethereum: env::var("ENABLE_ETHEREUM").map(|s| s == "true").unwrap_or(true),
+            enable_solana: env::var("ENABLE_SOLANA").map(|s| s == "true").unwrap_or(true),
         }
     }
 }
@@ -694,19 +704,67 @@ impl UniversalClient {
 
     async fn connect_to_network(&self) -> Result<(), String> {
         let seeds = self.get_default_seeds();
-        let mut success = 0;
-        for addr in seeds {
-            match tokio::time::timeout(self.cfg.connection_timeout, TcpStream::connect(&addr)).await {
-                Ok(Ok(conn)) => {
-                    conn.set_nodelay(true).ok();
-                    let peer_id = self.generate_peer_id(&addr);
-                    self.peers.lock().await.insert(peer_id, conn);
-                    info!("Connected to peer: {}", addr);
-                    success += 1;
+        if seeds.is_empty() {
+            // Nothing to do; treat as soft-ok so server can start
+            return Ok(());
+        }
+        let mut success = 0u32;
+
+        // Resolve DNS seeds to concrete socket addrs and shuffle
+        let mut addr_list: Vec<String> = Vec::new();
+        for seed in seeds {
+            match tokio::net::lookup_host(seed.as_str()).await {
+                Ok(iter) => {
+                    for sa in iter {
+                        addr_list.push(sa.to_string());
+                    }
                 }
-                Ok(Err(e)) => error!("Failed to connect to {}: {}", addr, e),
-                Err(_) => warn!("Timeout connecting to {}", addr),
+                Err(_) => {
+                    // Keep original entry as-is (may still resolve on connect)
+                    addr_list.push(seed);
+                }
             }
+        }
+        // Dedup and shuffle
+        addr_list.sort();
+        addr_list.dedup();
+        let mut rng = rand::thread_rng();
+        addr_list.shuffle(&mut rng);
+
+        // Limit concurrent dials to avoid burst
+        let max_concurrent = (self.cfg.max_connections.max(1) as usize).min(16);
+        let mut idx = 0usize;
+
+        while idx < addr_list.len() {
+            let batch = &addr_list[idx..(idx + max_concurrent).min(addr_list.len())];
+            let mut handles = Vec::with_capacity(batch.len());
+            for addr in batch.iter().cloned() {
+                let timeout = self.cfg.connection_timeout;
+                let peers = self.peers.clone();
+                let protocol = self.protocol.clone();
+                handles.push(tokio::spawn(async move {
+                    match tokio::time::timeout(timeout, TcpStream::connect(&addr)).await {
+                        Ok(Ok(conn)) => {
+                            conn.set_nodelay(true).ok();
+                            let mut hasher = Sha256::new();
+                            hasher.update(addr.as_bytes());
+                            hasher.update(protocol.to_string().as_bytes());
+                            let result = hasher.finalize();
+                            let peer_id = format!("peer_{:x}", u64::from_be_bytes(result[0..8].try_into().unwrap()));
+                            peers.lock().await.insert(peer_id, conn);
+                            debug!("Connected to {} for {:?}", addr, protocol);
+                            true
+                        }
+                        _ => false,
+                    }
+                }));
+            }
+
+            for h in handles {
+                if let Ok(true) = h.await { success += 1; }
+            }
+            if success > 0 { break; }
+            idx += batch.len();
         }
         if success == 0 {
             Err("Failed to connect to any peers".to_string())
@@ -732,15 +790,13 @@ impl UniversalClient {
                 return list;
             }
         }
-        match self.protocol {
+    match self.protocol {
             ProtocolType::Bitcoin => vec![
-                "seed.bitcoin.sipa.be:8333".to_string(),
-                "dnsseed.bluematt.me:8333".to_string(),
-                "dnsseed.bitcoin.dashjr.org:8333".to_string(),
-                "seed.bitcoinstats.com:8333".to_string(),
-                "seed.bitnodes.io:8333".to_string(),
-                "dnsseed.emzy.de:8333".to_string(),
-                "seed.bitcoin.jonasschnelli.ch:8333".to_string(),
+        // Note: Provide your reachable peers via BITCOIN_SEEDS env for reliability.
+        // These DNS seeders may not accept direct peer connections themselves.
+        "seed.bitcoin.sipa.be:8333".to_string(),
+        "seed.bitcoinstats.com:8333".to_string(),
+        "seed.bitnodes.io:8333".to_string(),
             ],
             ProtocolType::Ethereum => vec![
                 "18.138.108.67:30303".to_string(),
@@ -748,12 +804,17 @@ impl UniversalClient {
                 "34.255.23.113:30303".to_string(),
                 "35.158.244.151:30303".to_string(),
                 "52.74.57.123:30303".to_string(),
+        // Public RPC hosts (TCP reachability only)
+        "rpc.ankr.com:443".to_string(),
+        "cloudflare-eth.com:443".to_string(),
             ],
             ProtocolType::Solana => vec![
-                // Use raw host:port for TCP probing; JSON-RPC is HTTP but initial connectivity
-                // checks should avoid URL schemes here.
-                // Defaults intentionally empty to avoid noisy connection attempts unless enabled
-                // Provide SOLANA_SEEDS env (comma-separated) to set your own list.
+        // Prefer public RPC endpoints for basic reachability checks
+        "api.mainnet-beta.solana.com:443".to_string(),
+        "solana-api.projectserum.com:443".to_string(),
+        "rpc.ankr.com:443".to_string(),
+        // Native JSON-RPC port
+        "api.mainnet-beta.solana.com:8899".to_string(),
             ],
         }
     }
@@ -843,6 +904,11 @@ impl Server {
             .route("/status", get(status_handler))
             .route("/mempool", get(mempool_handler))
             .route("/chains", get(chains_handler))
+            // Entropy endpoints (non-auth for diagnostics)
+            .route("/entropy/fast", get(entropy_fast_handler))
+            .route("/entropy/fast_fingerprint", get(entropy_fast_fingerprint_handler))
+            .route("/entropy/hybrid", get(entropy_hybrid_handler))
+            .route("/entropy/hybrid_fingerprint", get(entropy_hybrid_fingerprint_handler))
             .route("/ready", get(ready_handler))
             .route("/generate-key", post(|| async { "Not implemented yet" }))
             .route("/license", get(license_handler))
@@ -866,6 +932,28 @@ impl Server {
                     }
                 } else {
                     info!("P2P connected for {:?}", protocol);
+                }
+            }
+        });
+
+        // Periodic metrics and reconnect loop
+        let p2p_for_metrics = self.p2p_clients.clone();
+        let metrics = self.metrics.clone();
+        tokio::task::spawn(async move {
+            let mut ticker = interval(Duration::from_secs(15));
+            loop {
+                ticker.tick().await;
+                let mut clients = p2p_for_metrics.lock().await;
+                for (protocol, client) in clients.iter_mut() {
+                    let chain = protocol.to_string();
+                    let count = client.get_peer_count().await as f64;
+                    metrics.set_active_connections(&chain, count);
+                    if count == 0.0 {
+                        // Attempt a reconnect quietly
+                        if let Err(_e) = client.connect_to_network().await {
+                            // keep silent to avoid log noise
+                        }
+                    }
                 }
             }
         });
@@ -1050,12 +1138,30 @@ async fn mempool_handler(
 }
 
 async fn chains_handler(
-    _state: axum::extract::State<Server>,
+    state: axum::extract::State<Server>,
 ) -> impl IntoResponse {
-    let chains = vec!["bitcoin", "ethereum", "solana"];
+    let mut details = Vec::new();
+    let cfg = state.cfg.clone();
+    let clients = state.p2p_clients.lock().await;
+
+    for (protocol, client) in clients.iter() {
+        let chain = protocol.to_string();
+        let enabled = match protocol {
+            ProtocolType::Bitcoin => cfg.enable_bitcoin,
+            ProtocolType::Ethereum => cfg.enable_ethereum,
+            ProtocolType::Solana => cfg.enable_solana,
+        };
+        let peers = client.get_peer_count().await;
+        details.push(json!({
+            "chain": chain,
+            "enabled": enabled,
+            "connected_peers": peers,
+        }));
+    }
+
     let resp = json!({
-        "chains": chains,
-        "total_chains": chains.len(),
+        "chains": details,
+        "total_chains": details.len(),
         "unified_api": true,
         "latency_target": "100ms P99",
     });
@@ -1131,11 +1237,12 @@ async fn enterprise_entropy_handler(
     Path(path): Path<String>,
 ) -> impl IntoResponse {
     // Enterprise entropy monitoring endpoint
+    let bytes = fast_entropy_with_fingerprint();
     let resp = json!({
         "entropy": {
-            "level": 0.85,
+            "bytes_base64": base64::encode(bytes),
             "quality": "high",
-            "source": "system",
+            "source": "os+jitter+fingerprint",
             "timestamp": Utc::now().to_rfc3339(),
         },
         "path": path,
@@ -1171,6 +1278,60 @@ async fn system_temperature_handler(
             "network": 55.8,
             "timestamp": Utc::now().to_rfc3339(),
         },
+    });
+    (StatusCode::OK, Json(resp))
+}
+
+// --- Entropy endpoints ---
+async fn entropy_fast_handler(
+    _state: axum::extract::State<Server>,
+) -> impl IntoResponse {
+    let bytes = fast_entropy();
+    let resp = json!({
+        "algorithm": "fast_entropy",
+        "bytes_base64": base64::encode(bytes),
+        "len": 32,
+        "timestamp": Utc::now().to_rfc3339(),
+    });
+    (StatusCode::OK, Json(resp))
+}
+
+async fn entropy_fast_fingerprint_handler(
+    _state: axum::extract::State<Server>,
+) -> impl IntoResponse {
+    let bytes = fast_entropy_with_fingerprint();
+    let resp = json!({
+        "algorithm": "fast_entropy_with_fingerprint",
+        "bytes_base64": base64::encode(bytes),
+        "len": 32,
+        "timestamp": Utc::now().to_rfc3339(),
+    });
+    (StatusCode::OK, Json(resp))
+}
+
+async fn entropy_hybrid_handler(
+    _state: axum::extract::State<Server>,
+) -> impl IntoResponse {
+    // Use empty headers by default; production can POST headers
+    let bytes = hybrid_entropy(&[]);
+    let resp = json!({
+        "algorithm": "hybrid_entropy",
+        "bytes_base64": base64::encode(bytes),
+        "len": 32,
+        "timestamp": Utc::now().to_rfc3339(),
+    });
+    (StatusCode::OK, Json(resp))
+}
+
+async fn entropy_hybrid_fingerprint_handler(
+    _state: axum::extract::State<Server>,
+) -> impl IntoResponse {
+    let bytes = hybrid_entropy_with_fingerprint(&[]);
+    let resp = json!({
+        "algorithm": "hybrid_entropy_with_fingerprint",
+        "bytes_base64": base64::encode(bytes),
+        "len": 32,
+        "timestamp": Utc::now().to_rfc3339(),
     });
     (StatusCode::OK, Json(resp))
 }

@@ -2,9 +2,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
-	"encoding/json"
 )
 
 // Test structures matching our updated multi-chain infrastructure
@@ -59,10 +59,10 @@ func main() {
 	// Test 2: ZMQ Mock Functionality
 	fmt.Println("🔄 Test 2: ZMQ Mock Enhanced Simulation")
 	fmt.Println("   Testing realistic blockchain event simulation...")
-	
+
 	for i := 0; i < 5; i++ {
 		event := simulateZMQMockEvent("bitcoin", uint32(860000+i+1), "ENTERPRISE")
-		fmt.Printf("   📦 Mock Block %d: %s (%.1fms)\n", 
+		fmt.Printf("   📦 Mock Block %d: %s (%.1fms)\n",
 			event.Height, event.Hash[:16]+"...", event.RelayTime)
 		time.Sleep(500 * time.Millisecond)
 	}
@@ -82,12 +82,12 @@ func main() {
 	endpoints := []string{
 		"/health",
 		"/api/v1/sprint/value",
-		"/api/v1/sprint/latency-stats", 
+		"/api/v1/sprint/latency-stats",
 		"/api/v1/universal/bitcoin/latest",
 		"/api/v1/universal/ethereum/latest",
 		"/api/v1/universal/solana/latest",
 	}
-	
+
 	fmt.Println("   Multi-chain API structure:")
 	for _, endpoint := range endpoints {
 		fmt.Printf("   ✅ %s\n", endpoint)
@@ -139,7 +139,7 @@ func main() {
 	fmt.Println("   • Multi-chain unified API architecture")
 	fmt.Println("   • Enterprise-grade performance targets")
 	fmt.Println("")
-	fmt.Printf("Infrastructure validation completed at: %s\n", 
+	fmt.Printf("Infrastructure validation completed at: %s\n",
 		time.Now().Format("2006-01-02 15:04:05 MST"))
 }
 
@@ -173,7 +173,7 @@ func simulateZMQMockEvent(chain string, height uint32, tier string) ZMQMockEvent
 func generateRealisticHash(height uint32) string {
 	// Generate Bitcoin-style hash with leading zeros
 	baseHash := "000000000000000000"
-	
+
 	// Add height-based variation
 	heightStr := ""
 	h := height
@@ -182,7 +182,7 @@ func generateRealisticHash(height uint32) string {
 		heightStr = string(char) + heightStr
 		h /= 16
 	}
-	
+
 	// Add timestamp-based randomness
 	now := time.Now().UnixNano()
 	randomPart := ""
@@ -190,6 +190,6 @@ func generateRealisticHash(height uint32) string {
 		char := "0123456789abcdef"[(now+int64(height)*int64(i))%16]
 		randomPart += string(char)
 	}
-	
+
 	return baseHash + heightStr + randomPart[:24]
 }

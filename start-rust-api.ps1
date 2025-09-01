@@ -25,36 +25,35 @@ New-Item -ItemType Directory -Force -Path $logdir | Out-Null
 # Start detached with redirected output
 $logOut = Join-Path $logdir 'bitcoin_sprint_api.out.log'
 $logErr = Join-Path $logdir 'bitcoin_sprint_api.err.log'
+# If an old process is running, stop it to avoid file locks
+if (Test-Path $pidfile) {
+    try {
+        $oldPid = Get-Content -Path $pidfile -ErrorAction Stop
+        if ($oldPid) {
+            $p = Get-Process -Id $oldPid -ErrorAction SilentlyContinue
+            if ($p) { Stop-Process -Id $oldPid -Force -ErrorAction SilentlyContinue }
+        }
+    } catch {}
+}
 
-$psi = New-Object System.Diagnostics.ProcessStartInfo
-$psi.FileName = $exe
-$psi.WorkingDirectory = (Split-Path $exe -Parent)
-$psi.UseShellExecute = $false
-$psi.RedirectStandardOutput = $true
-$psi.RedirectStandardError = $true
-$psi.Environment['API_HOST'] = $env:API_HOST
-$psi.Environment['API_PORT'] = $env:API_PORT
-$psi.Environment['RUST_WEB_SERVER_ENABLED'] = $env:RUST_WEB_SERVER_ENABLED
-# Default protocol flags to avoid noisy localhost connections
+# Ensure env is present in current process so child inherits it
+$env:API_HOST = $env:API_HOST
+$env:API_PORT = $env:API_PORT
+$env:RUST_WEB_SERVER_ENABLED = $env:RUST_WEB_SERVER_ENABLED
+# Default protocol flags: enable all unless explicitly disabled
 if (-not $env:ENABLE_BITCOIN)  { $env:ENABLE_BITCOIN  = 'true' }
-if (-not $env:ENABLE_ETHEREUM) { $env:ENABLE_ETHEREUM = 'false' }
-if (-not $env:ENABLE_SOLANA)   { $env:ENABLE_SOLANA   = 'false' }
+if (-not $env:ENABLE_ETHEREUM) { $env:ENABLE_ETHEREUM = 'true' }
+if (-not $env:ENABLE_SOLANA)   { $env:ENABLE_SOLANA   = 'true' }
 
-$psi.Environment['ENABLE_BITCOIN']  = $env:ENABLE_BITCOIN
-$psi.Environment['ENABLE_ETHEREUM'] = $env:ENABLE_ETHEREUM
-$psi.Environment['ENABLE_SOLANA']   = $env:ENABLE_SOLANA
+# Optional seed overrides are already in $env for inheritance
 
-$proc = New-Object System.Diagnostics.Process
-$proc.StartInfo = $psi
-[void]$proc.Start()
-
-# Async log handlers (attach handlers before starting read)
-$stdOutHandler = [System.Diagnostics.DataReceivedEventHandler]{ param($s,$e) if($e.Data){ Add-Content -Path $logOut -Value $e.Data } }
-$stdErrHandler = [System.Diagnostics.DataReceivedEventHandler]{ param($s,$e) if($e.Data){ Add-Content -Path $logErr -Value $e.Data } }
-$proc.add_OutputDataReceived($stdOutHandler)
-$proc.add_ErrorDataReceived($stdErrHandler)
-$proc.BeginOutputReadLine()
-$proc.BeginErrorReadLine()
+# Launch detached via Start-Process with redirected logs
+$proc = Start-Process -FilePath $exe \
+    -WorkingDirectory (Split-Path $exe -Parent) \
+    -WindowStyle Hidden \
+    -RedirectStandardOutput $logOut \
+    -RedirectStandardError $logErr \
+    -PassThru
 
 Set-Content -Path $pidfile -Value $proc.Id
 Write-Host ("Started bitcoin_sprint_api.exe (PID {0}) on {1}:{2}" -f $proc.Id,$env:API_HOST,$env:API_PORT) -ForegroundColor Green

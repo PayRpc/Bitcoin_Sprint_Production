@@ -1,5 +1,4 @@
 //go:build cgo
-// +build cgo
 
 package entropy
 
@@ -11,9 +10,9 @@ import (
 )
 
 // FastEntropyRust returns fast entropy using the full Rust implementation
-func FastEntropyRust() ([]byte, error) {
-	return securebuf.FastEntropy()
-}
+// func FastEntropyRust() ([]byte, error) {
+// 	return securebuf.FastEntropy()
+// }
 
 // HybridEntropyRustWithHeaders returns entropy using Bitcoin headers via Rust
 func HybridEntropyRustWithHeaders(headers [][]byte) ([]byte, error) {
@@ -21,14 +20,14 @@ func HybridEntropyRustWithHeaders(headers [][]byte) ([]byte, error) {
 }
 
 // SystemFingerprintRust returns hardware fingerprint via Rust
-func SystemFingerprintRust() ([32]byte, error) {
-	return securebuf.SystemFingerprint()
-}
+// func SystemFingerprintRust() ([]byte, error) {
+// 	return securebuf.SystemFingerprint()
+// }
 
 // GetCPUTemperatureRust returns CPU temperature via Rust
-func GetCPUTemperatureRust() (float64, error) {
-	return securebuf.GetCPUTemperature()
-}
+// func GetCPUTemperatureRust() (float32, error) {
+// 	return securebuf.GetCPUTemperature()
+// }
 
 // CreateEntropyBuffer creates a SecureBuffer pre-filled with entropy
 func CreateEntropyBuffer(capacity int) (*securebuf.Buffer, error) {
@@ -41,7 +40,7 @@ func CreateEntropyBufferWithHeaders(capacity int, headers [][]byte) (*securebuf.
 }
 
 // CreateEnterpriseEntropyBuffer creates an enterprise-grade entropy buffer
-func CreateEnterpriseEntropyBuffer(capacity int, level securebuf.SecurityLevel) (*securebuf.Buffer, error) {
+func CreateEnterpriseEntropyBuffer(capacity int, level securebuf.SecurityLevel) (*securebuf.EnterpriseBuffer, error) {
 	return securebuf.NewWithSecurityLevel(capacity, level)
 }
 

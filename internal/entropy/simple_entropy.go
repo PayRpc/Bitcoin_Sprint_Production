@@ -36,13 +36,13 @@ func TimingEntropy() ([]byte, error) {
 
 	// Mix timing data
 	timingBytes := (*[8]byte)(unsafe.Pointer(&end))[:8]
-	
+
 	// Combine with hash
 	hasher := sha256.New()
 	hasher.Write(baseData)
 	hasher.Write(timingBytes)
 	hasher.Write([]byte(start.String()))
-	
+
 	return hasher.Sum(nil), nil
 }
 
@@ -50,25 +50,25 @@ func TimingEntropy() ([]byte, error) {
 func EnhancedEntropyGo() ([]byte, error) {
 	// Multiple entropy sources
 	sources := make([][]byte, 0, 3)
-	
+
 	// Source 1: crypto/rand
 	data1 := make([]byte, 32)
 	if _, err := rand.Read(data1); err != nil {
 		return nil, err
 	}
 	sources = append(sources, data1)
-	
+
 	// Source 2: timing-based
 	timing, err := TimingEntropy()
 	if err != nil {
 		return nil, err
 	}
 	sources = append(sources, timing)
-	
+
 	// Source 3: memory address randomness
 	addr := uintptr(unsafe.Pointer(&sources))
 	addrBytes := (*[8]byte)(unsafe.Pointer(&addr))[:8]
-	
+
 	// Final mixing
 	hasher := sha256.New()
 	for _, source := range sources {
@@ -76,6 +76,6 @@ func EnhancedEntropyGo() ([]byte, error) {
 	}
 	hasher.Write(addrBytes)
 	hasher.Write([]byte(time.Now().String()))
-	
+
 	return hasher.Sum(nil), nil
 }

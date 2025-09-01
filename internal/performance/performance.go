@@ -50,11 +50,11 @@ type WorkerPool struct {
 
 // Worker represents a single worker in the pool
 type Worker struct {
-	id        int
-	taskChan  <-chan Task
-	quitChan  <-chan struct{}
+	id         int
+	taskChan   <-chan Task
+	quitChan   <-chan struct{}
 	processing bool
-	lastTask  time.Time
+	lastTask   time.Time
 }
 
 // Task represents a unit of work for the worker pool
@@ -68,13 +68,13 @@ type Task struct {
 
 // BackpressureController manages backpressure to prevent latency spikes
 type BackpressureController struct {
-	mu                sync.RWMutex
-	queueDepth        int
-	maxQueueDepth     int
-	backpressureLevel int
+	mu                 sync.RWMutex
+	queueDepth         int
+	maxQueueDepth      int
+	backpressureLevel  int
 	backpressureEvents int64
-	lastAdjustment    time.Time
-	samplingInterval  time.Duration
+	lastAdjustment     time.Time
+	samplingInterval   time.Duration
 }
 
 // PipelineStats tracks pipeline performance metrics for flat latency monitoring
@@ -89,15 +89,15 @@ type PipelineStats struct {
 
 // BufferPool manages reusable memory buffers
 type BufferPool struct {
-	pools    map[int]*sync.Pool
-	mu       sync.RWMutex
-	maxSize  int
+	pools   map[int]*sync.Pool
+	mu      sync.RWMutex
+	maxSize int
 }
 
 // New creates a new performance manager with automatic optimization level detection
 func New(cfg config.Config, logger *zap.Logger) *PerformanceManager {
 	level := LevelHigh // Default to high performance
-	
+
 	// Determine optimization level based on tier
 	switch cfg.Tier {
 	case config.TierTurbo, config.TierEnterprise:
@@ -371,11 +371,11 @@ func (bp *BufferPool) Get(size int) []byte {
 	if size > bp.maxSize {
 		return make([]byte, size)
 	}
-	
+
 	bp.mu.RLock()
 	pool, exists := bp.pools[size]
 	bp.mu.RUnlock()
-	
+
 	if !exists {
 		bp.mu.Lock()
 		if bp.pools[size] == nil {
@@ -388,12 +388,12 @@ func (bp *BufferPool) Get(size int) []byte {
 		pool = bp.pools[size]
 		bp.mu.Unlock()
 	}
-	
+
 	buf := pool.Get().([]byte)
-	
+
 	// Attempt to lock buffer in memory for sensitive data (best-effort)
 	bp.lockBufferInMemory(buf)
-	
+
 	return buf
 }
 
@@ -403,14 +403,14 @@ func (bp *BufferPool) Put(buf []byte) {
 	if size > bp.maxSize {
 		return
 	}
-	
+
 	// Unlock buffer from memory before returning to pool
 	bp.unlockBufferFromMemory(buf)
-	
+
 	bp.mu.RLock()
 	pool, exists := bp.pools[size]
 	bp.mu.RUnlock()
-	
+
 	if exists {
 		// Clear buffer before returning to pool
 		for i := range buf {
@@ -429,14 +429,14 @@ func (bp *BufferPool) lockBufferInMemory(buf []byte) {
 			// Silently ignore locking failures
 		}
 	}()
-	
+
 	// For sensitive data buffers, attempt to lock in memory
 	// This prevents sensitive data from being paged out
 	if len(buf) > 0 {
 		// Use Windows VirtualLock via kernel32.dll
 		kernel32 := syscall.NewLazyDLL("kernel32.dll")
 		virtualLock := kernel32.NewProc("VirtualLock")
-		
+
 		if virtualLock != nil {
 			addr := uintptr(unsafe.Pointer(&buf[0]))
 			size := uintptr(len(buf))
@@ -452,12 +452,12 @@ func (bp *BufferPool) unlockBufferFromMemory(buf []byte) {
 			// Silently ignore unlocking failures
 		}
 	}()
-	
+
 	if len(buf) > 0 {
 		// Use Windows VirtualUnlock via kernel32.dll
 		kernel32 := syscall.NewLazyDLL("kernel32.dll")
 		virtualUnlock := kernel32.NewProc("VirtualUnlock")
-		
+
 		if virtualUnlock != nil {
 			addr := uintptr(unsafe.Pointer(&buf[0]))
 			size := uintptr(len(buf))
@@ -469,14 +469,14 @@ func (bp *BufferPool) unlockBufferFromMemory(buf []byte) {
 // ApplyOptimizations applies all performance optimizations based on configuration
 func (pm *PerformanceManager) ApplyOptimizations() error {
 	pm.logger.Info("Applying performance optimizations",
-		zap.String("level", pm.getOptimizationLevelName()),
+		zap.String("level", pm.GetOptimizationLevelName()),
 		zap.String("tier", string(pm.cfg.Tier)),
 	)
 
 	// 1. Runtime optimizations (always applied)
 	pm.applyRuntimeOptimizations()
 
-	// 2. Memory optimizations 
+	// 2. Memory optimizations
 	pm.applyMemoryOptimizations()
 
 	// 3. CPU optimizations
@@ -571,9 +571,9 @@ func (pm *PerformanceManager) applySystemOptimizations() error {
 // setHighPriority sets the process to high priority (Windows-specific)
 func (pm *PerformanceManager) setHighPriority() error {
 	if runtime.GOOS == "windows" {
-	return pm.setWindowsHighPriority()
+		return pm.setWindowsHighPriority()
 	}
-	
+
 	// For Unix-like systems, we could implement nice() calls here
 	pm.logger.Debug("High priority optimization not implemented for this OS")
 	return nil
@@ -588,8 +588,8 @@ func (pm *PerformanceManager) preallocateBuffers() {
 	}
 
 	// Pre-populate the buffer pool with commonly used buffer sizes
-	bufferSizes := []int{bufferSize, bufferSize*2, bufferSize*4, 4096, 8192}
-	
+	bufferSizes := []int{bufferSize, bufferSize * 2, bufferSize * 4, 4096, 8192}
+
 	totalBuffers := 0
 	for _, size := range bufferSizes {
 		// Pre-allocate 5 buffers of each size
@@ -607,8 +607,8 @@ func (pm *PerformanceManager) preallocateBuffers() {
 	)
 }
 
-// getOptimizationLevelName returns the string representation of optimization level
-func (pm *PerformanceManager) getOptimizationLevelName() string {
+// GetOptimizationLevelName returns the string representation of optimization level
+func (pm *PerformanceManager) GetOptimizationLevelName() string {
 	switch pm.level {
 	case LevelMaximum:
 		return "maximum"
@@ -625,8 +625,8 @@ func (pm *PerformanceManager) GetCurrentStats() map[string]interface{} {
 	runtime.ReadMemStats(&m)
 
 	return map[string]interface{}{
-		"optimization_level": pm.getOptimizationLevelName(),
-		"tier":              string(pm.cfg.Tier),
+		"optimization_level": pm.GetOptimizationLevelName(),
+		"tier":               string(pm.cfg.Tier),
 		"runtime": map[string]interface{}{
 			"gomaxprocs":     runtime.GOMAXPROCS(0),
 			"num_cpu":        runtime.NumCPU(),
@@ -640,10 +640,10 @@ func (pm *PerformanceManager) GetCurrentStats() map[string]interface{} {
 			"num_gc":         m.NumGC,
 		},
 		"config": map[string]interface{}{
-			"lock_os_thread":    pm.cfg.LockOSThread,
-			"high_priority":     pm.cfg.HighPriority,
-			"prealloc_buffers":  pm.cfg.PreallocBuffers,
-			"optimize_system":   pm.cfg.OptimizeSystem,
+			"lock_os_thread":   pm.cfg.LockOSThread,
+			"high_priority":    pm.cfg.HighPriority,
+			"prealloc_buffers": pm.cfg.PreallocBuffers,
+			"optimize_system":  pm.cfg.OptimizeSystem,
 		},
 	}
 }
@@ -699,7 +699,7 @@ func (pm *PerformanceManager) GetPerformanceStats() map[string]interface{} {
 	return map[string]interface{}{
 		"average_latency_ms":     avgLatency.Milliseconds(),
 		"average_utilization":    avgUtilization,
-		"queue_depth":           queueDepth,
+		"queue_depth":            queueDepth,
 		"backpressure_level":     backpressureLevel,
 		"backpressure_events":    backpressureEvents,
 		"active_workers":         pm.countActiveWorkers(workerStats),
@@ -739,14 +739,14 @@ func (pm *PerformanceManager) RunLatencyBenchmark(duration time.Duration, concur
 
 	start := time.Now()
 	results := &LatencyBenchmarkResult{
-		P50Latencies:    make([]time.Duration, 0),
-		P95Latencies:    make([]time.Duration, 0),
-		P99Latencies:    make([]time.Duration, 0),
-		P999Latencies:   make([]time.Duration, 0),
-		RawLatencies:    make([]time.Duration, 0),
-		StartTime:       start,
-		EndTime:         start.Add(duration),
-		Concurrency:     concurrency,
+		P50Latencies:  make([]time.Duration, 0),
+		P95Latencies:  make([]time.Duration, 0),
+		P99Latencies:  make([]time.Duration, 0),
+		P999Latencies: make([]time.Duration, 0),
+		RawLatencies:  make([]time.Duration, 0),
+		StartTime:     start,
+		EndTime:       start.Add(duration),
+		Concurrency:   concurrency,
 	}
 
 	// Create work generator
@@ -847,24 +847,24 @@ func (pm *PerformanceManager) RunLatencyBenchmark(duration time.Duration, concur
 
 // LatencyBenchmarkResult contains the results of a latency benchmark
 type LatencyBenchmarkResult struct {
-	mu                sync.RWMutex
-	P50Latencies      []time.Duration
-	P95Latencies      []time.Duration
-	P99Latencies      []time.Duration
-	P999Latencies     []time.Duration
-	RawLatencies      []time.Duration
-	StartTime         time.Time
-	EndTime           time.Time
-	Concurrency       int
-	TotalRequests     int
-	Errors            int
+	mu                 sync.RWMutex
+	P50Latencies       []time.Duration
+	P95Latencies       []time.Duration
+	P99Latencies       []time.Duration
+	P999Latencies      []time.Duration
+	RawLatencies       []time.Duration
+	StartTime          time.Time
+	EndTime            time.Time
+	Concurrency        int
+	TotalRequests      int
+	Errors             int
 	BackpressureEvents int
 
 	// Calculated percentiles
-	P50Latency        time.Duration
-	P95Latency        time.Duration
-	P99Latency        time.Duration
-	P999Latency       time.Duration
+	P50Latency  time.Duration
+	P95Latency  time.Duration
+	P99Latency  time.Duration
+	P999Latency time.Duration
 }
 
 // calculatePercentiles calculates latency percentiles from raw data
@@ -905,17 +905,17 @@ func (r *LatencyBenchmarkResult) GetLatencyDistribution() map[string]interface{}
 	defer r.mu.RUnlock()
 
 	return map[string]interface{}{
-		"p50_ms":             r.P50Latency.Milliseconds(),
-		"p95_ms":             r.P95Latency.Milliseconds(),
-		"p99_ms":             r.P99Latency.Milliseconds(),
-		"p999_ms":            r.P999Latency.Milliseconds(),
-		"total_requests":     r.TotalRequests,
-		"errors":             r.Errors,
+		"p50_ms":              r.P50Latency.Milliseconds(),
+		"p95_ms":              r.P95Latency.Milliseconds(),
+		"p99_ms":              r.P99Latency.Milliseconds(),
+		"p999_ms":             r.P999Latency.Milliseconds(),
+		"total_requests":      r.TotalRequests,
+		"errors":              r.Errors,
 		"backpressure_events": r.BackpressureEvents,
-		"concurrency":        r.Concurrency,
-		"duration_seconds":   r.EndTime.Sub(r.StartTime).Seconds(),
+		"concurrency":         r.Concurrency,
+		"duration_seconds":    r.EndTime.Sub(r.StartTime).Seconds(),
 		"requests_per_second": float64(r.TotalRequests) / r.EndTime.Sub(r.StartTime).Seconds(),
-		"curve_flatness":     r.calculateFlatness(),
+		"curve_flatness":      r.calculateFlatness(),
 	}
 }
 

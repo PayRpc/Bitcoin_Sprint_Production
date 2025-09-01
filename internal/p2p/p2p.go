@@ -184,12 +184,12 @@ func (c *Client) Run() {
 
 	// Production Bitcoin seed nodes
 	nodes := []string{
-		"seed.bitcoin.sipa.be:8333",      // Pieter Wuille
-		"dnsseed.bluematt.me:8333",       // Matt Corallo
-		"dnsseed.bitcoin.dashjr.org:8333",// Luke Dashjr
-		"seed.bitcoinstats.com:8333",     // Christian Decker
-		"seed.bitnodes.io:8333",          // Addy Yeow
-		"dnsseed.emzy.de:8333",           // Stephan Oeste
+		"seed.bitcoin.sipa.be:8333",          // Pieter Wuille
+		"dnsseed.bluematt.me:8333",           // Matt Corallo
+		"dnsseed.bitcoin.dashjr.org:8333",    // Luke Dashjr
+		"seed.bitcoinstats.com:8333",         // Christian Decker
+		"seed.bitnodes.io:8333",              // Addy Yeow
+		"dnsseed.emzy.de:8333",               // Stephan Oeste
 		"seed.bitcoin.jonasschnelli.ch:8333", // Jonas Schnelli
 	}
 

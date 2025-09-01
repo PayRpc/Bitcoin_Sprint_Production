@@ -25,7 +25,7 @@ func FastEntropy() []byte {
 	if result != 0 {
 		// If FFI fails, return pseudo-random data
 		for i := range buffer {
-			buffer[i] = byte(i * 7 + 42) // Simple fallback
+			buffer[i] = byte(i*7 + 42) // Simple fallback
 		}
 	}
 	return buffer

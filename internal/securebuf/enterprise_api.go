@@ -1,5 +1,10 @@
-// Package securebuf - Enterprise API integration
+//go:build !cgo
+// +build !cgo
+
+// Package securebuf - Enterprise API integration (fallback when CGO is disabled)
 // This file provides high-level Go APIs that bridge to the enterprise FFI functions
+// for environments where CGO/Rust library is not available. When CGO is enabled,
+// the FFI-backed implementations in enterprise_ffi.go are used instead.
 package securebuf
 
 import (
@@ -18,13 +23,8 @@ const (
 	SecurityHardware
 )
 
-// Check if CGO is available at runtime
-var CGoEnabled = isCGoEnabled()
-
-func isCGoEnabled() bool {
-	// Simple check - in real implementation this would detect CGO availability
-	return false // Set to true when CGO and Rust library are available
-}
+// CGO is not available in this build; keep helpers consistent but static.
+var CGoEnabled = false
 
 // Enterprise Security API Functions
 // These functions provide access to the enterprise features from the C FFI layer

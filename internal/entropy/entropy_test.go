@@ -34,7 +34,7 @@ func TestHybridEntropyBasic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HybridEntropy failed: %v", err)
 	}
-	
+
 	if len(entropy) != 32 {
 		t.Fatalf("Expected 32 bytes, got %d", len(entropy))
 	}

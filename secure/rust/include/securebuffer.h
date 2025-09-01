@@ -96,6 +96,7 @@ extern "C"
 
 	// Core types
 	typedef struct SecureBuffer SecureBuffer;
+	typedef struct SecureBuffer *SecureBufferHandle;
 	typedef struct SecureChannelPool SecureChannelPool;
 
 	// === Core Buffer Operations ===

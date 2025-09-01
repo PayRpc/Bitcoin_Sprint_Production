@@ -1,3 +1,6 @@
+//go:build !cgo
+// +build !cgo
+
 // Package securebuf provides secure memory buffer operations (fallback when CGO is disabled)
 package securebuf
 
@@ -241,10 +244,10 @@ func (b *Buffer) zeroize() {
 
 // SecureBufferPool manages a pool of secure buffers for flat latency
 type SecureBufferPool struct {
-	pools    map[int]*sync.Pool
-	mu       sync.RWMutex
-	maxSize  int
-	minSize  int
+	pools   map[int]*sync.Pool
+	mu      sync.RWMutex
+	maxSize int
+	minSize int
 }
 
 // NewSecureBufferPool creates a new secure buffer pool
@@ -316,7 +319,7 @@ func (sbp *SecureBufferPool) GetPoolStats() map[string]interface{} {
 	defer sbp.mu.RUnlock()
 
 	return map[string]interface{}{
-		"pool_sizes":     len(sbp.pools),
+		"pool_sizes":      len(sbp.pools),
 		"max_buffer_size": sbp.maxSize,
 		"min_buffer_size": sbp.minSize,
 	}

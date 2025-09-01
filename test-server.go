@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"log"
+	"net/http"
 )
 
 func main() {
@@ -11,7 +11,7 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"status": "test server working", "port": "8080"}`)
 	})
-	
+
 	fmt.Println("Test server starting on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
