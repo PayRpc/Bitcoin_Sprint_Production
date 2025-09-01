@@ -2,7 +2,7 @@
 // Bitcoin Sprint - Enterprise-Grade Hardened Storage Verification Web API
 // Production-ready with TLS, Redis rate limiting, circuit breakers, and advanced monitoring
 
-#[cfg(feature = "web-server")]
+#[cfg(all(feature = "web-server", not(feature = "axum-only")))]
 
 use actix_web::{web, App, HttpServer, Responder, HttpResponse, Result, HttpRequest, HttpMessage};
 use actix_web::middleware::{self, Next};

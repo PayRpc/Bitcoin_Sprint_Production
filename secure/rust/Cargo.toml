@@ -80,6 +80,7 @@ lazy_static = "1.4"
 default = []
 ipfs = ["reqwest"]
 web-server = ["actix-web", "actix-rt", "uuid", "futures", "axum", "axum-extra", "chrono", "dotenvy", "num_cpus"]
+axum-only = ["axum", "axum-extra", "chrono", "dotenvy", "num_cpus", "uuid"]
 hardened = ["web-server", "axum-server", "rustls-pemfile", "redis", "tower", "tower-http"]
 
 [[bin]]
@@ -95,7 +96,7 @@ required-features = ["web-server"]
 [[bin]]
 name = "bitcoin_sprint_api"
 path = "src/bin/bitcoin_sprint_api_new.rs"
-required-features = ["web-server"]
+required-features = ["axum-only"]
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

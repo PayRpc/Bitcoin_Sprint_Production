@@ -2,7 +2,11 @@
   "dashboard": {
     "id": null,
     "title": "Bitcoin Sprint - Blockchain Monitoring",
-    "tags": ["bitcoin", "ethereum", "blockchain"],
+    "tags": [
+      "bitcoin",
+      "ethereum",
+      "blockchain"
+    ],
     "style": "dark",
     "timezone": "browser",
     "panels": [
@@ -34,7 +38,7 @@
                   "value": null
                 },
                 {
-                  "color": "yellow", 
+                  "color": "yellow",
                   "value": 1
                 },
                 {

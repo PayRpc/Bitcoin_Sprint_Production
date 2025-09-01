@@ -109,9 +109,6 @@ services:
     depends_on:
       - redis
       - postgres
-      - bitcoin-core
-      - geth
-      - solana-validator
     networks:
       - sprint-network
     restart: unless-stopped
@@ -125,7 +122,6 @@ services:
   bitcoin-core:
     image: bitcoin/bitcoin:latest
     container_name: bitcoin-core
-    profiles: ["default"]
     ports:
       - "8332:8332"     # RPC
       - "8333:8333"     # P2P
@@ -249,14 +245,14 @@ services:
       dockerfile: Dockerfile.bitcoin-exporter
     container_name: bitcoin-exporter
     ports:
-      - "8082:8080"     # Metrics exporter (changed to avoid conflict)
+      - "8084:8080"     # Metrics exporter (changed from 8082 to avoid bitcoin-sprint conflict)
     environment:
       - RPC_HOST=bitcoin-core
       - RPC_PORT=8332
       - RPC_USER=sprint
       - RPC_PASSWORD=sprint_password_2025
     depends_on:
-      - bitcoin-core
+      - redis
     networks:
       - sprint-network
     restart: unless-stopped
@@ -552,7 +548,7 @@ services:
     image: redis:7.2-alpine
     container_name: sprint-redis
     ports:
-      - "6379:6379"
+      - "6380:6379"     # Changed from 6379 to avoid local Redis conflict
     volumes:
       - redis-data:/data
     command: |
@@ -568,7 +564,7 @@ services:
     image: postgres:15-alpine
     container_name: sprint-postgres
     ports:
-      - "5432:5432"
+      - "5433:5432"     # Changed from 5432 to avoid local PostgreSQL conflict
     environment:
       - POSTGRES_DB=sprint_db
       - POSTGRES_USER=sprint
@@ -690,12 +686,17 @@ services:
     container_name: bitcoin-sprint-web
     ports:
       - "3002:3002"     # Web Dashboard
-    env_file:
-      - ./web/.env.production
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=http://bitcoin-sprint:8080/api
       - NEXT_PUBLIC_APP_ENV=production
+      - DATABASE_URL=postgresql://sprint:sprint@postgres:5432/sprint_db
+      - ADMIN_SECRET=bitcoin-sprint-admin-secret-2025-docker
+      - GO_API_URL=http://bitcoin-sprint:8080
+      - API_KEY=bitcoin-sprint-prod-key-2025
+      - BITCOIN_RPC_URL=http://bitcoin-core:8332
+      - BITCOIN_RPC_USER=sprint
+      - BITCOIN_RPC_PASS=sprint_password_2025
     depends_on:
       - bitcoin-sprint
       - postgres

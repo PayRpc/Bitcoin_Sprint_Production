@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>💀 BITCOIN SPRINT - WORLD CLASS DASHBOARD 💀</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono:wght@400&family=Rajdhani:wght@300;400;600;700&display=swap');
-        
+
         * {
             margin: 0;
             padding: 0;
@@ -39,7 +40,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: 
+            background:
                 radial-gradient(circle at 20% 80%, rgba(0, 255, 255, 0.1) 0%, transparent 50%),
                 radial-gradient(circle at 80% 20%, rgba(255, 7, 58, 0.1) 0%, transparent 50%),
                 radial-gradient(circle at 40% 40%, rgba(57, 255, 20, 0.05) 0%, transparent 50%);
@@ -48,8 +49,13 @@
         }
 
         @keyframes bgShift {
-            0% { transform: scale(1) rotate(0deg); }
-            100% { transform: scale(1.1) rotate(5deg); }
+            0% {
+                transform: scale(1) rotate(0deg);
+            }
+
+            100% {
+                transform: scale(1.1) rotate(5deg);
+            }
         }
 
         .scanlines {
@@ -58,13 +64,11 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: repeating-linear-gradient(
-                0deg,
-                transparent,
-                transparent 2px,
-                rgba(0, 255, 255, 0.03) 2px,
-                rgba(0, 255, 255, 0.03) 4px
-            );
+            background: repeating-linear-gradient(0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(0, 255, 255, 0.03) 2px,
+                    rgba(0, 255, 255, 0.03) 4px);
             pointer-events: none;
             z-index: 1000;
         }
@@ -82,9 +86,17 @@
         }
 
         @keyframes gradientShift {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
         }
 
         .header h1 {
@@ -97,12 +109,13 @@
         }
 
         @keyframes titleGlow {
-            0% { 
-                text-shadow: 0 0 30px var(--neon-blue), 0 0 60px var(--neon-blue); 
+            0% {
+                text-shadow: 0 0 30px var(--neon-blue), 0 0 60px var(--neon-blue);
                 transform: scale(1);
             }
-            100% { 
-                text-shadow: 0 0 50px var(--neon-pink), 0 0 100px var(--neon-pink); 
+
+            100% {
+                text-shadow: 0 0 50px var(--neon-pink), 0 0 100px var(--neon-pink);
                 transform: scale(1.02);
             }
         }
@@ -144,13 +157,30 @@
             animation: pulse 2s infinite;
         }
 
-        .status-dot.online { background: var(--neon-green); }
-        .status-dot.offline { background: var(--neon-pink); }
-        .status-dot.warning { background: var(--neon-yellow); }
+        .status-dot.online {
+            background: var(--neon-green);
+        }
+
+        .status-dot.offline {
+            background: var(--neon-pink);
+        }
+
+        .status-dot.warning {
+            background: var(--neon-yellow);
+        }
 
         @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(1.2); }
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.5;
+                transform: scale(1.2);
+            }
         }
 
         .main-grid {
@@ -165,11 +195,10 @@
         }
 
         .cyber-panel {
-            background: linear-gradient(135deg, 
-                rgba(0, 255, 255, 0.1), 
-                rgba(0, 0, 0, 0.8), 
-                rgba(255, 7, 58, 0.1)
-            );
+            background: linear-gradient(135deg,
+                    rgba(0, 255, 255, 0.1),
+                    rgba(0, 0, 0, 0.8),
+                    rgba(255, 7, 58, 0.1));
             border: 2px solid;
             border-image: linear-gradient(45deg, var(--neon-blue), var(--neon-pink), var(--neon-green)) 1;
             padding: 25px;
@@ -193,8 +222,13 @@
         }
 
         @keyframes borderRotate {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
 
         .cyber-panel:hover {
@@ -232,8 +266,13 @@
         }
 
         @keyframes dataFlicker {
-            0% { opacity: 1; }
-            100% { opacity: 0.9; }
+            0% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0.9;
+            }
         }
 
         .metric-label {
@@ -260,16 +299,18 @@
             transition: all 0.3s ease;
         }
 
-        .network-card.bitcoin { 
-            border-color: #f7931a; 
+        .network-card.bitcoin {
+            border-color: #f7931a;
             box-shadow: 0 0 20px rgba(247, 147, 26, 0.3);
         }
-        .network-card.ethereum { 
-            border-color: #627eea; 
+
+        .network-card.ethereum {
+            border-color: #627eea;
             box-shadow: 0 0 20px rgba(98, 126, 234, 0.3);
         }
-        .network-card.solana { 
-            border-color: #9945ff; 
+
+        .network-card.solana {
+            border-color: #9945ff;
             box-shadow: 0 0 20px rgba(153, 69, 255, 0.3);
         }
 
@@ -330,8 +371,15 @@
         }
 
         @keyframes logAppear {
-            0% { opacity: 0; transform: translateX(-20px); }
-            100% { opacity: 1; transform: translateX(0); }
+            0% {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateX(0);
+            }
         }
 
         .cursor {
@@ -340,8 +388,16 @@
         }
 
         @keyframes blink {
-            0%, 50% { opacity: 1; }
-            51%, 100% { opacity: 0; }
+
+            0%,
+            50% {
+                opacity: 1;
+            }
+
+            51%,
+            100% {
+                opacity: 0;
+            }
         }
 
         .performance-chart {
@@ -363,8 +419,13 @@
         }
 
         @keyframes chartGrow {
-            0% { height: 20%; }
-            100% { height: 90%; }
+            0% {
+                height: 20%;
+            }
+
+            100% {
+                height: 90%;
+            }
         }
 
         .stats-grid {
@@ -411,21 +472,38 @@
         }
 
         @keyframes alertPulse {
-            0%, 100% { transform: translateX(-50%) scale(1); }
-            50% { transform: translateX(-50%) scale(1.05); }
+
+            0%,
+            100% {
+                transform: translateX(-50%) scale(1);
+            }
+
+            50% {
+                transform: translateX(-50%) scale(1.05);
+            }
         }
 
         /* Responsive Design */
         @media (max-width: 768px) {
-            .header h1 { font-size: 3em; }
-            .main-grid { grid-template-columns: 1fr; }
-            .status-bar { flex-direction: column; gap: 10px; }
+            .header h1 {
+                font-size: 3em;
+            }
+
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .status-bar {
+                flex-direction: column;
+                gap: 10px;
+            }
         }
     </style>
 </head>
+
 <body>
     <div class="scanlines"></div>
-    
+
     <div class="status-bar">
         <div class="status-item">
             <div class="status-dot online" id="apiStatus"></div>
@@ -544,7 +622,7 @@
         // Update system time
         function updateSystemTime() {
             const now = new Date();
-            document.getElementById('liveTime').textContent = 
+            document.getElementById('liveTime').textContent =
                 `SYSTEM TIME: ${now.toLocaleTimeString()}`;
         }
 
@@ -552,17 +630,17 @@
         function addLog(message, type = 'info') {
             const timestamp = new Date().toLocaleTimeString();
             const logEntry = `[${timestamp}] ${message}`;
-            
+
             terminalLines.unshift(logEntry);
             if (terminalLines.length > 20) {
                 terminalLines = terminalLines.slice(0, 20);
             }
-            
+
             const terminal = document.getElementById('terminalContent');
-            terminal.innerHTML = terminalLines.map(line => 
+            terminal.innerHTML = terminalLines.map(line =>
                 `<div class="log-line">${line}</div>`
             ).join('') + '<span class="cursor">█</span>';
-            
+
             // Auto-scroll to top for newest logs
             terminal.scrollTop = 0;
         }
@@ -571,7 +649,7 @@
         function generateChart(containerId, dataPoints) {
             const container = document.getElementById(containerId);
             container.innerHTML = '';
-            
+
             dataPoints.forEach((value, index) => {
                 const bar = document.createElement('div');
                 bar.className = 'chart-bar';
@@ -593,11 +671,11 @@
                 if (healthResponse.ok) {
                     const healthData = await healthResponse.json();
                     document.getElementById('apiStatus').className = 'status-dot online';
-                    document.getElementById('apiStatusText').textContent = 
+                    document.getElementById('apiStatusText').textContent =
                         `RUST API: ONLINE (${healthData.service})`;
-                    
+
                     addLog(`✅ Rust Storage Verifier Health Check Passed`);
-                    
+
                     // Fetch metrics from Rust server
                     const metricsResponse = await fetch('http://localhost:8443/metrics');
                     if (metricsResponse.ok) {
@@ -690,7 +768,7 @@
                 document.getElementById('btcConnections').textContent = `${metrics.connections} Peers`;
                 document.getElementById('ethStatus').className = 'status-dot online';
                 document.getElementById('ethConnections').textContent = 'Connected';
-                
+
                 addLog(`🟠 Bitcoin: ${metrics.connections} active P2P connections`);
                 addLog(`🔵 Ethereum: Network connected and operational`);
             } else {
@@ -734,7 +812,7 @@
                 '🔗 Peer discovery protocol active',
                 '⚙️ Background processes monitoring...'
             ];
-            
+
             const randomEvent = events[Math.floor(Math.random() * events.length)];
             addLog(randomEvent);
         }
@@ -744,18 +822,18 @@
             addLog('🚀 Bitcoin Sprint World-Class Dashboard Initialized');
             addLog('⚡ Connecting to blockchain networks...');
             addLog('🔧 System diagnostics starting...');
-            
+
             // Start data fetching
             fetchSystemData();
             setInterval(fetchSystemData, 3000); // Every 3 seconds
-            
+
             // Update time every second
             updateSystemTime();
             setInterval(updateSystemTime, 1000);
-            
+
             // Add random events
             setInterval(addRandomEvents, 8000);
-            
+
             // Initial chart generation
             setTimeout(() => {
                 generateChart('connectionsChart', [60, 75, 80, 90, 85]);
@@ -781,4 +859,5 @@
         });
     </script>
 </body>
+
 </html>

@@ -33,6 +33,16 @@ enum ProtocolType {
     Solana,
 }
 
+impl std::fmt::Display for ProtocolType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProtocolType::Bitcoin => write!(f, "bitcoin"),
+            ProtocolType::Ethereum => write!(f, "ethereum"),
+            ProtocolType::Solana => write!(f, "solana"),
+        }
+    }
+}
+
 // Config struct (expanded to match Go more closely)
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Config {
@@ -268,10 +278,8 @@ impl UniversalClient {
             match TcpStream::connect(&addr).await {
                 Ok(mut conn) => {
                     // Set options to match Go
-                    if let Ok(tcp) = conn.as_ref() {
-                        tcp.set_nodelay(true).ok();
-                        // Keepalive, buffers, etc., would require socket options
-                    }
+                    conn.set_nodelay(true).ok();
+                    // Keepalive, buffers, etc., would require socket options
                     let peer_id = self.generate_peer_id(&addr);
                     self.peers.lock().await.insert(peer_id, conn);
                     info!("Connected to peer: {}", addr);
@@ -320,7 +328,7 @@ impl UniversalClient {
         hasher.update(address.as_bytes());
         hasher.update(self.protocol.to_string().as_bytes());
         let result = hasher.finalize();
-        format!("peer_{:x}", &result[0..8])
+        format!("peer_{:x}", u64::from_be_bytes(result[0..8].try_into().unwrap()))
     }
 
     async fn get_peer_count(&self) -> usize {
@@ -366,20 +374,21 @@ impl Server {
 
     fn register_routes(&self) -> Router {
         Router::new()
-            .route("/api/v1/universal/:chain/:method", post(self.universal_handler))
-            .route("/api/v1/latency", get(self.latency_stats_handler))
-            .route("/api/v1/cache", get(self.cache_stats_handler))
-            .route("/health", get(self.health_handler))
-            .route("/version", get(self.version_handler))
-            .route("/status", get(self.status_handler))
-            .route("/mempool", get(self.mempool_handler))
-            .route("/chains", get(self.chains_handler))
-            .route("/api/v1/p2p/diag", get(self.p2p_diag_handler))
+            .route("/api/v1/universal/:chain/:method", post(Self::universal_handler))
+            .route("/api/v1/latency", get(Self::latency_stats_handler))
+            .route("/api/v1/cache", get(Self::cache_stats_handler))
+            .route("/health", get(Self::health_handler))
+            .route("/version", get(Self::version_handler))
+            .route("/status", get(Self::status_handler))
+            .route("/mempool", get(Self::mempool_handler))
+            .route("/chains", get(Self::chains_handler))
+            .route("/api/v1/p2p/diag", get(Self::p2p_diag_handler))
+            .with_state(self.clone())
             // Add more routes as needed, e.g., enterprise endpoints
             .with_state(self.clone())
     }
 
-    async fn start(&self) {
+    async fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
         let app = self.register_routes();
 
         let addr: SocketAddr = format!("{}:{}", self.cfg.api_host, self.cfg.api_port).parse().unwrap();
@@ -410,12 +419,9 @@ impl Server {
             // In real: spawn process with Command
         }
 
-        if let Err(e) = axum::Server::bind(&addr)
-            .serve(app.into_make_service())
-            .await
-        {
-            error!("Server error: {}", e);
-        }
+        let listener = tokio::net::TcpListener::bind(&addr).await?;
+        axum::serve(listener, app).await?;
+        Ok(())
     }
 
     // Handlers (matching Go's HTTP handlers)
@@ -429,7 +435,7 @@ impl Server {
         let response = json!({
             "chain": chain,
             "method": method,
-            "data": body,
+            "data": *body,
             "timestamp": Utc::now().to_rfc3339(),
             "sprint_advantages": {
                 "unified_api": "Single endpoint for all chains",
@@ -498,7 +504,10 @@ impl Server {
         state: axum::extract::State<Server>,
     ) -> impl IntoResponse {
         let p2p_clients = state.p2p_clients.lock().await;
-        let connections: usize = p2p_clients.values().map(|c| c.get_peer_count()).sum().await;
+        let mut connections = 0;
+        for client in p2p_clients.values() {
+            connections += client.get_peer_count().await;
+        }
         let status = json!({
             "server": {
                 "uptime": "1h", // Mock

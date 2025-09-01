@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -36,7 +37,7 @@
             position: relative;
             overflow: hidden;
         }
-        
+
         .header::before {
             content: '';
             position: absolute;
@@ -48,11 +49,19 @@
             background-size: 200% 100%;
             animation: gradient-shift 5s ease infinite;
         }
-        
+
         @keyframes gradient-shift {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
         }
 
         .header h1 {
@@ -107,7 +116,7 @@
             border-bottom: 2px solid #f0f0f0;
             position: relative;
         }
-        
+
         .card-header::after {
             content: '';
             position: absolute;
@@ -132,7 +141,7 @@
             position: relative;
             overflow: hidden;
         }
-        
+
         .card-icon::after {
             content: '';
             position: absolute;
@@ -143,9 +152,20 @@
             background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 50%);
         }
 
-        .health-icon { background: linear-gradient(135deg, #4CAF50, #45a049); color: white; }
-        .metrics-icon { background: linear-gradient(135deg, #2196F3, #1976D2); color: white; }
-        .performance-icon { background: linear-gradient(135deg, #FF9800, #F57C00); color: white; }
+        .health-icon {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+        }
+
+        .metrics-icon {
+            background: linear-gradient(135deg, #2196F3, #1976D2);
+            color: white;
+        }
+
+        .performance-icon {
+            background: linear-gradient(135deg, #FF9800, #F57C00);
+            color: white;
+        }
 
         .card-title {
             font-size: 1.5rem;
@@ -162,14 +182,30 @@
             animation: pulse 2s infinite;
         }
 
-        .status-healthy { background-color: #4CAF50; }
-        .status-warning { background-color: #FF9800; }
-        .status-error { background-color: #f44336; }
+        .status-healthy {
+            background-color: #4CAF50;
+        }
+
+        .status-warning {
+            background-color: #FF9800;
+        }
+
+        .status-error {
+            background-color: #f44336;
+        }
 
         @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(76, 175, 80, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); }
+            0% {
+                box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(76, 175, 80, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+            }
         }
 
         .metric-grid {
@@ -188,7 +224,7 @@
             border-left: 4px solid #667eea;
             transition: transform 0.2s ease;
         }
-        
+
         .metric-item:hover {
             transform: translateY(-3px);
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
@@ -224,16 +260,16 @@
             scrollbar-width: thin;
             scrollbar-color: #ddd #f8f9fa;
         }
-        
+
         .data-display::-webkit-scrollbar {
             width: 8px;
         }
-        
+
         .data-display::-webkit-scrollbar-thumb {
             background-color: #ddd;
             border-radius: 4px;
         }
-        
+
         .data-display::-webkit-scrollbar-track {
             background-color: #f8f9fa;
         }
@@ -257,11 +293,11 @@
             transform: translateY(-2px);
             box-shadow: 0 6px 15px rgba(118, 75, 162, 0.3);
         }
-        
+
         .refresh-btn:active {
             transform: translateY(1px);
         }
-        
+
         .last-updated {
             text-align: center;
             color: #888;
@@ -280,7 +316,7 @@
             position: relative;
             overflow: hidden;
         }
-        
+
         .tier-info-section::before {
             content: '';
             position: absolute;
@@ -288,20 +324,23 @@
             left: -50%;
             width: 200%;
             height: 200%;
-            background: repeating-linear-gradient(
-                45deg,
-                rgba(255, 255, 255, 0.05),
-                rgba(255, 255, 255, 0.05) 10px,
-                rgba(255, 255, 255, 0) 10px,
-                rgba(255, 255, 255, 0) 20px
-            );
+            background: repeating-linear-gradient(45deg,
+                    rgba(255, 255, 255, 0.05),
+                    rgba(255, 255, 255, 0.05) 10px,
+                    rgba(255, 255, 255, 0) 10px,
+                    rgba(255, 255, 255, 0) 20px);
             animation: tier-pattern 20s linear infinite;
             z-index: 0;
         }
-        
+
         @keyframes tier-pattern {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         .tier-item {
@@ -454,7 +493,7 @@
             position: relative;
             overflow: hidden;
         }
-        
+
         .entropy-score-section::after {
             content: '';
             position: absolute;
@@ -511,23 +550,26 @@
             transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
             border-radius: 12px;
             box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
-            background-image: linear-gradient(
-                45deg, 
-                rgba(255, 255, 255, 0.15) 25%, 
-                transparent 25%, 
-                transparent 50%, 
-                rgba(255, 255, 255, 0.15) 50%, 
-                rgba(255, 255, 255, 0.15) 75%, 
-                transparent 75%, 
-                transparent
-            );
+            background-image: linear-gradient(45deg,
+                    rgba(255, 255, 255, 0.15) 25%,
+                    transparent 25%,
+                    transparent 50%,
+                    rgba(255, 255, 255, 0.15) 50%,
+                    rgba(255, 255, 255, 0.15) 75%,
+                    transparent 75%,
+                    transparent);
             background-size: 30px 30px;
             animation: entropy-bar-animation 2s linear infinite;
         }
-        
+
         @keyframes entropy-bar-animation {
-            0% { background-position: 0 0; }
-            100% { background-position: 30px 0; }
+            0% {
+                background-position: 0 0;
+            }
+
+            100% {
+                background-position: 30px 0;
+            }
         }
 
         .entropy-sources-grid {
@@ -547,13 +589,13 @@
             position: relative;
             overflow: hidden;
         }
-        
+
         .entropy-source:hover {
             transform: translateY(-3px);
             box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
             border-color: rgba(255, 255, 255, 0.3);
         }
-        
+
         .entropy-source::after {
             content: '';
             position: absolute;
@@ -600,7 +642,7 @@
             position: relative;
             overflow: hidden;
         }
-        
+
         .security-status::before {
             content: '';
             position: absolute;
@@ -651,7 +693,9 @@
         }
 
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         .performance-chart {
@@ -707,71 +751,71 @@
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
         }
-        
+
         /* Responsive styles */
         @media (max-width: 1200px) {
             .container {
                 max-width: 95%;
             }
-            
+
             .dashboard-grid {
                 grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
             }
         }
-        
+
         @media (max-width: 768px) {
             .header h1 {
                 font-size: 2.5rem;
             }
-            
+
             .header p {
                 font-size: 1.1rem;
             }
-            
+
             .dashboard-grid {
                 grid-template-columns: 1fr;
             }
-            
+
             .entropy-score-section {
                 flex-direction: column;
             }
-            
+
             .entropy-bar-container {
                 width: 100%;
                 margin-left: 0;
                 margin-top: 15px;
             }
-            
+
             .entropy-sources-grid {
                 grid-template-columns: 1fr;
             }
-            
+
             .block-metrics {
                 grid-template-columns: 1fr;
             }
-            
+
             .resource-grid {
                 grid-template-columns: repeat(2, 1fr);
             }
         }
-        
+
         @media (max-width: 480px) {
             .header h1 {
                 font-size: 2rem;
             }
-            
+
             .card {
                 padding: 20px;
             }
-            
+
             .metric-grid {
                 grid-template-columns: 1fr;
             }
-            
+
             .resource-grid {
                 grid-template-columns: 1fr;
             }
-            
+
             .card-icon {
                 width: 40px;
                 height: 40px;
@@ -779,6 +823,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div class="header">
@@ -977,7 +1022,7 @@
         let entropyData = {};
 
         // Initialize dashboard
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             refreshAll();
             // Auto-refresh every 5 seconds
             setInterval(refreshAll, 5000);
@@ -994,9 +1039,9 @@
                 // Fetch health from your local Bitcoin API
                 const healthResponse = await fetch('http://localhost:8080/health');
                 if (!healthResponse.ok) throw new Error(`HTTP ${healthResponse.status}`);
-                
+
                 const healthData = await healthResponse.json();
-                
+
                 // Fetch metrics for additional data
                 const metricsResponse = await fetch('http://localhost:8080/metrics');
                 const metricsText = await metricsResponse.text();
@@ -1028,7 +1073,7 @@
                 console.error('Local Bitcoin API failed:', error);
                 document.getElementById('health-status').textContent = '🔴 Disconnected';
                 document.getElementById('health-data').textContent = `Error: ${error.message}\n\nNo connection to Bitcoin Sprint API`;
-                
+
                 const indicator = document.querySelector('.status-indicator');
                 indicator.className = 'status-indicator status-error';
             }
@@ -1039,10 +1084,10 @@
                 // Fetch metrics from your local Bitcoin API
                 const response = await fetch('http://localhost:8080/metrics');
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                
+
                 const metricsText = await response.text();
                 const metrics = parseMetrics(metricsText);
-                
+
                 // Update performance metrics with your real data
                 document.getElementById('blocks-processed').textContent = metrics.bitcoin_sprint_uptime_seconds ? Math.floor(metrics.bitcoin_sprint_uptime_seconds / 600) : '0';
                 document.getElementById('avg-processing-time').textContent = '~10s avg';
@@ -1076,17 +1121,17 @@
         function parseMetrics(text) {
             const metrics = {};
             const lines = text.split('\n');
-            
+
             for (const line of lines) {
                 if (line.startsWith('#') || !line.trim()) continue;
-                
+
                 const match = line.match(/^([a-zA-Z_:][a-zA-Z0-9_:]*)\{?([^}]*)\}?\s+(.+)$/);
                 if (match) {
                     const [, name, labels, value] = match;
                     metrics[name] = parseFloat(value);
                 }
             }
-            
+
             return metrics;
         }
 
@@ -1095,7 +1140,7 @@
                 // Fetch metrics from your local Bitcoin API for entropy calculation
                 const response = await fetch('http://localhost:8080/metrics');
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                
+
                 const metricsText = await response.text();
                 const metrics = parseMetrics(metricsText);
 
@@ -1181,7 +1226,7 @@
         // Update button event listeners
         document.querySelectorAll('.refresh-btn').forEach(btn => {
             const originalClick = btn.onclick;
-            btn.onclick = function() {
+            btn.onclick = function () {
                 addLoadingAnimation(this);
                 originalClick.call(this);
             };
@@ -1239,4 +1284,5 @@
         window.refreshAll = refreshAllWithInternal;
     </script>
 </body>
+
 </html>

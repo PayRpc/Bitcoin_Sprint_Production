@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🚀 Bitcoin Sprint - TURBO DASHBOARD</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
-        
+
         * {
             margin: 0;
             padding: 0;
@@ -43,9 +44,17 @@
         }
 
         @keyframes gradient {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
         }
 
         .header h1 {
@@ -56,9 +65,17 @@
         }
 
         @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.05);
+            }
+
+            100% {
+                transform: scale(1);
+            }
         }
 
         .turbo-status {
@@ -74,8 +91,13 @@
         }
 
         @keyframes glow {
-            from { box-shadow: 0 0 20px #ff0080; }
-            to { box-shadow: 0 0 40px #ff0080, 0 0 60px #ff0080; }
+            from {
+                box-shadow: 0 0 20px #ff0080;
+            }
+
+            to {
+                box-shadow: 0 0 40px #ff0080, 0 0 60px #ff0080;
+            }
         }
 
         .dashboard-grid {
@@ -118,8 +140,13 @@
         }
 
         @keyframes borderRotate {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
 
         .metric-title {
@@ -143,8 +170,13 @@
         }
 
         @keyframes valueFlicker {
-            0% { opacity: 1; }
-            100% { opacity: 0.8; }
+            0% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0.8;
+            }
         }
 
         .metric-subtitle {
@@ -174,15 +206,17 @@
             overflow: hidden;
         }
 
-        .bitcoin-card { 
+        .bitcoin-card {
             border-color: #f7931a;
             box-shadow: 0 0 20px rgba(247, 147, 26, 0.5);
         }
-        .ethereum-card { 
+
+        .ethereum-card {
             border-color: #627eea;
             box-shadow: 0 0 20px rgba(98, 126, 234, 0.5);
         }
-        .rust-card { 
+
+        .rust-card {
             border-color: #ce422b;
             box-shadow: 0 0 20px rgba(206, 66, 43, 0.5);
         }
@@ -201,13 +235,29 @@
             animation: pulse-dot 1s infinite;
         }
 
-        .pulse-dot.online { background: #00ff41; }
-        .pulse-dot.offline { background: #ff4444; }
+        .pulse-dot.online {
+            background: #00ff41;
+        }
+
+        .pulse-dot.offline {
+            background: #ff4444;
+        }
 
         @keyframes pulse-dot {
-            0% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.2); opacity: 0.7; }
-            100% { transform: scale(1); opacity: 1; }
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.2);
+                opacity: 0.7;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
         }
 
         .live-chart {
@@ -231,11 +281,30 @@
         }
 
         @keyframes chartMove {
-            0% { left: 0%; height: 60%; }
-            25% { left: 25%; height: 80%; }
-            50% { left: 50%; height: 40%; }
-            75% { left: 75%; height: 90%; }
-            100% { left: 100%; height: 60%; }
+            0% {
+                left: 0%;
+                height: 60%;
+            }
+
+            25% {
+                left: 25%;
+                height: 80%;
+            }
+
+            50% {
+                left: 50%;
+                height: 40%;
+            }
+
+            75% {
+                left: 75%;
+                height: 90%;
+            }
+
+            100% {
+                left: 100%;
+                height: 60%;
+            }
         }
 
         .terminal-section {
@@ -269,8 +338,16 @@
         }
 
         @keyframes blink {
-            0%, 50% { border-color: #00ff41; }
-            51%, 100% { border-color: transparent; }
+
+            0%,
+            50% {
+                border-color: #00ff41;
+            }
+
+            51%,
+            100% {
+                border-color: transparent;
+            }
         }
 
         .performance-bars {
@@ -296,8 +373,13 @@
         }
 
         @keyframes barFill {
-            0% { width: 60%; }
-            100% { width: 95%; }
+            0% {
+                width: 60%;
+            }
+
+            100% {
+                width: 95%;
+            }
         }
 
         .crypto-ticker {
@@ -319,8 +401,13 @@
         }
 
         @keyframes scroll {
-            0% { transform: translateX(100%); }
-            100% { transform: translateX(-100%); }
+            0% {
+                transform: translateX(100%);
+            }
+
+            100% {
+                transform: translateX(-100%);
+            }
         }
 
         .hack-mode {
@@ -340,9 +427,10 @@
         }
     </style>
 </head>
+
 <body>
     <canvas class="matrix-bg" id="matrix"></canvas>
-    
+
     <div class="turbo-status">
         <div>🚀 TURBO MODE ACTIVE</div>
         <div id="systemStatus">ONLINE</div>
@@ -368,9 +456,15 @@
             <div class="metric-value" id="uptime">--</div>
             <div class="metric-subtitle">SECONDS ONLINE</div>
             <div class="performance-bars">
-                <div class="perf-bar"><div class="perf-fill"></div></div>
-                <div class="perf-bar"><div class="perf-fill"></div></div>
-                <div class="perf-bar"><div class="perf-fill"></div></div>
+                <div class="perf-bar">
+                    <div class="perf-fill"></div>
+                </div>
+                <div class="perf-bar">
+                    <div class="perf-fill"></div>
+                </div>
+                <div class="perf-bar">
+                    <div class="perf-fill"></div>
+                </div>
             </div>
         </div>
 
@@ -438,7 +532,9 @@
 
     <div class="crypto-ticker">
         <div class="ticker-content">
-            🟠 BTC: $43,267.89 (+2.1%) | 🔵 ETH: $2,634.12 (+1.8%) | ⚡ BITCOIN SPRINT: TURBO MODE ACTIVE | 🚀 P2P CONNECTIONS: <span id="tickerConnections">0</span> | 💾 MEMORY: <span id="tickerMemory">0</span>MB | ⏱️ UPTIME: <span id="tickerUptime">0</span>s
+            🟠 BTC: $43,267.89 (+2.1%) | 🔵 ETH: $2,634.12 (+1.8%) | ⚡ BITCOIN SPRINT: TURBO MODE ACTIVE | 🚀 P2P
+            CONNECTIONS: <span id="tickerConnections">0</span> | 💾 MEMORY: <span id="tickerMemory">0</span>MB | ⏱️
+            UPTIME: <span id="tickerUptime">0</span>s
         </div>
     </div>
 
@@ -499,7 +595,7 @@
             if (terminalLines.length > 15) {
                 terminalLines = terminalLines.slice(0, 15);
             }
-            
+
             const terminal = document.getElementById('terminal');
             terminal.innerHTML = terminalLines.join('\n') + '\n<span class="typing-effect">█</span>';
         }
@@ -508,7 +604,7 @@
         async function fetchSystemData() {
             refreshCount++;
             document.getElementById('refreshCounter').textContent = refreshCount;
-            
+
             try {
                 // Health check
                 const healthResponse = await fetch('http://localhost:8080/health');
@@ -516,7 +612,7 @@
                     const healthData = await healthResponse.json();
                     document.getElementById('systemStatus').textContent = 'ONLINE';
                     addTerminalLine(`✅ BITCOIN SPRINT API v${healthData.version} ONLINE`);
-                    
+
                     // Metrics
                     const metricsResponse = await fetch('http://localhost:8080/metrics');
                     if (metricsResponse.ok) {
@@ -598,7 +694,7 @@
         function startupSequence() {
             const hackMode = document.getElementById('hackMode');
             hackMode.style.display = 'block';
-            
+
             setTimeout(() => {
                 hackMode.style.display = 'none';
                 addTerminalLine('🚀 BITCOIN SPRINT TURBO DASHBOARD INITIALIZED');
@@ -626,4 +722,5 @@
         }, 8000);
     </script>
 </body>
+
 </html>
