@@ -28,9 +28,11 @@
     "test:connection": "node test-connection.js",
     "test:server": "node test-server.js",
     "test:entropy": "node test-entropy-auth.js",
+    "test:entropy:web": "node test-entropy-web-api.js",
+    "demo:entropy": "node demo-entropy.js",
     "test:monitor": "node test-entropy-monitor.js",
     "test:monitor:standalone": "node test-entropy-monitor-standalone.js",
-    "test:all": "npm run test:entropy && npm run test:monitor && npm run test:server && npm run test:connection"
+    "test:all": "npm run test:entropy && npm run test:entropy:web && npm run test:monitor && npm run test:server && npm run test:connection"
   },
   "dependencies": {
     "@prisma/client": "^5.15.0",

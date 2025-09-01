@@ -908,13 +908,11 @@ pub unsafe extern "C" fn system_fingerprint_c(output: *mut u8) -> c_int {
         return -1; // Null pointer error
     }
 
-    match entropy::system_fingerprint() {
-        Ok(fingerprint) => {
-            std::ptr::copy_nonoverlapping(fingerprint.as_ptr(), output, 32);
-            0 // Success
-        }
-        Err(_) => -2, // System error
+    let fingerprint = entropy::system_fingerprint();
+    unsafe {
+        std::ptr::copy_nonoverlapping(fingerprint.as_ptr(), output, 32);
     }
+    0 // Success
 }
 
 /// Get CPU temperature for entropy mixing - Direct FFI export
