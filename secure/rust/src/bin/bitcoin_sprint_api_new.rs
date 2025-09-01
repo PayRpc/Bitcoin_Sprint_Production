@@ -92,6 +92,10 @@ struct Config {
     rust_tls_cert_path: String,
     rust_tls_key_path: String,
     rust_redis_url: String,
+    // Protocol toggles
+    enable_bitcoin: bool,
+    enable_ethereum: bool,
+    enable_solana: bool,
 }
 
 impl Config {
@@ -160,6 +164,10 @@ impl Config {
             rust_tls_cert_path: env::var("RUST_TLS_CERT_PATH").unwrap_or("/app/config/tls/cert.pem".to_string()),
             rust_tls_key_path: env::var("RUST_TLS_KEY_PATH").unwrap_or("/app/config/tls/key.pem".to_string()),
             rust_redis_url: env::var("RUST_REDIS_URL").unwrap_or("redis://redis:6379".to_string()),
+            // Protocol toggles (default: only Bitcoin enabled)
+            enable_bitcoin: env::var("ENABLE_BITCOIN").map(|s| s == "true").unwrap_or(true),
+            enable_ethereum: env::var("ENABLE_ETHEREUM").map(|s| s == "true").unwrap_or(false),
+            enable_solana: env::var("ENABLE_SOLANA").map(|s| s == "true").unwrap_or(false),
         }
     }
 }
@@ -708,6 +716,22 @@ impl UniversalClient {
     }
 
     fn get_default_seeds(&self) -> Vec<String> {
+        // Allow overrides via env vars: BITCOIN_SEEDS/ETHEREUM_SEEDS/SOLANA_SEEDS (comma-separated host:port)
+        let override_key = match self.protocol {
+            ProtocolType::Bitcoin => "BITCOIN_SEEDS",
+            ProtocolType::Ethereum => "ETHEREUM_SEEDS",
+            ProtocolType::Solana => "SOLANA_SEEDS",
+        };
+        if let Ok(v) = env::var(override_key) {
+            let list: Vec<String> = v
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if !list.is_empty() {
+                return list;
+            }
+        }
         match self.protocol {
             ProtocolType::Bitcoin => vec![
                 "seed.bitcoin.sipa.be:8333".to_string(),
@@ -728,11 +752,8 @@ impl UniversalClient {
             ProtocolType::Solana => vec![
                 // Use raw host:port for TCP probing; JSON-RPC is HTTP but initial connectivity
                 // checks should avoid URL schemes here.
-                "127.0.0.1:8899".to_string(),
-                "127.0.0.1:8901".to_string(),
-                "127.0.0.1:8903".to_string(),
-                "127.0.0.1:8904".to_string(),
-                "127.0.0.1:8905".to_string(),
+                // Defaults intentionally empty to avoid noisy connection attempts unless enabled
+                // Provide SOLANA_SEEDS env (comma-separated) to set your own list.
             ],
         }
     }
@@ -773,7 +794,13 @@ impl Server {
     async fn new(cfg: Config) -> Self {
         let cfg_arc = Arc::new(cfg.clone());
         let mut p2p_clients = HashMap::new();
-        for protocol in vec![ProtocolType::Bitcoin, ProtocolType::Ethereum, ProtocolType::Solana] {
+    // Build enabled protocols list
+    let mut protocols: Vec<ProtocolType> = Vec::new();
+    if cfg.enable_bitcoin { protocols.push(ProtocolType::Bitcoin); }
+    if cfg.enable_ethereum { protocols.push(ProtocolType::Ethereum); }
+    if cfg.enable_solana { protocols.push(ProtocolType::Solana); }
+
+    for protocol in protocols {
             match UniversalClient::new(cfg.clone(), protocol.clone()).await {
                 Ok(client) => {
                     p2p_clients.insert(protocol, client);

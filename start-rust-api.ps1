@@ -35,18 +35,26 @@ $psi.RedirectStandardError = $true
 $psi.Environment['API_HOST'] = $env:API_HOST
 $psi.Environment['API_PORT'] = $env:API_PORT
 $psi.Environment['RUST_WEB_SERVER_ENABLED'] = $env:RUST_WEB_SERVER_ENABLED
+# Default protocol flags to avoid noisy localhost connections
+if (-not $env:ENABLE_BITCOIN)  { $env:ENABLE_BITCOIN  = 'true' }
+if (-not $env:ENABLE_ETHEREUM) { $env:ENABLE_ETHEREUM = 'false' }
+if (-not $env:ENABLE_SOLANA)   { $env:ENABLE_SOLANA   = 'false' }
+
+$psi.Environment['ENABLE_BITCOIN']  = $env:ENABLE_BITCOIN
+$psi.Environment['ENABLE_ETHEREUM'] = $env:ENABLE_ETHEREUM
+$psi.Environment['ENABLE_SOLANA']   = $env:ENABLE_SOLANA
 
 $proc = New-Object System.Diagnostics.Process
 $proc.StartInfo = $psi
 [void]$proc.Start()
 
-# Async log handlers
+# Async log handlers (attach handlers before starting read)
 $stdOutHandler = [System.Diagnostics.DataReceivedEventHandler]{ param($s,$e) if($e.Data){ Add-Content -Path $logOut -Value $e.Data } }
 $stdErrHandler = [System.Diagnostics.DataReceivedEventHandler]{ param($s,$e) if($e.Data){ Add-Content -Path $logErr -Value $e.Data } }
-$proc.BeginOutputReadLine()
-$proc.BeginErrorReadLine()
 $proc.add_OutputDataReceived($stdOutHandler)
 $proc.add_ErrorDataReceived($stdErrHandler)
+$proc.BeginOutputReadLine()
+$proc.BeginErrorReadLine()
 
 Set-Content -Path $pidfile -Value $proc.Id
 Write-Host ("Started bitcoin_sprint_api.exe (PID {0}) on {1}:{2}" -f $proc.Id,$env:API_HOST,$env:API_PORT) -ForegroundColor Green
