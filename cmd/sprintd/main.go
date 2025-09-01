@@ -1,55 +1,35 @@
 package main
 
-
 import (
-
-"context"
-
-"crypto/rand"
-
-"crypto/sha256"
-
-"encoding/hex"
-
-"encoding/json"
-
-"errors"
-
-"fmt"
-
-"log"
-
-"math"
-
-"net"
-
-"net/http"
-
-"net/url"
-
-"os"
-
-"os/signal"
-
-"runtime"
-
-"sort"
-
-"strconv"
-
-"strings"
-
-"sync"
-
-"sync/atomic"
-
-"syscall"
-
-"time"
-
-
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"math"
+	"net"
+	"net/http"
+	"net/url"
+	"os"
+	"os/signal"
+	"runtime"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"syscall"
+	"time"
 	"go.uber.org/zap"
+)
 
+// Version information set by ldflags during build
+var (
+	Version = "dev"
+	Commit  = "unknown"
 )
 
 
