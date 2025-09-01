@@ -114,7 +114,7 @@ impl Config {
         Config {
             tier: env::var("RELAY_TIER").unwrap_or("Enterprise".to_string()),
             api_host: env::var("API_HOST").unwrap_or("0.0.0.0".to_string()),
-            api_port: env::var("API_PORT").ok().and_then(|s| s.parse().ok()).unwrap_or(8080),
+            api_port: env::var("API_PORT").ok().and_then(|s| s.parse().ok()).unwrap_or(8443),
             max_connections: env::var("MAX_CONNECTIONS").ok().and_then(|s| s.parse().ok()).unwrap_or(20),
             message_queue_size: env::var("MESSAGE_QUEUE_SIZE").ok().and_then(|s| s.parse().ok()).unwrap_or(1000),
             circuit_breaker_threshold: env::var("CIRCUIT_BREAKER_THRESHOLD").ok().and_then(|s| s.parse().ok()).unwrap_or(3),
@@ -1153,6 +1153,7 @@ async fn main() {
     tracing_subscriber::fmt::init();
     let cfg = Config::load();
     info!("Starting Sprint API server, tier: {}", cfg.tier);
+    info!("Config - Host: {}, Port: {}", cfg.api_host, cfg.api_port);
 
     let server = Server::new(cfg).await;
     if let Err(e) = server.start().await {
