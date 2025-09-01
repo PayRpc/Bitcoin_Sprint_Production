@@ -39,7 +39,7 @@ rustls-native-certs = "0.8"
 
 # HTTP and metrics
 hyper = { version = "1.0", features = ["full"] }
-prometheus = "0.13"
+prometheus = { version = "0.13", features = ["process"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
@@ -48,15 +48,30 @@ actix-web = { version = "4.4", optional = true }
 actix-rt = { version = "2.9", optional = true }
 uuid = { version = "1.0", features = ["v4", "serde"], optional = true }
 futures = { version = "0.3", optional = true }
+
+# TLS and Security
+axum-server = { version = "0.6", features = ["tls-rustls"], optional = true }
+rustls-pemfile = { version = "2.0", optional = true }
+
+# Distributed Rate Limiting
+redis = { version = "0.25", features = ["tokio-comp", "connection-manager"], optional = true }
+
+# Circuit Breakers and Resilience
+tower = { version = "0.4", features = ["retry", "timeout", "load-shed", "limit"], optional = true }
+tower-http = { version = "0.5", features = ["cors", "request-id", "trace"], optional = true }
+
+# Enhanced Monitoring
 tokio-metrics = "0.3"
 hdrhistogram = "7.5"
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["json"] }
+lazy_static = "1.4"
 
 [features]
 default = []
 ipfs = ["reqwest"]
 web-server = ["actix-web", "actix-rt", "uuid", "futures"]
+hardened = ["web-server", "axum-server", "rustls-pemfile", "redis", "tower", "tower-http"]
 
 [[bin]]
 name = "storage_demo"
