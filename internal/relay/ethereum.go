@@ -11,7 +11,6 @@ import (
 
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
-	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )

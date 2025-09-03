@@ -348,7 +348,7 @@ func (gr *GenericRelay) GetNetworkInfo() (*NetworkInfo, error) {
 		return nil, fmt.Errorf("not connected to blockchain network")
 	}
 
-	response, err := gr.makeHTTPRequest(gr.rpcMethods.GetNetworkInfo, []interface{}{})
+	_, err := gr.makeHTTPRequest(gr.rpcMethods.GetNetworkInfo, []interface{}{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get network info: %w", err)
 	}

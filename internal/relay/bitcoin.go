@@ -3,7 +3,6 @@ package relay
 import (
 	"context"
 	"fmt"
-	"net"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -201,7 +200,6 @@ func (br *BitcoinRelay) GetLatestBlock() (*blocks.BlockEvent, error) {
 	// Implementation would query latest block from peers
 	// For now, return a placeholder
 	return &blocks.BlockEvent{
-		Network:   "bitcoin",
 		Height:    850000, // placeholder
 		Hash:      "0000000000000000000000000000000000000000000000000000000000000000",
 		Timestamp: time.Now(),
@@ -333,12 +331,10 @@ func (br *BitcoinRelay) connectToPeer(ctx context.Context, endpoint string) {
 		NewestBlock: func() (*chainhash.Hash, int32, error) {
 			return &chainhash.Hash{}, 850000, nil // placeholder
 		},
-		HostToNetAddress: func(host string, port uint16, services wire.ServiceFlag) (*wire.NetAddress, error) {
-			return wire.NewNetAddressIPPort(net.ParseIP("127.0.0.1"), port, services), nil
-		},
 		ChainParams: &chaincfg.MainNetParams,
 		Services:    wire.SFNodeNetwork | wire.SFNodeWitness,
-		UserAgent:   "Bitcoin-Sprint:2.1.0",
+		UserAgentName:    "Bitcoin-Sprint",
+		UserAgentVersion: "2.1.0",
 	}, endpoint)
 
 	if err != nil {
@@ -403,11 +399,9 @@ func (bp *BitcoinBlockProcessor) worker(blockChan chan blocks.BlockEvent) {
 	for msgBlock := range bp.workChan {
 		// Convert wire.MsgBlock to blocks.BlockEvent
 		blockEvent := blocks.BlockEvent{
-			Network:   "bitcoin",
-			Height:    uint64(msgBlock.Header.Height), // This might not be available in the header
+			Height:    0, // Height not available in block header, would need to be tracked separately
 			Hash:      msgBlock.BlockHash().String(),
 			Timestamp: msgBlock.Header.Timestamp,
-			Size:      int64(msgBlock.SerializeSize()),
 		}
 
 		atomic.AddInt64(&bp.processedBlocks, 1)
@@ -424,7 +418,7 @@ func (bp *BitcoinBlockProcessor) worker(blockChan chan blocks.BlockEvent) {
 // NewBitcoinAuthenticator creates a new Bitcoin authenticator
 func NewBitcoinAuthenticator() *BitcoinAuthenticator {
 	return &BitcoinAuthenticator{
-		secureBuffers: make(map[string]*securebuf.SecureBuffer),
+		secureBuffers: make(map[string][]byte),
 	}
 }
 

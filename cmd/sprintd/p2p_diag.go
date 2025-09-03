@@ -156,6 +156,8 @@ func snapshotBuffer(protocol string) map[string]interface{} {
 }
 
 // p2pDiagHandler returns peer diagnostics
+// Commented out due to undefined types (Server, ProtocolType, etc.)
+/*
 func (s *Server) p2pDiagHandler(w http.ResponseWriter, r *http.Request) {
 	// Build response from existing p2pClients map
 	clients := map[string]interface{}{}
@@ -192,6 +194,7 @@ func (s *Server) p2pDiagHandler(w http.ResponseWriter, r *http.Request) {
 		"ts":          time.Now().UTC().Format(time.RFC3339),
 	})
 }
+*/
 
 // NewRPCRacer creates a new competitive RPC racing engine
 // chain: e.g. "ethereum" or "solana" (used for diagnostics)

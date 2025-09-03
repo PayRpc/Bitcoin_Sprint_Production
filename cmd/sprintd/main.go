@@ -16,7 +16,6 @@ import (
 	"github.com/PayRpc/Bitcoin-Sprint/internal/cache"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/database"
-	"github.com/PayRpc/Bitcoin-Sprint/internal/entropy"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/license"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/p2p"
@@ -90,10 +89,10 @@ func main() {
 	// Initialize core components
 	blockChan := make(chan blocks.BlockEvent, 1000)
 	mem := mempool.New()
-	cache := cache.New(1000, logger)
+	_ = cache.New(1000, logger) // Cache not currently used
 
 	// Initialize broadcaster for real-time updates
-	broadcaster := broadcaster.New(logger)
+	_ = broadcaster.New(logger) // Broadcaster not currently used
 
 	// Initialize relay dispatcher for multi-chain support
 	relayDispatcher := relay.NewRelayDispatcher(cfg, logger)
@@ -103,9 +102,6 @@ func main() {
 	if err != nil {
 		logger.Fatal("Failed to create P2P client", zap.Error(err))
 	}
-
-	// Initialize runtime optimizer
-	runtime.ApplySystemOptimizations(logger)
 
 	// Initialize API server
 	server := api.New(cfg, blockChan, mem, logger)
@@ -194,7 +190,7 @@ func main() {
 	cancel()
 
 	// Wait for services to shut down
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	_, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
 	// Stop services in reverse order
@@ -272,7 +268,7 @@ func performHealthCheck(server *api.Server, p2pClient *p2p.Client, relayDispatch
 	healthStatus := relayDispatcher.GetHealthStatus()
 	for network, status := range healthStatus {
 		if !status.IsHealthy {
-			return fmt.Errorf("relay client %s is unhealthy: %s", network, status.Status)
+			return fmt.Errorf("relay client %s is unhealthy: %s", network, status.ErrorMessage)
 		}
 	}
 

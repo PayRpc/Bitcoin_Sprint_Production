@@ -9,8 +9,9 @@
                 "build",
                 "-ldflags=-s -w -extldflags=-static",
                 "-trimpath",
-                "-o", "bitcoin-sprint.exe",
-                "."
+                "-o",
+                "bitcoin-sprint.exe",
+                "./cmd/sprintd"
             ],
             "group": {
                 "kind": "build",
@@ -22,15 +23,22 @@
                 "focus": false,
                 "panel": "shared"
             },
-            "problemMatcher": ["$go"]
+            "problemMatcher": [
+                "$go"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            }
         },
         {
             "label": "Build Release (Maximum Optimization)",
             "type": "shell",
             "command": "powershell",
             "args": [
-                "-ExecutionPolicy", "Bypass",
-                "-File", "./build-optimized.ps1",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "./build-optimized.ps1",
                 "-Release"
             ],
             "group": "build",
@@ -49,8 +57,9 @@
             "args": [
                 "build",
                 "-race",
-                "-o", "bitcoin-sprint-dev.exe",
-                "."
+                "-o",
+                "bitcoin-sprint-dev.exe",
+                "./cmd/sprintd"
             ],
             "group": "build",
             "presentation": {
@@ -59,7 +68,9 @@
                 "focus": false,
                 "panel": "shared"
             },
-            "problemMatcher": ["$go"]
+            "problemMatcher": [
+                "$go"
+            ]
         },
         {
             "label": "Clean Build Artifacts",
@@ -82,8 +93,10 @@
             "type": "shell",
             "command": "powershell",
             "args": [
-                "-ExecutionPolicy", "Bypass",
-                "-File", "./build-optimized.ps1",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "./build-optimized.ps1",
                 "-Benchmark"
             ],
             "group": "build",
@@ -98,7 +111,10 @@
             "label": "Go Vet (Code Analysis)",
             "type": "shell",
             "command": "go",
-            "args": ["vet", "./..."],
+            "args": [
+                "vet",
+                "./..."
+            ],
             "group": "test",
             "presentation": {
                 "echo": true,
@@ -106,13 +122,19 @@
                 "focus": false,
                 "panel": "shared"
             },
-            "problemMatcher": ["$go"]
+            "problemMatcher": [
+                "$go"
+            ]
         },
         {
             "label": "Go Format",
             "type": "shell",
             "command": "gofmt",
-            "args": ["-s", "-w", "."],
+            "args": [
+                "-s",
+                "-w",
+                "."
+            ],
             "group": "build",
             "presentation": {
                 "echo": true,
@@ -144,7 +166,13 @@
             "type": "shell",
             "command": "go",
             "args": [
-                "test", "./...", "-bench", ".", "-benchmem", "-run", "^$"
+                "test",
+                "./...",
+                "-bench",
+                ".",
+                "-benchmem",
+                "-run",
+                "^$"
             ],
             "group": "test",
             "presentation": {
@@ -153,7 +181,9 @@
                 "focus": true,
                 "panel": "shared"
             },
-            "problemMatcher": ["$go"]
+            "problemMatcher": [
+                "$go"
+            ]
         }
     ]
 }
