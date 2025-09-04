@@ -84,19 +84,14 @@ axum-only = ["axum", "axum-extra", "chrono", "dotenvy", "num_cpus", "uuid"]
 hardened = ["web-server", "axum-server", "rustls-pemfile", "redis", "tower", "tower-http"]
 
 [[bin]]
-name = "storage_demo"
-path = "../../storage_verification_demo.rs"
-required-features = ["ipfs"]
-
-[[bin]]
-name = "storage_verifier_server"
-path = "src/bin/storage_verifier_server.rs"
+name = "bitcoin_sprint_api"
+path = "src/bin/bitcoin_sprint_api.rs"
 required-features = ["web-server"]
 
 [[bin]]
-name = "enterprise_server"
-path = "src/bin/enterprise_server.rs"
-required-features = ["hardened"]
+name = "bitcoin_sprint_api_new"
+path = "src/bin/bitcoin_sprint_api_new.rs"
+required-features = ["axum-only"]
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

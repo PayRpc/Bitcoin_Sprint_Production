@@ -1,3 +1,6 @@
+//go:build ignore
+// +build ignore
+
 // Bitcoin Sprint Enterprise Security Integration Demo
 // This demonstrates how the SecureBuffer enterprise features integrate with the API layer
 

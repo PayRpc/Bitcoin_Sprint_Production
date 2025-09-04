@@ -1,3 +1,6 @@
+//go:build ignore
+// +build ignore
+
 // Package securebuf provides enterprise-grade memory protection and Bitcoin-specific optimizations
 // This example shows how to integrate the full SecureBuffer API into Bitcoin Sprint
 

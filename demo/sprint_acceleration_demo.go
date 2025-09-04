@@ -1,3 +1,6 @@
+//go:build ignore
+// +build ignore
+
 // Sprint Acceleration Layer - Real-time blockchain network acceleration
 // Sprint sits between apps and blockchain networks, providing sub-ms relay and predictive caching
 package main

@@ -300,12 +300,12 @@ func (gr *GenericRelay) GetBlockByHash(hash string) (*blocks.BlockEvent, error) 
 		params = []interface{}{hash}
 	}
 
-	response, err := gr.makeHTTPRequest(gr.rpcMethods.GetBlockByHash, params)
+	resp, err := gr.makeHTTPRequest(gr.rpcMethods.GetBlockByHash, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get block by hash: %w", err)
 	}
 
-	return gr.parseBlockResponse(response.Result)
+	return gr.parseBlockResponse(resp.Result)
 }
 
 // GetBlockByHeight retrieves a block by its height

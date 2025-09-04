@@ -12,6 +12,7 @@ import (
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/metrics"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/netkit"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/securebuf"
 	"github.com/btcsuite/btcd/chaincfg"
@@ -20,6 +21,25 @@ import (
 	"github.com/btcsuite/btcd/wire"
 	"go.uber.org/zap"
 )
+
+// Service flag constants for peer validation
+const (
+	SvcNodeNetwork       = 1 << 0  // 1
+	SvcNodeGetUTXO       = 1 << 1  // 2 (unused)
+	SvcNodeBloom         = 1 << 2  // 4 (legacy)
+	SvcNodeWitness       = 1 << 3  // 8
+	SvcNodeNetworkLimited= 1 << 10 // 1024
+	SvcNodeP2Pv2         = 1 << 11 // 2048
+)
+
+const minProtocol = 70016
+
+// goodServices validates that peer has required service flags
+func goodServices(s uint64) bool {
+	hasNet := (s&SvcNodeNetwork) != 0 || (s&SvcNodeNetworkLimited) != 0
+	hasWit := (s&SvcNodeWitness) != 0
+	return hasNet && hasWit
+}
 
 // Client manages P2P peers with secure handshake authentication and resilient reconnection
 type Client struct {
@@ -77,6 +97,7 @@ type BlockProcessor struct {
 	// Metrics
 	processedBlocks    int64
 	droppedBlocks      int64
+	duplicateBlocks    int64
 	backpressureEvents int64
 }
 
@@ -170,12 +191,13 @@ func New(cfg config.Config, blockChan chan blocks.BlockEvent, mem *mempool.Mempo
 	}
 
 	return &Client{
-		cfg:       cfg,
-		blockChan: blockChan,
-		mem:       mem,
-		logger:    logger,
-		peers:     make([]*peer.Peer, 0),
-		auth:      auth,
+		cfg:         cfg,
+		blockChan:   blockChan,
+		mem:         mem,
+		logger:      logger,
+		peers:       make([]*peer.Peer, 0),
+		auth:        auth,
+		peerMetrics: make(map[string]*PeerMetrics),
 	}, nil
 }
 
@@ -279,11 +301,35 @@ func (c *Client) parallelConnect(address string, connectionChan chan<- *peer.Pee
 		ProtocolVersion:  wire.ProtocolVersion,
 		Listeners: peer.MessageListeners{
 			OnVersion: func(p *peer.Peer, msg *wire.MsgVersion) *wire.MsgReject {
+				// Enforce minimum protocol version
+				if msg.ProtocolVersion < minProtocol {
+					c.logger.Warn("Rejecting peer: protocol too old",
+						zap.String("peer", address),
+						zap.Uint32("version", uint32(msg.ProtocolVersion)),
+						zap.Uint32("min_version", minProtocol))
+					return wire.NewMsgReject(msg.Command(), wire.RejectMalformed, "protocol version too old")
+				}
+
+				// Enforce service flag requirements
+				if !goodServices(uint64(msg.Services)) {
+					c.logger.Warn("Rejecting peer: insufficient services",
+						zap.String("peer", address),
+						zap.Uint64("services", uint64(msg.Services)),
+						zap.Bool("has_network", (uint64(msg.Services)&SvcNodeNetwork) != 0),
+						zap.Bool("has_network_limited", (uint64(msg.Services)&SvcNodeNetworkLimited) != 0),
+						zap.Bool("has_witness", (uint64(msg.Services)&SvcNodeWitness) != 0))
+					return wire.NewMsgReject(msg.Command(), wire.RejectMalformed, "insufficient services")
+				}
+
 				c.logger.Info("Bitcoin protocol handshake completed",
 					zap.String("peer", address),
 					zap.String("user_agent", msg.UserAgent),
 					zap.Uint32("protocol_version", uint32(msg.ProtocolVersion)),
-					zap.Uint64("services", uint64(msg.Services)))
+					zap.Uint64("services", uint64(msg.Services)),
+					zap.Bool("network", (uint64(msg.Services)&SvcNodeNetwork) != 0),
+					zap.Bool("network_limited", (uint64(msg.Services)&SvcNodeNetworkLimited) != 0),
+					zap.Bool("witness", (uint64(msg.Services)&SvcNodeWitness) != 0),
+					zap.Bool("p2p_v2", (uint64(msg.Services)&SvcNodeP2Pv2) != 0))
 
 				atomic.AddInt32(&c.activePeers, 1)
 				return nil
@@ -390,6 +436,27 @@ func (c *Client) blockProcessingWorker() {
 	defer c.blockProcessor.wg.Done()
 
 	for block := range c.blockProcessor.workChan {
+		blockHash := block.BlockHash().String()
+
+		// TODO: Use global block deduplication index
+		// source := "p2p"
+		// if end, ok := dedup.BlockIdx.TryBegin(blockHash); !ok {
+		// 	c.logger.Info("Duplicate block ignored",
+		// 		zap.String("hash", blockHash),
+		// 		zap.String("source", source),
+		// 		zap.String("reason", "recent-seen"))
+		// 	metrics.BlockDuplicatesIgnored.WithLabelValues(source).Inc()
+		// 	atomic.AddInt64(&c.blockProcessor.duplicateBlocks, 1)
+		// 	continue
+		// }
+		// defer end(true)
+
+		source := "p2p"
+		c.logger.Info("Processing block",
+			zap.String("hash", blockHash),
+			zap.Int("tx_count", len(block.Transactions)),
+			zap.String("source", source))
+
 		// Use circuit breaker to protect against cascading failures
 		err := c.blockProcessor.circuitBreaker.Call(func() error {
 			// Process block concurrently
@@ -399,6 +466,8 @@ func (c *Client) blockProcessingWorker() {
 			select {
 			case c.blockProcessor.resultChan <- blockEvent:
 				atomic.AddInt64(&c.blockProcessor.processedBlocks, 1)
+				// Record successful processing metric
+				metrics.BlocksProcessed.WithLabelValues(source).Inc()
 			case <-time.After(100 * time.Millisecond):
 				atomic.AddInt64(&c.blockProcessor.droppedBlocks, 1)
 				c.logger.Warn("Block processing result dropped due to timeout",

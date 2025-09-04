@@ -588,7 +588,7 @@ pub fn generate_admin_secret_raw() -> [u8; 32] {
 /// Generate admin secret as base64 string
 pub fn generate_admin_secret_base64() -> String {
     let secret = generate_admin_secret_raw();
-    base64::encode(&secret)
+    base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &secret)
 }
 
 /// Generate admin secret as hex string

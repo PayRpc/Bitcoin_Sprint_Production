@@ -107,12 +107,14 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		// Check rate limit for this specific API key
-		keyIdentifier := "key:" + customerKey.Hash
-		if !s.rateLimiter.Allow(keyIdentifier, float64(customerKey.RateLimitRemaining), 1) {
-			s.logger.Warn("API key rate limit exceeded",
+		// Check rate limit based on customer tier
+		keyIdentifier := string(customerKey.Hash)
+		tierRateLimit := s.getTierRateLimit(customerKey.Tier)
+		if !s.rateLimiter.Allow(keyIdentifier, tierRateLimit, 1) {
+			s.logger.Warn("Tier rate limit exceeded",
 				zap.String("key_hash", customerKey.Hash[:8]),
 				zap.String("tier", string(customerKey.Tier)),
+				zap.Float64("limit", tierRateLimit),
 				zap.String("ip", getClientIP(r)),
 				zap.String("path", r.URL.Path),
 			)
@@ -164,25 +166,32 @@ func (rw *responseWriter) Write(data []byte) (int, error) {
 	return rw.ResponseWriter.Write(data)
 }
 
-// getClientIP extracts the client's real IP considering proxy headers
-func getClientIP(r *http.Request) string {
-	// Try common proxy headers
-	for _, header := range []string{"X-Forwarded-For", "X-Real-IP"} {
-		if ip := r.Header.Get(header); ip != "" {
-			// X-Forwarded-For can be a comma-separated list; take the first one
-			if strings.Contains(ip, ",") {
-				return strings.TrimSpace(strings.Split(ip, ",")[0])
-			}
-			return ip
+// getTierRateLimit returns the rate limit for a given tier
+func (s *Server) getTierRateLimit(tier config.Tier) float64 {
+	if s.cfg.RateLimits == nil {
+		// Fallback to basic limits if not configured
+		switch tier {
+		case config.TierFree:
+			return 1.0
+		case config.TierPro:
+			return 10.0
+		case config.TierBusiness:
+			return 50.0
+		case config.TierTurbo:
+			return 100.0
+		case config.TierEnterprise:
+			return 500.0
+		default:
+			return 1.0
 		}
 	}
 
-	// Extract from RemoteAddr
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
+	if tierLimit, exists := s.cfg.RateLimits[tier]; exists {
+		return tierLimit.RefillRate
 	}
-	return ip
+
+	// Default fallback
+	return 1.0
 }
 
 // jsonResponse safely writes a JSON response with proper error handling
@@ -228,4 +237,33 @@ func (s *Server) turboEncodeJSON(w http.ResponseWriter, data interface{}) {
 		)
 		w.Write([]byte(`{"error":"Internal encoding error"}`))
 	}
+}
+
+// getClientIP extracts the real client IP from the request
+func getClientIP(r *http.Request) string {
+	// Check X-Forwarded-For header (most common with proxies/load balancers)
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// X-Forwarded-For can contain multiple IPs, take the first one
+		ips := strings.Split(xff, ",")
+		if len(ips) > 0 {
+			return strings.TrimSpace(ips[0])
+		}
+	}
+
+	// Check X-Real-IP header (nginx)
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+
+	// Check X-Forwarded header
+	if xf := r.Header.Get("X-Forwarded"); xf != "" {
+		return strings.TrimSpace(xf)
+	}
+
+	// Fall back to RemoteAddr
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return ip
 }

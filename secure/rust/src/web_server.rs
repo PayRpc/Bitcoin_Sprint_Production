@@ -92,14 +92,17 @@ lazy_static::lazy_static! {
         &["provider", "error_type"]
     ).unwrap();
 
-    static ref REQUESTS_RATE_LIMITED: prometheus::Counter = prometheus::register_counter!(
-        "bitcoin_sprint_requests_rate_limited_total",
-        "Total number of rate limited requests"
-    ).unwrap();
-
     static ref CIRCUIT_BREAKER_TRIPS: prometheus::Counter = prometheus::register_counter!(
         "bitcoin_sprint_circuit_breaker_trips_total",
         "Total number of circuit breaker trips"
+    ).unwrap();
+}
+
+// --- Rate Limiting Counter (available without hardened feature) ---
+lazy_static::lazy_static! {
+    static ref REQUESTS_RATE_LIMITED: prometheus::Counter = prometheus::register_counter!(
+        "bitcoin_sprint_requests_rate_limited_total",
+        "Total number of rate limited requests"
     ).unwrap();
 }
 

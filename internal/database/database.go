@@ -9,13 +9,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/lib/pq"
+	_ "github.com/mattn/go-sqlite3"
 	"go.uber.org/zap"
 )
 
 // DB represents the database connection
 type DB struct {
-	Pool   *pgxpool.Pool
-	Logger *zap.Logger
+	Pool     *pgxpool.Pool // For PostgreSQL
+	SqlDB    *sql.DB       // For SQLite
+	Type     string        // "postgres" or "sqlite"
+	Logger   *zap.Logger
 }
 
 // Config holds database configuration
@@ -28,10 +31,18 @@ type Config struct {
 
 // New creates a new database connection
 func New(cfg Config, logger *zap.Logger) (*DB, error) {
-	if cfg.Type != "postgres" && cfg.Type != "postgresql" {
+	switch cfg.Type {
+	case "postgres", "postgresql":
+		return newPostgresDB(cfg, logger)
+	case "sqlite", "sqlite3":
+		return newSQLiteDB(cfg, logger)
+	default:
 		return nil, fmt.Errorf("unsupported database type: %s", cfg.Type)
 	}
+}
 
+// newPostgresDB creates a PostgreSQL database connection
+func newPostgresDB(cfg Config, logger *zap.Logger) (*DB, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -66,21 +77,65 @@ func New(cfg Config, logger *zap.Logger) (*DB, error) {
 
 	return &DB{
 		Pool:   pool,
+		Type:   cfg.Type,
+		Logger: logger,
+	}, nil
+}
+
+// newSQLiteDB creates a SQLite database connection
+func newSQLiteDB(cfg Config, logger *zap.Logger) (*DB, error) {
+	db, err := sql.Open("sqlite3", cfg.URL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open SQLite database: %w", err)
+	}
+
+	// Configure connection pool
+	db.SetMaxOpenConns(cfg.MaxConns)
+	db.SetMaxIdleConns(cfg.MinConns)
+	db.SetConnMaxLifetime(1 * time.Hour)
+	db.SetConnMaxIdleTime(30 * time.Minute)
+
+	// Test connection
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to ping SQLite database: %w", err)
+	}
+
+	logger.Info("SQLite database connection established",
+		zap.String("url", cfg.URL),
+		zap.Int("max_conns", cfg.MaxConns),
+		zap.Int("min_conns", cfg.MinConns))
+
+	return &DB{
+		SqlDB:  db,
+		Type:   cfg.Type,
 		Logger: logger,
 	}, nil
 }
 
 // Close closes the database connection
 func (db *DB) Close() {
-	if db.Pool != nil {
-		db.Pool.Close()
-		db.Logger.Info("Database connection closed")
+	if db.Type == "postgres" || db.Type == "postgresql" {
+		if db.Pool != nil {
+			db.Pool.Close()
+			db.Logger.Info("PostgreSQL database connection closed")
+		}
+	} else if db.Type == "sqlite" || db.Type == "sqlite3" {
+		if db.SqlDB != nil {
+			db.SqlDB.Close()
+			db.Logger.Info("SQLite database connection closed")
+		}
 	}
 }
 
 // Ping tests the database connection
 func (db *DB) Ping(ctx context.Context) error {
-	return db.Pool.Ping(ctx)
+	if db.Type == "postgres" || db.Type == "postgresql" {
+		return db.Pool.Ping(ctx)
+	} else if db.Type == "sqlite" || db.Type == "sqlite3" {
+		return db.SqlDB.PingContext(ctx)
+	}
+	return fmt.Errorf("unsupported database type for ping: %s", db.Type)
 }
 
 // APIKey represents an API key in the database

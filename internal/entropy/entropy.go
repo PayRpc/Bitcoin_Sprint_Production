@@ -132,3 +132,13 @@ func HybridEntropyWithFingerprintRust(headers [][]byte) ([]byte, error) {
 
 	return entropy, nil
 }
+
+// CreateEnterpriseEntropyBuffer creates a secure buffer with enterprise-grade entropy
+func CreateEnterpriseEntropyBuffer(size int) ([]byte, error) {
+	return FastEntropyWithFingerprintRust()
+}
+
+// CreateEntropyBufferWithHeaders creates entropy buffer with Bitcoin block headers
+func CreateEntropyBufferWithHeaders(size int, headers [][]byte) ([]byte, error) {
+	return HybridEntropyWithFingerprintRust(headers)
+}

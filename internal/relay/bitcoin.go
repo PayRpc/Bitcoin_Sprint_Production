@@ -1,3 +1,6 @@
+//go:build !sprintd_exclude_bitcoin
+// +build !sprintd_exclude_bitcoin
+
 package relay
 
 import (

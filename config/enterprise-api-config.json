@@ -1,9 +1,9 @@
 {
   "endpoints": {
-    "analytics": "http://localhost:8080/analytics",
-    "health": "http://localhost:8080/health",
-    "status": "http://localhost:8080/status",
-    "metrics": "http://localhost:8081/metrics",
+    "analytics": "http://localhost:8082/analytics",
+    "health": "http://localhost:8082/health",
+    "status": "http://localhost:8082/status",
+    "metrics": "http://localhost:8083/metrics",
     "validate_storage": "https://localhost:8443/api/validate-storage",
     "subscription": "https://localhost:8443/api/subscription",
     "storage_analytics": "https://localhost:8443/api/analytics"

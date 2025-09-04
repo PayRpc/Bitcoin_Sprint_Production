@@ -30,6 +30,7 @@ export default function EntropyGenerator() {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
+					'X-API-Key': 'free-api-key-changeme', // Use the free tier API key
 				},
 				body: JSON.stringify({ size, format }),
 			});

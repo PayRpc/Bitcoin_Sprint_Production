@@ -7,6 +7,8 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use dotenvy::dotenv;
+use lazy_static::lazy_static;
+use prometheus::Counter;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -14,34 +16,71 @@ use std::collections::HashMap;
 use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::net::TcpStream;
 use tokio::sync::{mpsc, Mutex};
 use tokio::task;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
+// Static atomic counters
+static BITCOIN_BLOCKS: AtomicU64 = AtomicU64::new(850000);
+static TOTAL_REQUESTS: AtomicU64 = AtomicU64::new(0);
+static ACTIVE_CONNECTIONS: AtomicU64 = AtomicU64::new(0);
+
+// Prometheus metrics
+lazy_static! {
+    static ref REQUESTS_RATE_LIMITED: Counter = prometheus::register_counter!(
+        "bitcoin_sprint_requests_rate_limited_total",
+        "Total number of rate limited requests"
+    ).unwrap();
+}
+
 // Version information
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const COMMIT: &str = "unknown";
 
-// Protocol types
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-enum ProtocolType {
-    Bitcoin,
-    Ethereum,
-    Solana,
+// API Response types
+#[derive(Debug, Serialize, Deserialize)]
+struct HealthResponse {
+    status: String,
+    service: String,
+    version: String,
+    network: String,
+    timestamp: u64,
 }
 
-// Config struct (expanded to match Go more closely)
+#[derive(Debug, Serialize, Deserialize)]
+struct MetricsResponse {
+    active_connections: u64,
+    total_requests: u64,
+    bitcoin_blocks: u64,
+    uptime_seconds: u64,
+    network_status: String,
+    timestamp: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct BitcoinStatus {
+    network: String,
+    block_height: u64,
+    peers_connected: u32,
+    mempool_size: u64,
+    last_block_time: u64,
+    sync_status: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct NetworkInfo {
+    bitcoin: BitcoinStatus,
+    ethereum_connected: bool,
+    total_tx_processed: u64,
+    fees_collected: f64,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Config {
-    tier: String,
-    api_host: String,
-    api_port: u16,
-    max_connections: u32,
-    message_queue_size: u32,
-    circuit_breaker_threshold: u32,
     circuit_breaker_timeout: u32,
     circuit_breaker_half_open_max: u32,
     enable_encryption: bool,
@@ -570,7 +609,7 @@ struct NetworkInfo {
     fees_collected: f64,
 }
 
-async fn health() -> Result<HttpResponse> {
+async fn health() -> Result<Json<HealthResponse>, (StatusCode, Json<Value>)> {
     TOTAL_REQUESTS.fetch_add(1, Ordering::SeqCst);
     
     let response = HealthResponse {
@@ -584,10 +623,10 @@ async fn health() -> Result<HttpResponse> {
             .as_secs(),
     };
     
-    Ok(HttpResponse::Ok().json(response))
+    Ok(Json(response))
 }
 
-async fn metrics() -> Result<HttpResponse> {
+async fn metrics() -> Result<Json<MetricsResponse>, (StatusCode, Json<Value>)> {
     TOTAL_REQUESTS.fetch_add(1, Ordering::SeqCst);
     
     let response = MetricsResponse {
@@ -602,10 +641,10 @@ async fn metrics() -> Result<HttpResponse> {
             .as_secs(),
     };
     
-    Ok(HttpResponse::Ok().json(response))
+    Ok(Json(response))
 }
 
-async fn bitcoin_status() -> Result<HttpResponse> {
+async fn bitcoin_status() -> Result<Json<BitcoinStatus>, (StatusCode, Json<Value>)> {
     TOTAL_REQUESTS.fetch_add(1, Ordering::SeqCst);
     
     let status = BitcoinStatus {
@@ -620,10 +659,10 @@ async fn bitcoin_status() -> Result<HttpResponse> {
         sync_status: "synced".to_string(),
     };
     
-    Ok(HttpResponse::Ok().json(status))
+    Ok(Json(status))
 }
 
-async fn network_info() -> Result<HttpResponse> {
+async fn network_info() -> Result<Json<NetworkInfo>, (StatusCode, Json<Value>)> {
     TOTAL_REQUESTS.fetch_add(1, Ordering::SeqCst);
     
     let bitcoin_status = BitcoinStatus {
@@ -645,7 +684,7 @@ async fn network_info() -> Result<HttpResponse> {
         fees_collected: 15.75,
     };
     
-    Ok(HttpResponse::Ok().json(info))
+    Ok(Json(info))
 }
 
 // Simulate Bitcoin network activity
@@ -695,34 +734,31 @@ fn configure_tls() -> Result<ServerConfig, Box<dyn std::error::Error>> {
     Ok(config)
 }
 
-#[actix_web::main]
+#[tokio::main]
 async fn main() -> std::io::Result<()> {
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
-        .init();
+    // Initialize tracing
+    tracing_subscriber::fmt().init();
 
-    log::info!("🚀 Starting Bitcoin Sprint API Server...");
-    log::info!("🔗 Network: Bitcoin Mainnet");
-    log::info!("🌐 Server will be available at http://0.0.0.0:8080");
+    info!("🚀 Starting Bitcoin Sprint API Server...");
+    info!("🔗 Network: Bitcoin Mainnet");
+    info!("🌐 Server will be available at http://0.0.0.0:8080");
 
     // Start background network simulation
     tokio::spawn(simulate_network_activity());
 
-    HttpServer::new(|| {
-        App::new()
-            .wrap(Logger::default())
-            .wrap(
-                actix_web::middleware::DefaultHeaders::new()
-                    .add(("Access-Control-Allow-Origin", "*"))
-                    .add(("Access-Control-Allow-Methods", "GET, POST, OPTIONS"))
-                    .add(("Access-Control-Allow-Headers", "Content-Type"))
-            )
-            .route("/health", web::get().to(health))
-            .route("/metrics", web::get().to(metrics))
-            .route("/bitcoin/status", web::get().to(bitcoin_status))
-            .route("/network/info", web::get().to(network_info))
-    })
-    .bind("0.0.0.0:8080")?
-    .run()
-    .await
+    // Build the Axum application
+    let app = Router::new()
+        .route("/health", get(health))
+        .route("/metrics", get(metrics))
+        .route("/bitcoin/status", get(bitcoin_status))
+        .route("/network/info", get(network_info));
+
+    // Create the server
+    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
+    info!("Server listening on {}", addr);
+
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app).await?;
+
+    Ok(())
 }

@@ -1,3 +1,6 @@
+//go:build ignore
+// +build ignore
+
 // Enterprise Demo - Bitcoin Sprint Multi-Chain Platform
 // This demonstrates the complete enterprise features and architecture
 package main

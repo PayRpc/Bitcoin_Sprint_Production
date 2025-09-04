@@ -45,10 +45,12 @@ type RelayClient interface {
 
 // RelayDispatcher manages multiple relay clients and routes requests
 type RelayDispatcher struct {
-	clients map[string]RelayClient
-	logger  *zap.Logger
-	cfg     config.Config
-	mu      sync.RWMutex
+	clients        map[string]RelayClient
+	logger         *zap.Logger
+	cfg            config.Config
+	mu             sync.RWMutex
+	deduper        *BlockDeduper
+	dedupeStop     chan struct{}
 }
 
 // NetworkInfo contains network-specific information
@@ -136,11 +138,29 @@ type TLSConfig struct {
 
 // NewRelayDispatcher creates a new relay dispatcher
 func NewRelayDispatcher(cfg config.Config, logger *zap.Logger) *RelayDispatcher {
-	return &RelayDispatcher{
-		clients: make(map[string]RelayClient),
-		logger:  logger,
-		cfg:     cfg,
+	dispatcher := &RelayDispatcher{
+		clients:    make(map[string]RelayClient),
+		logger:     logger,
+		cfg:        cfg,
+		deduper:    NewBlockDeduper(8192, 5*time.Minute), // 8K capacity with 5min TTL
+		dedupeStop: make(chan struct{}),
 	}
+	
+	// Start background cleanup for the deduper
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				dispatcher.deduper.Cleanup()
+			case <-dispatcher.dedupeStop:
+				return
+			}
+		}
+	}()
+	
+	return dispatcher
 }
 
 // RegisterClient registers a relay client for a specific network
@@ -245,6 +265,12 @@ func (d *RelayDispatcher) GetMetrics() map[string]*RelayMetrics {
 func (d *RelayDispatcher) Shutdown(ctx context.Context) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+
+	// Stop deduper cleanup goroutine
+	if d.dedupeStop != nil {
+		close(d.dedupeStop)
+		d.dedupeStop = nil
+	}
 
 	for network, client := range d.clients {
 		if err := client.Disconnect(); err != nil {

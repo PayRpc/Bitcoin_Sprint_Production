@@ -94,6 +94,21 @@ type Config struct {
 
 	// Sprint relay peer settings
 	SprintRelayPeers []string // List of Sprint relay peers requiring authentication
+
+	// RPC Configuration (for backfill and batch operations)
+	RPCEnabled         bool          `json:"rpc_enabled"`
+	RPCURL             string        `json:"rpc_url"`
+	RPCUsername        string        `json:"rpc_username"`
+	RPCPassword        string        `json:"rpc_password"`
+	RPCTimeout         time.Duration `json:"rpc_timeout"`
+	RPCBatchSize       int           `json:"rpc_batch_size"`
+	RPCRetryAttempts   int           `json:"rpc_retry_attempts"`
+	RPCRetryMaxWait    time.Duration `json:"rpc_retry_max_wait"`
+	RPCSkipMempool     bool          `json:"rpc_skip_mempool"`
+	RPCFailedTxFile    string        `json:"rpc_failed_tx_file"`
+	RPCLastIDFile      string        `json:"rpc_last_id_file"`
+	RPCWorkers         int           `json:"rpc_workers"`
+	RPCMessageTopic    string        `json:"rpc_message_topic"`
 }
 
 // Load reads config from env
@@ -107,22 +122,20 @@ func Load() Config {
 		BitcoinNodes:     []string{getEnv("BITCOIN_NODE", "127.0.0.1:8333")},
 		ZMQNodes:         []string{getEnv("ZMQ_NODE", "127.0.0.1:28332")},
 		PeerListenPort:   getEnvInt("PEER_LISTEN_PORT", 8335),
-		APIHost:          getEnv("API_HOST", "0.0.0.0"),
-		APIPort:          getEnvInt("API_PORT", 8080),
-		AdminPort:        getEnvInt("ADMIN_PORT", 8081), // Separate admin port
+		AdminPort:        getEnvInt("ADMIN_PORT", 8081),
 		LicenseKey:       getEnv("LICENSE_KEY", ""),
 		APIKey:           getEnv("API_KEY", "changeme"),
 		SecureChannelURL: getEnv("SECURE_CHANNEL_URL", "tcp://127.0.0.1:9000"),
 		UseDirectP2P:     getEnvBool("USE_DIRECT_P2P", false),
 		UseMemoryChannel: getEnvBool("USE_MEMORY_CHANNEL", false),
-		OptimizeSystem:   getEnvBool("OPTIMIZE_SYSTEM", true), // Default to optimized
+		OptimizeSystem:   getEnvBool("OPTIMIZE_SYSTEM", true),
 
 		// Performance optimizations (permanent defaults for 99.9% SLA)
-		GCPercent:       getEnvInt("GC_PERCENT", 25),          // Aggressive GC by default
-		MaxCPUCores:     getEnvInt("MAX_CPU_CORES", 0),        // Auto-detect all cores
-		HighPriority:    getEnvBool("HIGH_PRIORITY", true),    // High priority by default
-		LockOSThread:    getEnvBool("LOCK_OS_THREAD", true),   // Pin threads by default
-		PreallocBuffers: getEnvBool("PREALLOC_BUFFERS", true), // Pre-allocate by default
+		GCPercent:       getEnvInt("GC_PERCENT", 25),
+		MaxCPUCores:     getEnvInt("MAX_CPU_CORES", 0),
+		HighPriority:    getEnvBool("HIGH_PRIORITY", true),
+		LockOSThread:    getEnvBool("LOCK_OS_THREAD", true),
+		PreallocBuffers: getEnvBool("PREALLOC_BUFFERS", true),
 
 		// Enterprise-ready settings
 		EnablePrometheus:     getEnvBool("ENABLE_PROMETHEUS", true),
@@ -145,16 +158,47 @@ func Load() Config {
 		SupportedChains: []string{"btc", "eth", "sol", "polygon", "arbitrum"},
 		DefaultChain:    getEnv("DEFAULT_CHAIN", "btc"),
 
-		// Sprint relay peer settings (configurable via env)
+		// Sprint relay peer settings
 		SprintRelayPeers: getEnvSlice("SPRINT_RELAY_PEERS", []string{}),
 
-		// Turbo mode defaults
-		Tier:               tier,
-		WriteDeadline:      2 * time.Second,
-		UseSharedMemory:    false,
-		BlockBufferSize:    1024,
-		EnableKernelBypass: getEnvBool("ENABLE_KERNEL_BYPASS", false),
-		MockFastBlocks:     getEnvBool("MOCK_FAST_BLOCKS", false),
+		// RPC Configuration for backfill operations
+		RPCEnabled:       getEnvBool("RPC_ENABLED", false),
+		RPCURL:           getEnv("RPC_URL", "http://127.0.0.1:8332"),
+		RPCUsername:      getEnv("RPC_USERNAME", "sprint"),
+		RPCPassword:      getEnv("RPC_PASSWORD", "sprint_password_2025"),
+		RPCTimeout:       time.Duration(getEnvInt("RPC_TIMEOUT_SEC", 30)) * time.Second,
+		RPCBatchSize:     getEnvInt("RPC_BATCH_SIZE", 50),
+		RPCRetryAttempts: getEnvInt("RPC_RETRY_ATTEMPTS", 3),
+		RPCRetryMaxWait:  time.Duration(getEnvInt("RPC_RETRY_MAX_WAIT_MIN", 5)) * time.Minute,
+		RPCSkipMempool:   getEnvBool("RPC_SKIP_MEMPOOL", false),
+		RPCFailedTxFile:  getEnv("RPC_FAILED_TX_FILE", "./failed_txs.txt"),
+		RPCLastIDFile:    getEnv("RPC_LAST_ID_FILE", "./last_id.txt"),
+		RPCWorkers:       getEnvInt("RPC_WORKERS", 10),
+		RPCMessageTopic:  getEnv("RPC_MESSAGE_TOPIC", "bitcoin.transactions"),
+	}
+
+	// Parse API_ADDR if provided (format: host:port)
+	apiAddr := getEnv("API_ADDR", "")
+	if apiAddr != "" {
+		if host, port, err := parseAddr(apiAddr); err == nil {
+			cfg.APIHost = host
+			cfg.APIPort = port
+		}
+	} else {
+		// Use individual settings
+		cfg.APIHost = getEnv("API_HOST", "0.0.0.0")
+		cfg.APIPort = getEnvInt("API_PORT", 8080)
+	}
+
+	// Parse METRICS_ADDR if provided (format: host:port)
+	metricsAddr := getEnv("METRICS_ADDR", "")
+	if metricsAddr != "" {
+		if _, port, err := parseAddr(metricsAddr); err == nil {
+			cfg.PrometheusPort = port
+			// Note: We don't override the host for metrics as it's typically localhost
+		}
+	} else {
+		cfg.PrometheusPort = getEnvInt("PROMETHEUS_PORT", 9090)
 	}
 
 	// Initialize tier-based rate limits
@@ -322,4 +366,24 @@ func loadEnvironmentConfig() {
 			log.Printf("Config: Loaded relay tier .env file: %s", relayTierEnvFile)
 		}
 	}
+}
+
+// parseAddr parses a host:port string and returns host and port separately
+func parseAddr(addr string) (string, int, error) {
+	parts := strings.Split(addr, ":")
+	if len(parts) != 2 {
+		return "", 0, fmt.Errorf("invalid address format, expected host:port")
+	}
+
+	host := parts[0]
+	port, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return "", 0, fmt.Errorf("invalid port number: %v", err)
+	}
+
+	if port < 1 || port > 65535 {
+		return "", 0, fmt.Errorf("port number out of range: %d", port)
+	}
+
+	return host, port, nil
 }

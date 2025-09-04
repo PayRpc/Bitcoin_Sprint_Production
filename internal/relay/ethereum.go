@@ -2,18 +2,49 @@ package relay
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"math"
+	"math/rand"
+	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/netx"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )
+
+// wsConn wraps websocket.Conn with thread-safe write operations
+type wsConn struct {
+	Conn     *websocket.Conn
+	logger   *zap.Logger
+	writeMu  sync.Mutex
+	endpoint string
+}
+
+// WriteMessage sends a message through the WebSocket connection with thread safety
+func (w *wsConn) WriteMessage(messageType int, data []byte) error {
+	w.writeMu.Lock()
+	defer w.writeMu.Unlock()
+	return w.Conn.WriteMessage(messageType, data)
+}
+
+// ReadMessage reads a message from the WebSocket connection
+func (w *wsConn) ReadMessage() (int, []byte, error) {
+	return w.Conn.ReadMessage()
+}
+
+// Close closes the WebSocket connection
+func (w *wsConn) Close() error {
+	return w.Conn.Close()
+}
 
 // EthereumRelay implements RelayClient for Ethereum network using JSON-RPC WebSocket
 type EthereumRelay struct {
@@ -21,7 +52,7 @@ type EthereumRelay struct {
 	logger *zap.Logger
 
 	// WebSocket connections
-	connections []*websocket.Conn
+	connections []*wsConn
 	connMu      sync.RWMutex
 	connected   atomic.Bool
 
@@ -36,6 +67,9 @@ type EthereumRelay struct {
 	healthMu  sync.RWMutex
 	metrics   *RelayMetrics
 	metricsMu sync.RWMutex
+	
+	// Block deduplication
+	deduper    *BlockDeduper
 
 	// Request tracking
 	requestID   int64
@@ -45,6 +79,10 @@ type EthereumRelay struct {
 	// Subscription management
 	subscriptions map[string]chan *EthereumNotification
 	subMu         sync.RWMutex
+
+	// backoff per endpoint
+	backoffMu sync.Mutex
+	backoff   map[string]int // attempt counter
 }
 
 // EthereumResponse represents a JSON-RPC response
@@ -93,7 +131,7 @@ type EthereumNetworkInfo struct {
 func NewEthereumRelay(cfg config.Config, logger *zap.Logger) *EthereumRelay {
 	relayConfig := RelayConfig{
 		Network:           "ethereum",
-		Endpoints:         []string{"18.138.108.67:30303", "3.209.45.79:30303", "34.255.23.113:30303"},
+		Endpoints:         []string{"wss://ethereum.publicnode.com", "wss://cloudflare-eth.com", "wss://rpc.ankr.com/eth/ws"},
 		Timeout:           30 * time.Second,
 		RetryAttempts:     3,
 		RetryDelay:        5 * time.Second,
@@ -106,14 +144,17 @@ func NewEthereumRelay(cfg config.Config, logger *zap.Logger) *EthereumRelay {
 		cfg:           cfg,
 		logger:        logger,
 		relayConfig:   relayConfig,
+		connections:   make([]*wsConn, 0),
 		blockChan:     make(chan blocks.BlockEvent, 1000),
 		pendingReqs:   make(map[int64]chan *EthereumResponse),
 		subscriptions: make(map[string]chan *EthereumNotification),
+		backoff:       make(map[string]int),
 		health: &HealthStatus{
 			IsHealthy:       false,
 			ConnectionState: "disconnected",
 		},
 		metrics: &RelayMetrics{},
+		deduper: NewBlockDeduper(4096, 3*time.Minute), // Ethereum-specific deduper
 	}
 }
 
@@ -126,12 +167,13 @@ func (er *EthereumRelay) Connect(ctx context.Context) error {
 	er.logger.Info("Connecting to Ethereum network",
 		zap.Strings("endpoints", er.relayConfig.Endpoints))
 
+	// Try to connect to all endpoints in parallel
 	for _, endpoint := range er.relayConfig.Endpoints {
 		go er.connectToEndpoint(ctx, endpoint)
 	}
 
-	er.connected.Store(true)
-	er.updateHealth(true, "connected", nil)
+	// The connected flag will be set when the first connection succeeds
+	// in addConnection, not immediately here
 
 	return nil
 }
@@ -411,6 +453,149 @@ func (er *EthereumRelay) GetSupportedFeatures() []Feature {
 	}
 }
 
+// addConnection adds a connection to the active set
+func (er *EthereumRelay) addConnection(wc *wsConn) {
+	er.connMu.Lock()
+	defer er.connMu.Unlock()
+	er.connections = append(er.connections, wc)
+	if len(er.connections) == 1 {
+		er.connected.Store(true)
+		er.updateHealth(true, "connected", nil)
+	}
+}
+
+// removeConnection removes a connection from the active set
+func (er *EthereumRelay) removeConnection(wc *wsConn) {
+	er.connMu.Lock()
+	defer er.connMu.Unlock()
+	out := er.connections[:0]
+	for _, c := range er.connections {
+		if c != wc {
+			out = append(out, c)
+		}
+	}
+	er.connections = out
+	if len(er.connections) == 0 {
+		er.connected.Store(false)
+		er.updateHealth(false, "disconnected", nil)
+	}
+}
+
+// scheduleReconnect schedules reconnect with exponential backoff per endpoint
+func (er *EthereumRelay) scheduleReconnect(endpoint string) {
+	er.backoffMu.Lock()
+	
+	// Check how many connections we still have
+	er.connMu.RLock()
+	activeConnections := len(er.connections)
+	er.connMu.RUnlock()
+	
+	// If this is a Cloudflare or Ankr endpoint and we have at least one working connection,
+	// use a longer backoff to avoid unnecessary reconnection attempts
+	isProblematicEndpoint := strings.Contains(endpoint, "cloudflare") || 
+	                        strings.Contains(endpoint, "ankr") || 
+	                        strings.Contains(endpoint, "infura")
+	
+	var attempt int
+	if isProblematicEndpoint && activeConnections > 0 {
+		// Use higher starting backoff for problematic endpoints if we have other working connections
+		attempt = er.backoff[endpoint] + 2
+		if attempt > 8 {
+			attempt = 8 // Cap at ~256s for problematic endpoints
+		}
+	} else {
+		// Standard backoff for primary endpoints or when we have no connections
+		attempt = er.backoff[endpoint] + 1
+		if attempt > 6 {
+			attempt = 6 // Cap at ~32s
+		}
+	}
+	
+	er.backoff[endpoint] = attempt
+	er.backoffMu.Unlock()
+
+	// Calculate delay with more jitter for longer backoffs
+	delay := time.Duration(1<<uint(attempt-1)) * time.Second
+	jitterPercent := 0.2 // 20% jitter
+	jitter := time.Duration(float64(delay) * jitterPercent * rand.Float64())
+	wait := delay + jitter
+	
+	er.logger.Info("Scheduling reconnect", 
+		zap.String("endpoint", endpoint), 
+		zap.Duration("in", wait),
+		zap.Int("active_connections", activeConnections),
+		zap.Int("attempt", attempt))
+	
+	time.AfterFunc(wait, func() {
+		// Double check if we still need to reconnect
+		er.connMu.RLock()
+		needToReconnect := true
+		
+		// If we have enough connections and this is a problematic endpoint,
+		// we can skip reconnection attempt
+		if isProblematicEndpoint && len(er.connections) >= 1 {
+			// Only skip every other attempt to ensure we keep trying occasionally
+			if er.backoff[endpoint]%2 == 0 {
+				needToReconnect = false
+			}
+		}
+		er.connMu.RUnlock()
+		
+		if needToReconnect {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			er.connectToEndpoint(ctx, endpoint)
+		} else {
+			er.logger.Info("Skipping reconnect attempt, enough connections active", 
+				zap.String("endpoint", endpoint))
+		}
+	})
+}
+
+// shouldReconnect determines if we should attempt to reconnect based on the error
+func (er *EthereumRelay) shouldReconnect(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check for specific WebSocket close codes that indicate temporary issues
+	if closeErr, ok := err.(*websocket.CloseError); ok {
+		switch closeErr.Code {
+		case websocket.CloseAbnormalClosure,
+			 websocket.CloseGoingAway,
+			 websocket.CloseInternalServerErr,
+			 websocket.CloseTryAgainLater:
+			return true
+		}
+	}
+
+	// Reconnect on network-related errors
+	errStr := err.Error()
+	return strings.Contains(errStr, "timeout") ||
+		   strings.Contains(errStr, "connection reset") ||
+		   strings.Contains(errStr, "broken pipe") ||
+		   strings.Contains(errStr, "bad handshake") ||
+		   strings.Contains(errStr, "tls") ||
+		   strings.Contains(errStr, "lookup") ||
+		   strings.Contains(errStr, "network is unreachable")
+}
+
+// updateHealth updates the health status
+func (er *EthereumRelay) updateHealth(healthy bool, state string, err error) {
+	er.healthMu.Lock()
+	defer er.healthMu.Unlock()
+
+	er.health.IsHealthy = healthy
+	er.health.LastSeen = time.Now()
+	er.health.ConnectionState = state
+	if err != nil {
+		er.health.ErrorMessage = err.Error()
+		er.health.ErrorCount++
+	} else {
+		er.health.ErrorMessage = ""
+	}
+}
+
 // UpdateConfig updates the relay configuration
 func (er *EthereumRelay) UpdateConfig(cfg RelayConfig) error {
 	er.relayConfig = cfg
@@ -434,33 +619,217 @@ func (er *EthereumRelay) connectToEndpoint(ctx context.Context, endpoint string)
 		return
 	}
 
-	conn, _, err := websocket.DefaultDialer.DialContext(ctx, u.String(), nil)
-	if err != nil {
-		er.logger.Warn("Failed to connect to Ethereum endpoint",
-			zap.String("endpoint", endpoint),
-			zap.Error(err))
-		return
+	// Create WebSocket dialer with resolver-aware NetDialContext
+	dialer := websocket.Dialer{
+		Proxy:             websocket.DefaultDialer.Proxy,
+		HandshakeTimeout:  20 * time.Second, // Increased from 12 to 20 seconds
+		TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: false},
+		NetDialContext:    netx.DialerWithResolver(),
+		EnableCompression: true,
 	}
 
-	er.connMu.Lock()
-	er.connections = append(er.connections, conn)
-	er.connMu.Unlock()
+	// Base headers for all endpoints
+	header := http.Header{}
+	header.Set("Origin", "https://bitcoinsprint.com")
+	header.Set("User-Agent", "BitcoinSprint/2.5.0 (+https://bitcoinsprint.com)")
+	header.Set("Pragma", "no-cache")
+	header.Set("Cache-Control", "no-cache")
+	
+	// Endpoint-specific configuration
+	if strings.Contains(endpoint, "cloudflare") {
+		// Cloudflare requires specific headers
+		header.Set("Origin", "https://www.cloudflare-eth.com")
+		header.Set("CF-Access-Client-Id", er.cfg.Get("CF_ACCESS_CLIENT_ID", ""))
+		header.Set("CF-Access-Client-Secret", er.cfg.Get("CF_ACCESS_CLIENT_SECRET", ""))
+	} else if strings.Contains(endpoint, "ankr") {
+		// Ankr API requires JWT or API key
+		apiKey := er.cfg.Get("ANKR_API_KEY", "")
+		if apiKey != "" {
+			header.Set("Authorization", "Bearer "+apiKey)
+		}
+		header.Set("Origin", "https://www.ankr.com")
+	} else if strings.Contains(endpoint, "infura") {
+		// Infura may require API key or project ID
+		projectId := er.cfg.Get("INFURA_PROJECT_ID", "")
+		if projectId != "" && !strings.Contains(endpoint, projectId) {
+			// Only add if not already in the URL
+			if strings.Contains(endpoint, "?") {
+				u.RawQuery += "&projectId=" + projectId
+			} else {
+				u.RawQuery = "projectId=" + projectId
+			}
+		}
+	}
 
-	er.logger.Info("Connected to Ethereum endpoint", zap.String("endpoint", endpoint))
+	// Use exponential backoff with jitter for reconnect attempts
+	er.backoffMu.Lock()
+	attempt := er.backoff[endpoint]
+	er.backoff[endpoint] = attempt + 1
+	er.backoffMu.Unlock()
 
-	// Start message handler
-	go er.handleMessages(conn)
+	for {
+		// per-attempt timeout to avoid long DNS hangs
+		dialCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		conn, resp, err := dialer.DialContext(dialCtx, u.String(), header)
+		cancel()
+		if err == nil {
+			if resp != nil {
+				resp.Body.Close()
+			}
+			wsConn := &wsConn{
+				Conn:     conn,
+				logger:   er.logger,
+				endpoint: endpoint,
+			}
+			
+			// Install ping/pong and heartbeat handlers
+			er.installWSHandlers(wsConn)
+			
+			// Add connection to active set
+			er.addConnection(wsConn)
+
+			// Reset backoff on successful connection
+			er.backoffMu.Lock()
+			delete(er.backoff, endpoint)
+			er.backoffMu.Unlock()
+
+			er.logger.Info("Connected to Ethereum endpoint", zap.String("endpoint", endpoint))
+			// Start message handler
+			go er.handleMessages(wsConn)
+			return
+		}
+
+		er.logger.Warn("Failed to connect to Ethereum endpoint",
+			zap.String("endpoint", endpoint),
+			zap.Error(err),
+			zap.Int("attempt", attempt))
+
+		// Backoff with jitter
+		backoff := time.Duration(math.Min(float64(30*time.Second), float64(2*time.Second)*math.Pow(2, float64(attempt))))
+		jitter := time.Duration(rand.Int63n(int64(backoff / 2)))
+		wait := backoff + jitter
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+			// try again
+			attempt++
+			er.backoffMu.Lock()
+			er.backoff[endpoint] = attempt
+			er.backoffMu.Unlock()
+		}
+	}
+}
+
+// installWSHandlers sets up ping/pong and heartbeat handlers for the WebSocket connection
+func (er *EthereumRelay) installWSHandlers(wc *wsConn) {
+	// Set a more aggressive initial read deadline
+	_ = wc.Conn.SetReadDeadline(time.Now().Add(45 * time.Second))
+	
+	// Enhanced pong handler with logging
+	wc.Conn.SetPongHandler(func(data string) error {
+		_ = wc.Conn.SetReadDeadline(time.Now().Add(45 * time.Second))
+		er.logger.Debug("Received pong", 
+			zap.String("endpoint", wc.endpoint),
+			zap.String("data", data))
+		return nil
+	})
+	
+	// Enhanced ping loop with more frequent pings and heartbeat subscription refresh
+	go func() {
+		pingTicker := time.NewTicker(15 * time.Second)  // More frequent pings
+		heartbeatTicker := time.NewTicker(50 * time.Second) // Send heartbeat before timeout
+		defer pingTicker.Stop()
+		defer heartbeatTicker.Stop()
+		
+		for {
+			select {
+			case <-pingTicker.C:
+				// Verify connection is still in active set
+				er.connMu.RLock()
+				alive := false
+				for _, c := range er.connections {
+					if c == wc {
+						alive = true
+						break
+					}
+				}
+				er.connMu.RUnlock()
+				
+				if !alive {
+					return
+				}
+				
+				// Send ping with timestamp
+				wc.writeMu.Lock()
+				_ = wc.Conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+				pingData := fmt.Sprintf("ping-%d", time.Now().Unix())
+				err := wc.Conn.WriteControl(websocket.PingMessage, []byte(pingData), time.Now().Add(5*time.Second))
+				wc.writeMu.Unlock()
+				
+				if err != nil {
+					er.logger.Warn("Ping failed", 
+						zap.String("endpoint", wc.endpoint), 
+						zap.Error(err))
+					return
+				}
+				
+			case <-heartbeatTicker.C:
+				// Send a heartbeat message to keep connection alive
+				er.sendHeartbeat(wc)
+			}
+		}
+	}()
+}
+
+// sendHeartbeat sends a lightweight RPC call to keep the connection active
+func (er *EthereumRelay) sendHeartbeat(wc *wsConn) {
+	// For Ethereum connections: eth_blockNumber is very lightweight
+	requestData := []byte(`{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":0}`)
+	
+	wc.writeMu.Lock()
+	_ = wc.Conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	err := wc.Conn.WriteMessage(websocket.TextMessage, requestData)
+	wc.writeMu.Unlock()
+	
+	if err != nil {
+		er.logger.Warn("Failed to send heartbeat", 
+			zap.String("endpoint", wc.endpoint), 
+			zap.Error(err))
+	} else {
+		er.logger.Debug("Sent heartbeat to keep connection alive", 
+			zap.String("endpoint", wc.endpoint))
+	}
 }
 
 // handleMessages handles incoming WebSocket messages
-func (er *EthereumRelay) handleMessages(conn *websocket.Conn) {
-	defer conn.Close()
+func (er *EthereumRelay) handleMessages(conn *wsConn) {
+	defer func() {
+		conn.Close()
+		// Remove connection from active set
+		er.removeConnection(conn)
+		// Schedule reconnect
+		er.scheduleReconnect(conn.endpoint)
+		// Mark as disconnected when handler exits
+		er.updateHealth(er.IsConnected(), "connection_lost", nil)
+		er.logger.Warn("Ethereum WebSocket handler exited", 
+			zap.String("endpoint", conn.endpoint),
+			zap.Int("remaining_connections", len(er.connections)))
+	}()
 
 	for {
+		// Reset read deadline on each loop iteration
+		_ = conn.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		
 		_, message, err := conn.ReadMessage()
 		if err != nil {
-			er.logger.Warn("WebSocket read error", zap.Error(err))
-			break
+			er.logger.Warn("WebSocket read error", 
+				zap.String("endpoint", conn.endpoint),
+				zap.Error(err))
+			
+			// Don't attempt to reconnect here, let the scheduleReconnect in the defer handle it
+			return
 		}
 
 		// Parse message as JSON-RPC response or notification
@@ -564,21 +933,39 @@ func (er *EthereumRelay) subscribeToBlocks(ctx context.Context) error {
 
 // handleBlockNotification processes block notifications
 func (er *EthereumRelay) handleBlockNotification(notification *EthereumNotification) {
-	// Parse notification and extract block data
-	// Convert to BlockEvent and send to channel
-	blockEvent := blocks.BlockEvent{
-		Hash:       "0x" + "0000000000000000000000000000000000000000000000000000000000000000", // placeholder
-		Height:     850000,                                                                    // placeholder
-		Timestamp:  time.Now(),
-		DetectedAt: time.Now(),
-		Source:     "ethereum-relay",
-		Tier:       "enterprise",
+	// Parse subscription notification
+	var result struct {
+		Subscription string          `json:"subscription"`
+		Result       EthereumBlock   `json:"result"`
 	}
-
+	
+	if err := json.Unmarshal(notification.Params, &result); err != nil {
+		er.logger.Warn("Failed to parse Ethereum block notification", zap.Error(err))
+		return
+	}
+	
+	// Extract block info
+	blockHash := result.Result.Hash
+	
+	// Check if we've already seen this block recently via the deduper
+	if er.deduper != nil && er.deduper.Seen(blockHash, time.Now(), "ethereum") {
+		er.logger.Debug("Suppressed duplicate Ethereum block", 
+			zap.String("hash", blockHash),
+			zap.String("number", result.Result.Number))
+		return
+	}
+	
+	// Convert to BlockEvent
+	blockEvent := er.convertToBlockEvent(&result.Result)
+	
+	// Send to block channel
 	select {
-	case er.blockChan <- blockEvent:
+	case er.blockChan <- *blockEvent:
+		// Successfully sent
 	default:
 		// Channel full, drop block
+		er.logger.Warn("Block channel full, dropping block", 
+			zap.String("hash", blockHash))
 	}
 }
 
@@ -630,4 +1017,46 @@ func parseHexNumber(hex string) (uint64, error) {
 	}
 
 	return result, nil
+}
+
+// shouldReconnect determines if we should attempt to reconnect based on the error
+func (er *EthereumRelay) shouldReconnect(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check for specific WebSocket close codes that indicate temporary issues
+	if closeErr, ok := err.(*websocket.CloseError); ok {
+		switch closeErr.Code {
+		case websocket.CloseAbnormalClosure,
+			 websocket.CloseGoingAway,
+			 websocket.CloseInternalServerErr,
+			 websocket.CloseTryAgainLater:
+			return true
+		}
+	}
+
+	// Reconnect on network-related errors
+	errStr := err.Error()
+	return strings.Contains(errStr, "timeout") ||
+		   strings.Contains(errStr, "connection reset") ||
+		   strings.Contains(errStr, "broken pipe") ||
+		   strings.Contains(errStr, "network is unreachable")
+}
+
+// reconnect attempts to re-establish the WebSocket connection
+func (er *EthereumRelay) reconnect() error {
+	er.logger.Info("Reconnecting Ethereum WebSocket")
+
+	// Disconnect first to clean up
+	er.Disconnect()
+
+	// Wait a bit before reconnecting
+	time.Sleep(2 * time.Second)
+
+	// Try to connect again
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	return er.Connect(ctx)
 }

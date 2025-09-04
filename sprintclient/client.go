@@ -2,7 +2,6 @@ package sprintclient
 
 import (
 	"bytes"
-	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"

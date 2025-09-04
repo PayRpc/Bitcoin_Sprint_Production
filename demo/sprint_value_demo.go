@@ -1,3 +1,6 @@
+//go:build ignore
+// +build ignore
+
 // Sprint Value Delivery Demo - Showcasing competitive advantages
 // This demonstrates how Sprint delivers the specific value props that beat Infura/Alchemy
 package main

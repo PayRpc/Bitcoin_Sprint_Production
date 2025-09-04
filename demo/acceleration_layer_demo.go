@@ -1,3 +1,6 @@
+//go:build ignore
+// +build ignore
+
 // Sprint Acceleration Layer Demo - Shows true Sprint architecture
 // Sprint = lightweight acceleration layer, NOT full node replacement
 package main

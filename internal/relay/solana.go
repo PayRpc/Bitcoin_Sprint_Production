@@ -2,15 +2,21 @@ package relay
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"math"
+	"math/rand"
+	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/netx"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )
@@ -21,7 +27,7 @@ type SolanaRelay struct {
 	logger *zap.Logger
 
 	// WebSocket connections
-	connections []*websocket.Conn
+	connections []*wsConn
 	connMu      sync.RWMutex
 	connected   atomic.Bool
 
@@ -36,6 +42,9 @@ type SolanaRelay struct {
 	healthMu  sync.RWMutex
 	metrics   *RelayMetrics
 	metricsMu sync.RWMutex
+	
+	// Block deduplication
+	deduper    *BlockDeduper
 
 	// Request tracking
 	requestID   int64
@@ -45,6 +54,10 @@ type SolanaRelay struct {
 	// Subscription management
 	subscriptions map[string]chan *SolanaNotification
 	subMu         sync.RWMutex
+
+	// backoff per endpoint
+	backoffMu sync.Mutex
+	backoff   map[string]int
 }
 
 // SolanaResponse represents a JSON-RPC response
@@ -114,7 +127,7 @@ type SolanaVersion struct {
 func NewSolanaRelay(cfg config.Config, logger *zap.Logger) *SolanaRelay {
 	relayConfig := RelayConfig{
 		Network:           "solana",
-		Endpoints:         []string{"wss://api.mainnet-beta.solana.com", "wss://solana-api.projectserum.com"},
+		Endpoints:         []string{"wss://api.mainnet-beta.solana.com", "wss://solana.publicnode.com", "wss://rpc.ankr.com/solana"},
 		Timeout:           30 * time.Second,
 		RetryAttempts:     3,
 		RetryDelay:        2 * time.Second,
@@ -130,11 +143,13 @@ func NewSolanaRelay(cfg config.Config, logger *zap.Logger) *SolanaRelay {
 		blockChan:     make(chan blocks.BlockEvent, 2000),
 		pendingReqs:   make(map[int64]chan *SolanaResponse),
 		subscriptions: make(map[string]chan *SolanaNotification),
+		backoff:       make(map[string]int),
 		health: &HealthStatus{
 			IsHealthy:       false,
 			ConnectionState: "disconnected",
 		},
 		metrics: &RelayMetrics{},
+		deduper: NewBlockDeduper(4096, 3*time.Minute), // Solana-specific deduper
 	}
 }
 
@@ -151,9 +166,6 @@ func (sr *SolanaRelay) Connect(ctx context.Context) error {
 		go sr.connectToEndpoint(ctx, endpoint)
 	}
 
-	sr.connected.Store(true)
-	sr.updateHealth(true, "connected", nil)
-
 	return nil
 }
 
@@ -166,8 +178,8 @@ func (sr *SolanaRelay) Disconnect() error {
 	sr.connMu.Lock()
 	defer sr.connMu.Unlock()
 
-	for _, conn := range sr.connections {
-		conn.Close()
+	for _, wc := range sr.connections {
+		_ = wc.Conn.Close()
 	}
 	sr.connections = nil
 
@@ -182,7 +194,7 @@ func (sr *SolanaRelay) Disconnect() error {
 func (sr *SolanaRelay) IsConnected() bool {
 	sr.connMu.RLock()
 	defer sr.connMu.RUnlock()
-	return sr.connected.Load() && len(sr.connections) > 0
+	return len(sr.connections) > 0
 }
 
 // StreamBlocks streams Solana blocks
@@ -419,33 +431,177 @@ func (sr *SolanaRelay) connectToEndpoint(ctx context.Context, endpoint string) {
 		return
 	}
 
-	conn, _, err := websocket.DefaultDialer.DialContext(ctx, u.String(), nil)
-	if err != nil {
-		sr.logger.Warn("Failed to connect to Solana endpoint",
-			zap.String("endpoint", endpoint),
-			zap.Error(err))
-		return
+	// Use a websocket dialer that respects a custom resolver and TLS
+	dialer := websocket.Dialer{
+		Proxy:             http.ProxyFromEnvironment,
+		HandshakeTimeout:  20 * time.Second,
+		TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: false},
+		NetDialContext:    netx.DialerWithResolver(),
+		EnableCompression: true,
 	}
 
-	sr.connMu.Lock()
-	sr.connections = append(sr.connections, conn)
-	sr.connMu.Unlock()
+	// Base headers for all endpoints
+	header := http.Header{}
+	header.Set("Origin", "https://bitcoinsprint.com")
+	header.Set("User-Agent", "BitcoinSprint/2.2 (+https://bitcoinsprint.com)")
+	header.Set("Pragma", "no-cache")
+	header.Set("Cache-Control", "no-cache")
+	
+	// Endpoint-specific configuration
+	if strings.Contains(endpoint, "cloudflare") {
+		// Cloudflare requires specific headers
+		header.Set("Origin", "https://www.cloudflare-eth.com")
+		header.Set("CF-Access-Client-Id", sr.cfg.Get("CF_ACCESS_CLIENT_ID", ""))
+		header.Set("CF-Access-Client-Secret", sr.cfg.Get("CF_ACCESS_CLIENT_SECRET", ""))
+	} else if strings.Contains(endpoint, "ankr") {
+		// Ankr API requires JWT or API key
+		apiKey := sr.cfg.Get("ANKR_API_KEY", "")
+		if apiKey != "" {
+			header.Set("Authorization", "Bearer "+apiKey)
+		}
+		header.Set("Origin", "https://www.ankr.com")
+	}
 
-	sr.logger.Info("Connected to Solana endpoint", zap.String("endpoint", endpoint))
+	var attempt int
+	for {
+		attempt++
+		dialCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		conn, _, err := dialer.DialContext(dialCtx, u.String(), header)
+		cancel()
+		if err == nil {
+			wc := &wsConn{
+				Conn:     conn,
+				logger:   sr.logger,
+				endpoint: endpoint,
+			}
+			sr.installWSHandlers(wc)
+			sr.addConnection(wc)
+			sr.logger.Info("Connected to Solana endpoint", zap.String("endpoint", endpoint))
+			// Start message handler
+			go sr.handleMessages(wc)
+			return
+		}
 
-	// Start message handler
-	go sr.handleMessages(conn)
+		sr.logger.Warn("Failed to connect to Solana endpoint",
+			zap.String("endpoint", endpoint),
+			zap.Error(err),
+			zap.Int("attempt", attempt))
+
+		// Backoff with jitter
+		backoff := time.Duration(math.Min(float64(30*time.Second), float64(2*time.Second)*math.Pow(2, float64(attempt))))
+		jitter := time.Duration(rand.Int63n(int64(backoff / 2)))
+		wait := backoff + jitter
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+			// retry
+		}
+	}
+}
+
+func (sr *SolanaRelay) installWSHandlers(wc *wsConn) {
+	// Set a more aggressive initial read deadline
+	_ = wc.Conn.SetReadDeadline(time.Now().Add(45 * time.Second))
+	
+	// Enhanced pong handler with logging
+	wc.Conn.SetPongHandler(func(data string) error {
+		_ = wc.Conn.SetReadDeadline(time.Now().Add(45 * time.Second))
+		sr.logger.Debug("Received pong", 
+			zap.String("endpoint", wc.endpoint),
+			zap.String("data", data))
+		return nil
+	})
+	
+	// Enhanced ping loop with more frequent pings and heartbeat subscription refresh
+	go func() {
+		pingTicker := time.NewTicker(15 * time.Second)  // More frequent pings
+		heartbeatTicker := time.NewTicker(50 * time.Second) // Send heartbeat before timeout
+		defer pingTicker.Stop()
+		defer heartbeatTicker.Stop()
+		
+		for {
+			select {
+			case <-pingTicker.C:
+				// Verify connection is still in active set
+				sr.connMu.RLock()
+				alive := false
+				for _, c := range sr.connections {
+					if c == wc {
+						alive = true
+						break
+					}
+				}
+				sr.connMu.RUnlock()
+				
+				if !alive {
+					return
+				}
+				
+				// Send ping with timestamp
+				wc.writeMu.Lock()
+				_ = wc.Conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+				pingData := fmt.Sprintf("ping-%d", time.Now().Unix())
+				err := wc.Conn.WriteControl(websocket.PingMessage, []byte(pingData), time.Now().Add(5*time.Second))
+				wc.writeMu.Unlock()
+				
+				if err != nil {
+					sr.logger.Warn("Ping failed", 
+						zap.String("endpoint", wc.endpoint), 
+						zap.Error(err))
+					return
+				}
+				
+			case <-heartbeatTicker.C:
+				// Send a heartbeat message to keep connection alive
+				// This is especially important for publicnode.com which has a 60s timeout
+				sr.sendHeartbeat(wc)
+			}
+		}
+	}()
+}
+
+// sendHeartbeat sends a lightweight RPC call to keep the connection active
+func (sr *SolanaRelay) sendHeartbeat(wc *wsConn) {
+	// For Solana connections: refresh subscriptions or send a lightweight call
+	requestData := []byte(`{"jsonrpc":"2.0","method":"getHealth","params":[],"id":0}`)
+	
+	wc.writeMu.Lock()
+	_ = wc.Conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	err := wc.Conn.WriteMessage(websocket.TextMessage, requestData)
+	wc.writeMu.Unlock()
+	
+	if err != nil {
+		sr.logger.Warn("Failed to send heartbeat", 
+			zap.String("endpoint", wc.endpoint), 
+			zap.Error(err))
+	} else {
+		sr.logger.Debug("Sent heartbeat to keep connection alive", 
+			zap.String("endpoint", wc.endpoint))
+	}
 }
 
 // handleMessages handles incoming WebSocket messages
-func (sr *SolanaRelay) handleMessages(conn *websocket.Conn) {
-	defer conn.Close()
+func (sr *SolanaRelay) handleMessages(wc *wsConn) {
+	defer func() {
+		_ = wc.Conn.Close()
+		sr.removeConnection(wc)
+		sr.updateHealth(sr.IsConnected(), "connection_lost", nil)
+		sr.logger.Warn("Solana WebSocket handler exited", zap.String("endpoint", wc.endpoint))
+		sr.scheduleReconnect(wc.endpoint)
+	}()
 
 	for {
-		_, message, err := conn.ReadMessage()
+		_, message, err := wc.Conn.ReadMessage()
 		if err != nil {
 			sr.logger.Warn("WebSocket read error", zap.Error(err))
-			break
+			// Don't break immediately, try to reconnect
+			if sr.shouldReconnect(err) {
+				sr.logger.Info("Attempting to reconnect Solana WebSocket", zap.String("endpoint", wc.endpoint))
+				return
+			}
+			return
 		}
 
 		// Parse message as JSON-RPC response or notification
@@ -460,6 +616,31 @@ func (sr *SolanaRelay) handleMessages(conn *websocket.Conn) {
 				sr.handleNotification(&notification)
 			}
 		}
+	}
+}
+
+func (sr *SolanaRelay) addConnection(wc *wsConn) {
+	sr.connMu.Lock()
+	defer sr.connMu.Unlock()
+	sr.connections = append(sr.connections, wc)
+	if len(sr.connections) == 1 {
+		sr.connected.Store(true)
+		sr.updateHealth(true, "connected", nil)
+	}
+}
+
+func (sr *SolanaRelay) removeConnection(wc *wsConn) {
+	sr.connMu.Lock()
+	defer sr.connMu.Unlock()
+	out := sr.connections[:0]
+	for _, c := range sr.connections {
+		if c != wc {
+			out = append(out, c)
+		}
+	}
+	sr.connections = out
+	if len(sr.connections) == 0 {
+		sr.connected.Store(false)
 	}
 }
 
@@ -481,11 +662,12 @@ func (sr *SolanaRelay) makeRequest(method string, params []interface{}) (*Solana
 
 	// Get a connection
 	sr.connMu.RLock()
-	if len(sr.connections) == 0 {
+	n := len(sr.connections)
+	if n == 0 {
 		sr.connMu.RUnlock()
 		return nil, fmt.Errorf("no active connections")
 	}
-	conn := sr.connections[0] // Use first connection
+	wc := sr.connections[rand.Intn(n)]
 	sr.connMu.RUnlock()
 
 	// Create response channel
@@ -495,7 +677,11 @@ func (sr *SolanaRelay) makeRequest(method string, params []interface{}) (*Solana
 	sr.reqMu.Unlock()
 
 	// Send request
-	if err := conn.WriteMessage(websocket.TextMessage, requestData); err != nil {
+	wc.writeMu.Lock()
+	_ = wc.Conn.SetWriteDeadline(time.Now().Add(8 * time.Second))
+	err = wc.Conn.WriteMessage(websocket.TextMessage, requestData)
+	wc.writeMu.Unlock()
+	if err != nil {
 		sr.reqMu.Lock()
 		delete(sr.pendingReqs, requestID)
 		sr.reqMu.Unlock()
@@ -533,9 +719,49 @@ func (sr *SolanaRelay) handleResponse(response *SolanaResponse) {
 
 // handleNotification handles subscription notifications
 func (sr *SolanaRelay) handleNotification(notification *SolanaNotification) {
-	// Handle slot notifications specifically
-	if notification.Method == "slotNotification" {
-		sr.handleSlotNotification(notification)
+	if notification.Method != "slotNotification" {
+		return
+	}
+	// payload: {"jsonrpc":"2.0","method":"slotNotification","params":{"result":{"parent":N,"root":N,"slot":N},"subscription":ID}}
+	var wrap struct {
+		Method string `json:"method"`
+		Params struct {
+			Subscription int `json:"subscription"`
+			Result       struct {
+				Parent uint64 `json:"parent"`
+				Root   uint64 `json:"root"`
+				Slot   uint64 `json:"slot"`
+			} `json:"result"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal(notification.Params, &wrap.Params); err != nil {
+		sr.logger.Warn("Failed to parse slotNotification params", zap.Error(err))
+		return
+	}
+	
+	// Create block hash from the slot
+	blockHash := fmt.Sprintf("slot:%d", wrap.Params.Result.Slot)
+	
+	// Check if we've already seen this block recently via the relay's deduper
+	if sr.deduper != nil && sr.deduper.Seen(blockHash, time.Now(), "solana") {
+		sr.logger.Debug("Suppressed duplicate Solana block",
+			zap.Uint64("slot", wrap.Params.Result.Slot),
+			zap.String("hash", blockHash))
+		return
+	}
+	
+	ev := blocks.BlockEvent{
+		Hash:       blockHash,
+		Height:     uint32(wrap.Params.Result.Slot),
+		Timestamp:  time.Now(),
+		DetectedAt: time.Now(),
+		Source:     "solana-relay",
+		Tier:       "enterprise",
+	}
+	
+	select {
+	case sr.blockChan <- ev:
+	default:
 	}
 }
 
@@ -546,23 +772,75 @@ func (sr *SolanaRelay) subscribeToBlocks(ctx context.Context) error {
 	return err
 }
 
-// handleSlotNotification processes slot notifications
-func (sr *SolanaRelay) handleSlotNotification(notification *SolanaNotification) {
-	// Parse notification and extract slot data
-	blockEvent := blocks.BlockEvent{
-		Hash:       "solana-slot-" + fmt.Sprintf("%d", time.Now().Unix()), // Solana uses slots, not traditional hashes
-		Height:     uint32(time.Now().Unix() % 1000000),                   // placeholder
-		Timestamp:  time.Now(),
-		DetectedAt: time.Now(),
-		Source:     "solana-relay",
-		Tier:       "enterprise",
+// scheduleReconnect schedules reconnect with exponential backoff per endpoint
+func (sr *SolanaRelay) scheduleReconnect(endpoint string) {
+	sr.backoffMu.Lock()
+	
+	// Check how many connections we still have
+	sr.connMu.RLock()
+	activeConnections := len(sr.connections)
+	sr.connMu.RUnlock()
+	
+	// If this is a Cloudflare or Ankr endpoint and we have at least one working connection,
+	// use a longer backoff to avoid unnecessary reconnection attempts
+	isProblematicEndpoint := strings.Contains(endpoint, "cloudflare") || 
+	                        strings.Contains(endpoint, "ankr") || 
+	                        strings.Contains(endpoint, "api.mainnet-beta.solana.com")
+	
+	var attempt int
+	if isProblematicEndpoint && activeConnections > 0 {
+		// Use higher starting backoff for problematic endpoints if we have other working connections
+		attempt = sr.backoff[endpoint] + 2
+		if attempt > 8 {
+			attempt = 8 // Cap at ~256s for problematic endpoints
+		}
+	} else {
+		// Standard backoff for primary endpoints or when we have no connections
+		attempt = sr.backoff[endpoint] + 1
+		if attempt > 6 {
+			attempt = 6 // Cap at ~32s
+		}
 	}
+	
+	sr.backoff[endpoint] = attempt
+	sr.backoffMu.Unlock()
 
-	select {
-	case sr.blockChan <- blockEvent:
-	default:
-		// Channel full, drop block
-	}
+	// Calculate delay with more jitter for longer backoffs
+	delay := time.Duration(1<<uint(attempt-1)) * time.Second
+	jitterPercent := 0.2 // 20% jitter
+	jitter := time.Duration(float64(delay) * jitterPercent * rand.Float64())
+	wait := delay + jitter
+	
+	sr.logger.Info("Scheduling reconnect", 
+		zap.String("endpoint", endpoint), 
+		zap.Duration("in", wait),
+		zap.Int("active_connections", activeConnections),
+		zap.Int("attempt", attempt))
+	
+	time.AfterFunc(wait, func() {
+		// Double check if we still need to reconnect
+		sr.connMu.RLock()
+		needToReconnect := true
+		
+		// If we have enough connections and this is a problematic endpoint,
+		// we can skip reconnection attempt
+		if isProblematicEndpoint && len(sr.connections) >= 1 {
+			// Only skip every other attempt to ensure we keep trying occasionally
+			if sr.backoff[endpoint]%2 == 0 {
+				needToReconnect = false
+			}
+		}
+		sr.connMu.RUnlock()
+		
+		if needToReconnect {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			sr.connectToEndpoint(ctx, endpoint)
+		} else {
+			sr.logger.Info("Skipping reconnect attempt, enough connections active", 
+				zap.String("endpoint", endpoint))
+		}
+	})
 }
 
 // convertToBlockEvent converts SolanaBlock to BlockEvent
@@ -582,6 +860,34 @@ func (sr *SolanaRelay) convertToBlockEvent(solanaBlock *SolanaBlock) *blocks.Blo
 	}
 
 	return event
+}
+
+// shouldReconnect determines if we should attempt to reconnect based on the error
+func (sr *SolanaRelay) shouldReconnect(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check for specific WebSocket close codes that indicate temporary issues
+	if closeErr, ok := err.(*websocket.CloseError); ok {
+		switch closeErr.Code {
+		case websocket.CloseAbnormalClosure,
+			 websocket.CloseGoingAway,
+			 websocket.CloseInternalServerErr,
+			 websocket.CloseTryAgainLater:
+			return true
+		}
+	}
+
+	// Reconnect on network-related errors
+	errStr := err.Error()
+	return strings.Contains(errStr, "timeout") ||
+		   strings.Contains(errStr, "connection reset") ||
+		   strings.Contains(errStr, "broken pipe") ||
+		   strings.Contains(errStr, "bad handshake") ||
+		   strings.Contains(errStr, "tls") ||
+		   strings.Contains(errStr, "lookup") ||
+		   strings.Contains(errStr, "network is unreachable")
 }
 
 // updateHealth updates the health status

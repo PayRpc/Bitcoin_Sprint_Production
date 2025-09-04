@@ -14,6 +14,7 @@ import (
 	"github.com/PayRpc/Bitcoin-Sprint/internal/cache"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/relay"
 	"go.uber.org/zap"
 )
 
@@ -28,7 +29,7 @@ type Server struct {
 	logger    *zap.Logger
 	srv       *http.Server // Public API server
 	adminSrv  *http.Server // Admin-only server
-	// HTTP router
+	startTime time.Time    // Server start time for uptime tracking
 
 	// Rate limiting
 	rateLimiter *RateLimiter
@@ -37,29 +38,17 @@ type Server struct {
 	httpMux *http.ServeMux
 
 	// Customer key management
-	keyManager *CustomerKeyManager
-
-	// Admin authentication
-	adminAuth *AdminAuth
-
-	// WebSocket connection limits
-	wsLimiter *WebSocketLimiter
-
-	// Predictive analytics
-	predictor *PredictiveAnalytics
-
-	// Circuit breaker for fault tolerance
-	circuitBreaker *CircuitBreaker
-
-	// Blockchain-agnostic backends
-	backends *BackendRegistry
-
-	// Enterprise Security Manager for enterprise features
+	keyManager       *CustomerKeyManager
+	adminAuth        *AdminAuth
+	wsLimiter        *WebSocketLimiter
+	predictor        *PredictiveAnalytics
+	circuitBreaker   *CircuitBreaker
+	backends         *BackendRegistry
+	ethereumRelay    *relay.EthereumRelay
+	solanaRelay      *relay.SolanaRelay
+	clock            Clock
+	randReader       RandomReader
 	enterpriseManager *EnterpriseSecurityManager
-
-	// Injected dependencies for determinism
-	clock      Clock
-	randReader RandomReader
 }
 
 // New creates a new API server instance
@@ -78,6 +67,13 @@ func New(cfg config.Config, blockChan chan blocks.BlockEvent, mem *mempool.Mempo
 		wsLimiter:      NewWebSocketLimiter(cfg.WebSocketMaxGlobal, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
 		predictor:      NewPredictiveAnalytics(clock),
 		circuitBreaker: NewCircuitBreaker(cfg.Tier, clock),
+		backends:       NewBackendRegistry(),
+		httpMux:        http.NewServeMux(), // Initialize HTTP mux
+		ethereumRelay:  relay.NewEthereumRelay(cfg, logger),
+		solanaRelay:    relay.NewSolanaRelay(cfg, logger),
+		clock:          clock,
+		randReader:     randReader,
+		enterpriseManager: nil, // Will be initialized in Run()
 	}
 
 	// Initialize default Bitcoin backend
@@ -108,6 +104,14 @@ func NewWithCache(cfg config.Config, blockChan chan blocks.BlockEvent, mem *memp
 		adminAuth:   NewAdminAuth(),
 		wsLimiter:   NewWebSocketLimiter(cfg.WebSocketMaxGlobal, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
 		predictor:   NewPredictiveAnalytics(clock),
+		circuitBreaker: NewCircuitBreaker(cfg.Tier, clock),
+		backends:    NewBackendRegistry(),
+		httpMux:     http.NewServeMux(), // Initialize HTTP mux
+		ethereumRelay: relay.NewEthereumRelay(cfg, logger),
+		solanaRelay: relay.NewSolanaRelay(cfg, logger),
+		clock:       clock,
+		randReader:  randReader,
+		enterpriseManager: nil, // Will be initialized in Run()
 	}
 
 	// Initialize default Bitcoin backend

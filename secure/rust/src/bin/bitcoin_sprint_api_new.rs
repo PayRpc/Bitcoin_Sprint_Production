@@ -1,4 +1,4 @@
-use axum::{extract::{Path, Query}, middleware, middleware::from_fn, http::{Request, StatusCode}, response::{IntoResponse, Response}, routing::{get, post}, Router, Json};
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, routing::{get, post}, Router, Json};
 use chrono::{DateTime, Utc};
 use dotenvy::dotenv;
 use serde::{Deserialize, Serialize};
@@ -11,13 +11,11 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use std::time::{Duration, Instant};
 use tokio::net::TcpStream;
-use tokio::sync::mpsc;
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 use axum::http::header::CONTENT_TYPE;
 use prometheus::{Encoder, TextEncoder, register_counter_vec, CounterVec, register_gauge_vec, GaugeVec, register_histogram_vec, HistogramVec};
-use uuid::Uuid;
-use rand;
+use base64::{Engine as _, engine::general_purpose};
 use rand::seq::SliceRandom;
 use hex;
 
@@ -728,8 +726,12 @@ impl UniversalClient {
         // Dedup and shuffle
         addr_list.sort();
         addr_list.dedup();
-        let mut rng = rand::thread_rng();
-        addr_list.shuffle(&mut rng);
+        // Use a simple deterministic shuffle instead of random for thread safety
+        let len = addr_list.len();
+        for i in 0..len {
+            let swap_idx = (i * 7 + 13) % len; // Simple deterministic shuffle
+            addr_list.swap(i, swap_idx);
+        }
 
         // Limit concurrent dials to avoid burst
         let max_concurrent = (self.cfg.max_connections.max(1) as usize).min(16);
@@ -1279,7 +1281,7 @@ async fn enterprise_entropy_handler(
     let bytes = fast_entropy_with_fingerprint();
     let resp = json!({
         "entropy": {
-            "bytes_base64": base64::encode(bytes),
+            "bytes_base64": general_purpose::STANDARD.encode(bytes),
             "quality": "high",
             "source": "os+jitter+fingerprint",
             "timestamp": Utc::now().to_rfc3339(),
@@ -1328,7 +1330,7 @@ async fn entropy_fast_handler(
     let bytes = fast_entropy();
     let resp = json!({
         "algorithm": "fast_entropy",
-        "bytes_base64": base64::encode(bytes),
+        "bytes_base64": general_purpose::STANDARD.encode(bytes),
         "len": 32,
         "timestamp": Utc::now().to_rfc3339(),
     });
@@ -1341,7 +1343,7 @@ async fn entropy_fast_fingerprint_handler(
     let bytes = fast_entropy_with_fingerprint();
     let resp = json!({
         "algorithm": "fast_entropy_with_fingerprint",
-        "bytes_base64": base64::encode(bytes),
+        "bytes_base64": general_purpose::STANDARD.encode(bytes),
         "len": 32,
         "timestamp": Utc::now().to_rfc3339(),
     });
@@ -1355,7 +1357,7 @@ async fn entropy_hybrid_handler(
     let bytes = hybrid_entropy(&[]);
     let resp = json!({
         "algorithm": "hybrid_entropy",
-        "bytes_base64": base64::encode(bytes),
+        "bytes_base64": general_purpose::STANDARD.encode(bytes),
         "len": 32,
         "timestamp": Utc::now().to_rfc3339(),
     });
@@ -1368,7 +1370,7 @@ async fn entropy_hybrid_fingerprint_handler(
     let bytes = hybrid_entropy_with_fingerprint(&[]);
     let resp = json!({
         "algorithm": "hybrid_entropy_with_fingerprint",
-        "bytes_base64": base64::encode(bytes),
+        "bytes_base64": general_purpose::STANDARD.encode(bytes),
         "len": 32,
         "timestamp": Utc::now().to_rfc3339(),
     });
