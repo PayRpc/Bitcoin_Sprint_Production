@@ -59,7 +59,7 @@ services:
     ports:
       - "8443:8443"     # HTTPS API
       - "8444:8444"     # HTTPS Admin API
-      - "9092:9092"     # Prometheus Metrics (different from Go metrics)
+      - "9093:9092"     # Prometheus Metrics (changed to avoid conflict)
     environment:
       - RUST_LOG=info
       - TLS_CERT_PATH=/app/config/tls/cert.pem
@@ -93,14 +93,14 @@ services:
     ports:
       - "8082:8080"     # Main API (changed from 8080 to avoid conflict)
       - "8083:8081"     # Admin API (changed from 8081 to avoid conflict)
-      - "9091:9090"     # Metrics (changed from 9090 to avoid conflict)
+      # - "9090:9090"     # Metrics - internal only, accessed via Docker network
       - "6061:6060"     # pprof debugging (changed from 6060 to avoid conflict)
     environment:
       - SPRINT_TIER=enterprise
       - SPRINT_API_HOST=0.0.0.0
       - SPRINT_API_PORT=8080
       - SPRINT_ADMIN_PORT=8081
-      - SPRINT_METRICS_PORT=9090
+      - SPRINT_METRICS_PORT=9090     # Updated to match actual port
       - SPRINT_LICENSE_KEY=ENTERPRISE-FULL-FEATURES-ACTIVE
       - SPRINT_TURBO_MODE=true
       - SPRINT_ENTERPRISE_FEATURES=true
@@ -582,7 +582,7 @@ services:
     image: prom/prometheus:v2.45.0
     container_name: sprint-prometheus
     ports:
-      - "9091:9090"     # Avoid conflict with Sprint metrics
+      - "9090:9090"     # Standard Prometheus port
     volumes:
       - prometheus-data:/prometheus
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro

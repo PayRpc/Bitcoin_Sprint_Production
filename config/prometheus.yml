@@ -7,18 +7,24 @@ rule_files:
   # - "second_rules.yml"
 
 scrape_configs:
-  # Bitcoin Sprint Core Service
-  - job_name: 'bitcoin-sprint'
+  # Bitcoin Sprint Core Service (Go)
+  - job_name: 'bitcoin-sprint-go'
     static_configs:
-  # Scrape both Go (8082) and Rust (8443) backends running on the host from inside Docker
-  - targets: ['host.docker.internal:8082', 'host.docker.internal:8443']
+      - targets: ['bitcoin-sprint-core:9090']
+    scrape_interval: 5s
+    metrics_path: '/metrics'
+
+  # Bitcoin Sprint Rust Service
+  - job_name: 'bitcoin-sprint-rust'
+    static_configs:
+      - targets: ['bitcoin-sprint-rust:9092']
     scrape_interval: 5s
     metrics_path: '/metrics'
 
   # FastAPI Gateway
   - job_name: 'fastapi-gateway'
     static_configs:
-      - targets: ['bitcoin-sprint:8080']
+      - targets: ['bitcoin-sprint-core:8080']
     scrape_interval: 10s
     metrics_path: '/metrics'
 
@@ -32,7 +38,7 @@ scrape_configs:
   # Solana Enterprise Metrics Server
   - job_name: 'solana-enterprise-metrics'
     static_configs:
-      - targets: ['localhost:21000']
+      - targets: ['solana-enterprise:21000']
     scrape_interval: 10s
     metrics_path: '/metrics'
 
@@ -48,6 +54,35 @@ scrape_configs:
     static_configs:
       - targets: ['solana-exporter:8080']
     scrape_interval: 15s
+    metrics_path: '/metrics'
+
+  # Redis Exporter
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+
+  # PostgreSQL Exporter
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+
+  # Node Exporter (system metrics)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 15s
+    metrics_path: '/metrics'
     metrics_path: '/metrics'
 
   # Prometheus itself
