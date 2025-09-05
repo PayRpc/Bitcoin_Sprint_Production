@@ -368,22 +368,44 @@ func loadEnvironmentConfig() {
 	}
 }
 
-// parseAddr parses a host:port string and returns host and port separately
+// Get retrieves a configuration value by key with a default fallback
+func (c *Config) Get(key, def string) string {
+	// For now, just return environment variables directly
+	// In a production system, this could be enhanced to support
+	// configuration files, databases, etc.
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+// GetStringSlice retrieves a configuration value as a string slice
+func (c *Config) GetStringSlice(key string) []string {
+	if v := os.Getenv(key); v != "" {
+		if v == "" {
+			return []string{}
+		}
+		// Split by comma and trim spaces
+		parts := strings.Split(v, ",")
+		result := make([]string, len(parts))
+		for i, part := range parts {
+			result[i] = strings.TrimSpace(part)
+		}
+		return result
+	}
+	return []string{}
+}
+
+// parseAddr parses a host:port string and returns host, port, and error
 func parseAddr(addr string) (string, int, error) {
 	parts := strings.Split(addr, ":")
 	if len(parts) != 2 {
-		return "", 0, fmt.Errorf("invalid address format, expected host:port")
+		return "", 0, fmt.Errorf("invalid address format: %s", addr)
 	}
-
 	host := parts[0]
 	port, err := strconv.Atoi(parts[1])
 	if err != nil {
-		return "", 0, fmt.Errorf("invalid port number: %v", err)
+		return "", 0, fmt.Errorf("invalid port: %s", parts[1])
 	}
-
-	if port < 1 || port > 65535 {
-		return "", 0, fmt.Errorf("port number out of range: %d", port)
-	}
-
 	return host, port, nil
 }

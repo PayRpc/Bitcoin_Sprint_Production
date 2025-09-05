@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Bitcoin_Sprint/internal/api"
-	"github.com/Bitcoin_Sprint/internal/config"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/api"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 )
 
 func main() {

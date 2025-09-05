@@ -1010,22 +1010,6 @@ func (er *EthereumRelay) convertToBlockEvent(ethBlock *EthereumBlock) *blocks.Bl
 	return event
 }
 
-// updateHealth updates the health status
-func (er *EthereumRelay) updateHealth(healthy bool, state string, err error) {
-	er.healthMu.Lock()
-	defer er.healthMu.Unlock()
-
-	er.health.IsHealthy = healthy
-	er.health.LastSeen = time.Now()
-	er.health.ConnectionState = state
-	if err != nil {
-		er.health.ErrorMessage = err.Error()
-		er.health.ErrorCount++
-	} else {
-		er.health.ErrorMessage = ""
-	}
-}
-
 // parseHexNumber parses a hex string to uint64
 func parseHexNumber(hex string) (uint64, error) {
 	if len(hex) < 3 || hex[:2] != "0x" {
@@ -1040,32 +1024,6 @@ func parseHexNumber(hex string) (uint64, error) {
 	return result, nil
 }
 
-// shouldReconnect determines if we should attempt to reconnect based on the error
-func (er *EthereumRelay) shouldReconnect(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	// Check for specific WebSocket close codes that indicate temporary issues
-	if closeErr, ok := err.(*websocket.CloseError); ok {
-		switch closeErr.Code {
-		case websocket.CloseAbnormalClosure,
-			 websocket.CloseGoingAway,
-			 websocket.CloseInternalServerErr,
-			 websocket.CloseTryAgainLater:
-			return true
-		}
-	}
-
-	// Reconnect on network-related errors
-	errStr := err.Error()
-	return strings.Contains(errStr, "timeout") ||
-		   strings.Contains(errStr, "connection reset") ||
-		   strings.Contains(errStr, "broken pipe") ||
-		   strings.Contains(errStr, "network is unreachable")
-}
-
-// reconnect attempts to re-establish the WebSocket connection
 func (er *EthereumRelay) reconnect() error {
 	er.logger.Info("Reconnecting Ethereum WebSocket")
 

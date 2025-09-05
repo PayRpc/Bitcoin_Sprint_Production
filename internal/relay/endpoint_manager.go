@@ -76,7 +76,6 @@ func (eh *EndpointHealth) RecordError() {
 	
 	// Implement circuit breaker pattern
 	// Open circuit after consecutive errors with exponential timeout
-	errorThreshold := 3 // Open circuit after 3 consecutive errors
 	if eh.SuccessCount == 0 || float64(eh.ErrorCount)/float64(eh.SuccessCount+1) > 0.5 {
 		backoffTime := time.Duration(int(1<<uint(min(eh.ErrorCount, 8)))) * time.Second
 		eh.CircuitOpen = true
