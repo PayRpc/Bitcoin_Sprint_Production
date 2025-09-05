@@ -44,6 +44,15 @@ func NewBlockDeduper(capacity int, ttl time.Duration) *BlockDeduper {
 // Seen returns true if hash is already seen within TTL; otherwise records it and returns false.
 // It takes a network parameter for metrics tracking.
 func (d *BlockDeduper) Seen(hash string, now time.Time, network string) bool {
+	// Safety checks
+	if d == nil {
+		return false // If no deduper, never consider it a duplicate
+	}
+	
+	if hash == "" {
+		return false // Empty hashes are never considered duplicates
+	}
+
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -70,9 +79,19 @@ func (d *BlockDeduper) Seen(hash string, now time.Time, network string) bool {
 
 // Cleanup removes expired entries opportunistically; call from a ticker.
 func (d *BlockDeduper) Cleanup() {
+	// Safety check for nil deduper
+	if d == nil {
+		return
+	}
+
 	now := time.Now()
 	d.mu.Lock()
 	defer d.mu.Unlock()
+
+	// Nothing to clean if empty
+	if len(d.order) == 0 {
+		return
+	}
 
 	// compact order by skipping expired ones
 	w := 0

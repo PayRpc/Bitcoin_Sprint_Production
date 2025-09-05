@@ -933,6 +933,12 @@ func (er *EthereumRelay) subscribeToBlocks(ctx context.Context) error {
 
 // handleBlockNotification processes block notifications
 func (er *EthereumRelay) handleBlockNotification(notification *EthereumNotification) {
+	// Validate input
+	if notification == nil || len(notification.Params) == 0 {
+		er.logger.Warn("Received empty Ethereum notification")
+		return
+	}
+	
 	// Parse subscription notification
 	var result struct {
 		Subscription string          `json:"subscription"`
@@ -947,12 +953,27 @@ func (er *EthereumRelay) handleBlockNotification(notification *EthereumNotificat
 	// Extract block info
 	blockHash := result.Result.Hash
 	
-	// Check if we've already seen this block recently via the deduper
-	if er.deduper != nil && er.deduper.Seen(blockHash, time.Now(), "ethereum") {
-		er.logger.Debug("Suppressed duplicate Ethereum block", 
+	// Validate the block hash (should be a proper hex string starting with 0x)
+	if blockHash == "" || blockHash == "0x0000000000000000000000000000000000000000000000000000000000000000" || !strings.HasPrefix(blockHash, "0x") {
+		er.logger.Warn("Received block notification with invalid hash", 
 			zap.String("hash", blockHash),
 			zap.String("number", result.Result.Number))
 		return
+	}
+	
+	// Check if we've already seen this block recently via the deduper
+	// Safely handle the deduper
+	if er.deduper != nil {
+		if er.deduper.Seen(blockHash, time.Now(), "ethereum") {
+			er.logger.Debug("Suppressed duplicate Ethereum block", 
+				zap.String("hash", blockHash),
+				zap.String("number", result.Result.Number))
+			return
+		}
+	} else {
+		// No deduper configured, but let's log this for debugging
+		er.logger.Debug("Deduper not configured, processing all blocks", 
+			zap.String("hash", blockHash))
 	}
 	
 	// Convert to BlockEvent
