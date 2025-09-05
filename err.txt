@@ -1,0 +1,78 @@
+{"level":"info","timestamp":"2025-09-04T22:13:33.176-0400","caller":"sprintd/main.go:41","msg":"=== MAIN FUNCTION STARTED ==="}
+{"level":"info","timestamp":"2025-09-04T22:13:33.180-0400","caller":"sprintd/main.go:43","msg":"Starting Bitcoin Sprint","version":"1.0.0","go_version":"go1.25.0","cpu_cores":12}
+{"level":"info","timestamp":"2025-09-04T22:13:33.182-0400","caller":"sprintd/main.go:48","msg":"=== LOADING CONFIGURATION ==="}
+2025/09/04 22:13:33 Config: Loaded default .env file
+2025/09/04 22:13:33 Config: Loaded tier-specific .env file: .env.enterprise
+{"level":"info","timestamp":"2025-09-04T22:13:33.193-0400","caller":"sprintd/main.go:51","msg":"Configuration loaded","tier":"","default_chain":"btc","optimize_system":true}
+{"level":"info","timestamp":"2025-09-04T22:13:33.193-0400","caller":"sprintd/main.go:56","msg":"=== VALIDATING LICENSE ==="}
+{"level":"info","timestamp":"2025-09-04T22:13:33.193-0400","caller":"sprintd/main.go:62","msg":"License validated successfully"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.194-0400","caller":"sprintd/main.go:65","msg":"=== INITIALIZING DATABASE ==="}
+{"level":"warn","timestamp":"2025-09-04T22:13:33.194-0400","caller":"sprintd/main.go:74","msg":"Database connection failed, continuing without database","error":"failed to ping SQLite database: Binary was compiled with 'CGO_ENABLED=0', go-sqlite3 requires cgo to work. This is a stub","type":"sqlite","url":"./free_tier.db"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.195-0400","caller":"sprintd/main.go:78","msg":"Application will run without database persistence"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.195-0400","caller":"sprintd/main.go:87","msg":"=== INITIALIZING CORE COMPONENTS ==="}
+{"level":"info","timestamp":"2025-09-04T22:13:33.197-0400","caller":"sprintd/main.go:94","msg":"=== INITIALIZING CACHE ==="}
+{"level":"info","timestamp":"2025-09-04T22:13:33.197-0400","caller":"sprintd/main.go:98","msg":"=== INITIALIZING BROADCASTER ==="}
+{"level":"info","timestamp":"2025-09-04T22:13:33.197-0400","caller":"sprintd/main.go:102","msg":"=== INITIALIZING RELAY DISPATCHER ==="}
+{"level":"info","timestamp":"2025-09-04T22:13:33.199-0400","caller":"sprintd/main.go:106","msg":"=== INITIALIZING P2P CLIENT ==="}
+{"level":"info","timestamp":"2025-09-04T22:13:33.199-0400","caller":"sprintd/main.go:113","msg":"=== SETTING UP CONTEXT ==="}
+{"level":"info","timestamp":"2025-09-04T22:13:33.200-0400","caller":"sprintd/main.go:118","msg":"=== CREATING API SERVER ==="}
+{"level":"info","timestamp":"2025-09-04T22:13:33.200-0400","caller":"sprintd/main.go:120","msg":"Creating API server instance"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.204-0400","caller":"sprintd/main.go:125","msg":"API server instance created successfully"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.205-0400","caller":"sprintd/main.go:127","msg":"=== STARTING API SERVER GOROUTINE ==="}
+{"level":"info","timestamp":"2025-09-04T22:13:33.210-0400","caller":"sprintd/main.go:133","msg":"Port is available","addr":"0.0.0.0:9000"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.210-0400","caller":"sprintd/main.go:136","msg":"Starting API server directly"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.211-0400","caller":"sprintd/main.go:142","msg":"=== INITIALIZING BACKFILL SERVICE ==="}
+{"level":"info","timestamp":"2025-09-04T22:13:33.211-0400","caller":"sprintd/main.go:138","msg":"API server launch initiated"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.212-0400","caller":"api/server.go:66","msg":"Starting API server","addr":"0.0.0.0:9000"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.212-0400","caller":"messaging/backfill_service.go:70","msg":"RPC backfill disabled, skipping"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.212-0400","caller":"sprintd/main.go:148","msg":"Backfill service started"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.213-0400","caller":"sprintd/main.go:153","msg":"=== SETTING UP SIGNAL HANDLING ==="}
+{"level":"info","timestamp":"2025-09-04T22:13:33.212-0400","caller":"api/server.go:69","msg":"API server configuration","host":"0.0.0.0","port":9000,"full_addr":"0.0.0.0:9000","version":"2.5.0"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.213-0400","caller":"sprintd/main.go:158","msg":"=== STARTING P2P CLIENT ==="}
+{"level":"info","timestamp":"2025-09-04T22:13:33.214-0400","caller":"sprintd/main.go:164","msg":"=== BITCOIN SPRINT STARTUP COMPLETE ==="}
+{"level":"info","timestamp":"2025-09-04T22:13:33.214-0400","caller":"api/server.go:77","msg":"Binding to all interfaces (0.0.0.0) - Docker compatible"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.215-0400","caller":"api/server.go:96","msg":"HTTP mux already initialized"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.214-0400","caller":"p2p/p2p.go:205","msg":"Starting Bitcoin Sprint P2P client with parallel connection pool"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.215-0400","caller":"sprintd/main.go:165","msg":"Bitcoin Sprint started successfully","api_host":"0.0.0.0","api_port":9000,"p2p_port":8335}
+{"level":"info","timestamp":"2025-09-04T22:13:33.216-0400","caller":"api/server.go:38","msg":"Sprint competitive advantage routes registered","universal_endpoint":"/api/v1/universal/{chain}/{method}","value_props":"flat_p99,unified_api,predictive_cache,enterprise_tiers"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.221-0400","caller":"api/enterprise.go:35","msg":"Enterprise Security API endpoints available:","endpoints":["POST /api/v1/enterprise/entropy/fast","POST /api/v1/enterprise/entropy/hybrid","GET /api/v1/enterprise/system/fingerprint","GET /api/v1/enterprise/system/temperature","POST /api/v1/enterprise/buffer/new","GET /api/v1/enterprise/security/audit-status","POST /api/v1/enterprise/security/audit/enable","POST /api/v1/enterprise/security/audit/disable","POST /api/v1/enterprise/security/policy","GET /api/v1/enterprise/security/compliance-report"]}
+{"level":"info","timestamp":"2025-09-04T22:13:33.221-0400","caller":"api/server.go:130","msg":"Security middleware applied"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.222-0400","caller":"api/server.go:148","msg":"HTTP server configured with enhanced settings","addr":"0.0.0.0:9000","read_timeout":30,"write_timeout":60}
+{"level":"info","timestamp":"2025-09-04T22:13:33.222-0400","caller":"api/server.go:207","msg":"Starting HTTP server listen","addr":"0.0.0.0:9000"}
+{"level":"error","timestamp":"2025-09-04T22:13:33.231-0400","caller":"api/server.go:297","msg":"TCP connection to local port failed","port":9000,"error":"dial tcp 127.0.0.1:9000: connectex: No connection could be made because the target machine actively refused it.","stacktrace":"github.com/PayRpc/Bitcoin-Sprint/internal/api.(*Server).Run.func5\n\tgithub.com/PayRpc/Bitcoin-Sprint/internal/api/server.go:297\ngithub.com/PayRpc/Bitcoin-Sprint/internal/api.(*Server).Run\n\tgithub.com/PayRpc/Bitcoin-Sprint/internal/api/server.go:308\nmain.main.func1\n\tgithub.com/PayRpc/Bitcoin-Sprint/cmd/sprintd/main.go:139"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.235-0400","caller":"api/server.go:321","msg":"TCP listener created successfully"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.235-0400","caller":"api/server.go:327","msg":"HTTP server listener created successfully","addr":"0.0.0.0:9000"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.300-0400","caller":"p2p/p2p.go:397","msg":"Peer connection established","peer":"seed.bitcoinstats.com:8333","total_peers":1}
+{"level":"info","timestamp":"2025-09-04T22:13:33.310-0400","caller":"p2p/p2p.go:397","msg":"Peer connection established","peer":"dnsseed.bitcoin.dashjr.org:8333","total_peers":3}
+{"level":"info","timestamp":"2025-09-04T22:13:33.384-0400","caller":"p2p/p2p.go:397","msg":"Peer connection established","peer":"dnsseed.bluematt.me:8333","total_peers":5}
+{"level":"info","timestamp":"2025-09-04T22:13:33.385-0400","caller":"p2p/p2p.go:397","msg":"Peer connection established","peer":"dnsseed.emzy.de:8333","total_peers":7}
+{"level":"info","timestamp":"2025-09-04T22:13:33.394-0400","caller":"p2p/p2p.go:397","msg":"Peer connection established","peer":"seed.bitcoin.sipa.be:8333","total_peers":9}
+{"level":"info","timestamp":"2025-09-04T22:13:33.395-0400","caller":"p2p/p2p.go:397","msg":"Peer connection established","peer":"seed.bitcoin.jonasschnelli.ch:8333","total_peers":10}
+{"level":"info","timestamp":"2025-09-04T22:13:33.395-0400","caller":"p2p/p2p.go:244","msg":"P2P connection pool established","successful":5,"pool_size":5,"current_peers":11}
+{"level":"info","timestamp":"2025-09-04T22:13:33.397-0400","caller":"p2p/p2p.go:429","msg":"Started block processing pipeline with backpressure","workers":2,"max_queue_depth":200}
+{"level":"info","timestamp":"2025-09-04T22:13:33.423-0400","caller":"relay/ethereum.go:167","msg":"Connecting to Ethereum network","endpoints":["wss://ethereum.publicnode.com","wss://cloudflare-eth.com","wss://rpc.ankr.com/eth/ws"]}
+{"level":"info","timestamp":"2025-09-04T22:13:33.423-0400","caller":"api/server.go:163","msg":"ETH relay pre-warmed"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.424-0400","caller":"relay/solana.go:239","msg":"Connecting to Solana network","endpoints":["wss://api.mainnet-beta.solana.com","wss://solana.publicnode.com","wss://rpc.ankr.com/solana"]}
+{"level":"info","timestamp":"2025-09-04T22:13:33.424-0400","caller":"api/server.go:172","msg":"SOL relay pre-warmed"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.451-0400","caller":"p2p/p2p.go:324","msg":"Bitcoin protocol handshake completed","peer":"dnsseed.bluematt.me:8333","user_agent":"/Satoshi:27.0.0/","protocol_version":70016,"services":3081,"network":true,"network_limited":true,"witness":true,"p2p_v2":true}
+{"level":"info","timestamp":"2025-09-04T22:13:33.452-0400","caller":"p2p/p2p.go:339","msg":"Version acknowledgment received","peer":"dnsseed.bluematt.me:8333"}
+{"level":"warn","timestamp":"2025-09-04T22:13:33.486-0400","caller":"p2p/p2p.go:315","msg":"Rejecting peer: insufficient services","peer":"dnsseed.emzy.de:8333","services":3077,"has_network":true,"has_network_limited":true,"has_witness":false}
+{"level":"warn","timestamp":"2025-09-04T22:13:33.503-0400","caller":"p2p/p2p.go:315","msg":"Rejecting peer: insufficient services","peer":"seed.bitcoin.sipa.be:8333","services":3077,"has_network":true,"has_network_limited":true,"has_witness":false}
+{"level":"info","timestamp":"2025-09-04T22:13:33.503-0400","caller":"p2p/p2p.go:324","msg":"Bitcoin protocol handshake completed","peer":"seed.bitcoin.jonasschnelli.ch:8333","user_agent":"/Satoshi:28.1.0/","protocol_version":70016,"services":3081,"network":true,"network_limited":true,"witness":true,"p2p_v2":true}
+{"level":"info","timestamp":"2025-09-04T22:13:33.505-0400","caller":"p2p/p2p.go:339","msg":"Version acknowledgment received","peer":"seed.bitcoin.jonasschnelli.ch:8333"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.544-0400","caller":"p2p/p2p.go:397","msg":"Peer connection established","peer":"seed.bitnodes.io:8333","total_peers":12}
+{"level":"warn","timestamp":"2025-09-04T22:13:33.626-0400","caller":"relay/solana.go:614","msg":"Failed to connect to Solana endpoint","endpoint":"wss://api.mainnet-beta.solana.com","error":"websocket: bad handshake","attempt":1,"connection_attempt_time":0.2007741}
+{"level":"info","timestamp":"2025-09-04T22:13:33.627-0400","caller":"p2p/p2p.go:324","msg":"Bitcoin protocol handshake completed","peer":"seed.bitnodes.io:8333","user_agent":"/Satoshi:25.0.0/","protocol_version":70016,"services":1033,"network":true,"network_limited":true,"witness":true,"p2p_v2":false}
+{"level":"info","timestamp":"2025-09-04T22:13:33.627-0400","caller":"p2p/p2p.go:339","msg":"Version acknowledgment received","peer":"seed.bitnodes.io:8333"}
+{"level":"warn","timestamp":"2025-09-04T22:13:33.629-0400","caller":"relay/ethereum.go:702","msg":"Failed to connect to Ethereum endpoint","endpoint":"wss://rpc.ankr.com/eth/ws","error":"websocket: bad handshake","attempt":0}
+{"level":"warn","timestamp":"2025-09-04T22:13:33.645-0400","caller":"relay/ethereum.go:702","msg":"Failed to connect to Ethereum endpoint","endpoint":"wss://cloudflare-eth.com","error":"websocket: bad handshake","attempt":0}
+{"level":"info","timestamp":"2025-09-04T22:13:33.692-0400","caller":"relay/ethereum.go:696","msg":"Connected to Ethereum endpoint","endpoint":"wss://ethereum.publicnode.com"}
+{"level":"warn","timestamp":"2025-09-04T22:13:33.700-0400","caller":"relay/solana.go:614","msg":"Failed to connect to Solana endpoint","endpoint":"wss://rpc.ankr.com/solana","error":"websocket: bad handshake","attempt":1,"connection_attempt_time":0.2751436}
+{"level":"info","timestamp":"2025-09-04T22:13:33.707-0400","caller":"relay/solana.go:602","msg":"Connected to Solana endpoint","endpoint":"wss://solana.publicnode.com","connection_time":0.280905}
+{"level":"info","timestamp":"2025-09-04T22:13:33.730-0400","caller":"api/server.go:258","msg":"Attempting self-test HTTP request","url":"http://127.0.0.1:9000/health","attempt":1}
+{"level":"info","timestamp":"2025-09-04T22:13:33.732-0400","caller":"api/handlers.go:465","msg":"Health check request received","remote_addr":"127.0.0.1:43238","user_agent":"Go-http-client/1.1","method":"GET","path":"/health","host":"127.0.0.1:9000"}
+{"level":"info","timestamp":"2025-09-04T22:13:33.754-0400","caller":"api/server.go:265","msg":"Self-test HTTP request successful","url":"http://127.0.0.1:9000/health","status":200,"attempt":1}
+{"level":"info","timestamp":"2025-09-04T22:13:34.017-0400","caller":"p2p/p2p.go:324","msg":"Bitcoin protocol handshake completed","peer":"dnsseed.bitcoin.dashjr.org:8333","user_agent":"/Satoshi:27.1.0/","protocol_version":70016,"services":3081,"network":true,"network_limited":true,"witness":true,"p2p_v2":true}
+{"level":"info","timestamp":"2025-09-04T22:13:34.020-0400","caller":"p2p/p2p.go:339","msg":"Version acknowledgment received","peer":"dnsseed.bitcoin.dashjr.org:8333"}
+{"level":"info","timestamp":"2025-09-04T22:13:35.340-0400","caller":"p2p/p2p.go:324","msg":"Bitcoin protocol handshake completed","peer":"seed.bitcoinstats.com:8333","user_agent":"/Satoshi:27.1.0/","protocol_version":70016,"services":3081,"network":true,"network_limited":true,"witness":true,"p2p_v2":true}
+{"level":"info","timestamp":"2025-09-04T22:13:35.341-0400","caller":"p2p/p2p.go:339","msg":"Version acknowledgment received","peer":"seed.bitcoinstats.com:8333"}

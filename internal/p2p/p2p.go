@@ -3,6 +3,7 @@ package p2p
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"runtime"
 	"sync"
@@ -48,8 +49,8 @@ type Client struct {
 	mem       *mempool.Mempool
 	logger    *zap.Logger
 
-	peers []*peer.Peer
-	mu    sync.RWMutex
+	peers     map[string]*peer.Peer
+	peerMutex sync.RWMutex
 
 	activePeers int32
 	stopped     atomic.Bool
@@ -195,10 +196,16 @@ func New(cfg config.Config, blockChan chan blocks.BlockEvent, mem *mempool.Mempo
 		blockChan:   blockChan,
 		mem:         mem,
 		logger:      logger,
-		peers:       make([]*peer.Peer, 0),
+		peers:       make(map[string]*peer.Peer),
 		auth:        auth,
 		peerMetrics: make(map[string]*PeerMetrics),
 	}, nil
+}
+
+// PeerConnection represents a peer connection result
+type PeerConnection struct {
+	Address string
+	Peer    *peer.Peer
 }
 
 func (c *Client) Run() {
@@ -217,7 +224,7 @@ func (c *Client) Run() {
 
 	// Create connection pool with configurable size
 	poolSize := c.getConnectionPoolSize()
-	connectionChan := make(chan *peer.Peer, poolSize)
+	connectionChan := make(chan *PeerConnection, poolSize)
 
 	// Start parallel connection goroutines
 	for _, nodeAddr := range nodes {
@@ -228,9 +235,9 @@ func (c *Client) Run() {
 	successfulConnections := 0
 	for successfulConnections < poolSize {
 		select {
-		case p := <-connectionChan:
-			if p != nil {
-				c.addPeerSafe(p)
+		case peerConn := <-connectionChan:
+			if peerConn != nil && peerConn.Peer != nil {
+				c.addPeerSafe(peerConn.Address, peerConn.Peer)
 				successfulConnections++
 			}
 		case <-time.After(30 * time.Second):
@@ -238,9 +245,9 @@ func (c *Client) Run() {
 		}
 	}
 
-	c.mu.RLock()
+	c.peerMutex.RLock()
 	peerCount := len(c.peers)
-	c.mu.RUnlock()
+	c.peerMutex.RUnlock()
 	c.logger.Info("P2P connection pool established",
 		zap.Int("successful", successfulConnections),
 		zap.Int("pool_size", poolSize),
@@ -284,7 +291,7 @@ func (c *Client) getTierAwareWorkerCount() int {
 }
 
 // parallelConnect attempts to connect to a peer and sends result to channel
-func (c *Client) parallelConnect(address string, connectionChan chan<- *peer.Peer) {
+func (c *Client) parallelConnect(address string, connectionChan chan<- *PeerConnection) {
 	if c.stopped.Load() {
 		connectionChan <- nil
 		return
@@ -349,6 +356,9 @@ func (c *Client) parallelConnect(address string, connectionChan chan<- *peer.Pee
 			OnBlock: func(p *peer.Peer, msg *wire.MsgBlock, buf []byte) {
 				c.handleBlock(msg)
 			},
+			OnHeaders: func(p *peer.Peer, msg *wire.MsgHeaders) {
+				c.handleHeaders(p, msg)
+			},
 			OnInv: func(p *peer.Peer, msg *wire.MsgInv) {
 				c.handleInv(p, msg)
 			},
@@ -389,7 +399,7 @@ func (c *Client) parallelConnect(address string, connectionChan chan<- *peer.Pee
 	}
 
 	// Add to peer list
-	c.addPeerSafe(p)
+	c.addPeerSafe(address, p)
 
 	// Associate connection with peer
 	p.AssociateConnection(conn)
@@ -398,7 +408,10 @@ func (c *Client) parallelConnect(address string, connectionChan chan<- *peer.Pee
 		zap.String("peer", address),
 		zap.Int32("total_peers", int32(len(c.peers))))
 
-	connectionChan <- p
+	connectionChan <- &PeerConnection{
+		Address: address,
+		Peer:    p,
+	}
 }
 
 // startBlockProcessingPipeline initializes concurrent block processing with backpressure
@@ -556,13 +569,14 @@ func (c *Client) requestFullBlock(blockHash chainhash.Hash) {
 	getData.AddInvVect(wire.NewInvVect(wire.InvTypeBlock, &blockHash))
 
 	// Send to first available peer
-	c.mu.RLock()
-	if len(c.peers) > 0 {
-		c.peers[0].QueueMessage(getData, nil)
+	c.peerMutex.RLock()
+	for _, peer := range c.peers {
+		peer.QueueMessage(getData, nil)
 		c.logger.Debug("Requested full block data",
 			zap.String("hash", blockHash.String()))
+		break // Use first available peer
 	}
-	c.mu.RUnlock()
+	c.peerMutex.RUnlock()
 }
 
 // updatePeerMetrics updates performance metrics for a peer
@@ -722,12 +736,12 @@ func (c *Client) Stop() {
 		}
 
 		// Disconnect all peers
-		c.mu.Lock()
+		c.peerMutex.Lock()
 		for _, p := range c.peers {
 			p.Disconnect()
 		}
 		c.peers = nil
-		c.mu.Unlock()
+		c.peerMutex.Unlock()
 
 		c.logger.Info("P2P client stopped")
 	}
@@ -790,7 +804,7 @@ func (c *Client) connectToPeer(address string) error {
 		return fmt.Errorf("client stopped")
 	}
 
-	c.logger.Debug("Attempting to connect to peer", zap.String("address", address))
+	c.logger.Debug("Connecting to peer", zap.String("address", address))
 
 	config := &peer.Config{
 		UserAgentName:    "Bitcoin-Sprint",
@@ -825,6 +839,9 @@ func (c *Client) connectToPeer(address string) error {
 			OnBlock: func(p *peer.Peer, msg *wire.MsgBlock, buf []byte) {
 				c.handleBlock(msg)
 			},
+			OnHeaders: func(p *peer.Peer, msg *wire.MsgHeaders) {
+				c.handleHeaders(p, msg)
+			},
 			OnInv: func(p *peer.Peer, msg *wire.MsgInv) {
 				c.handleInv(p, msg)
 			},
@@ -836,37 +853,29 @@ func (c *Client) connectToPeer(address string) error {
 		},
 	}
 
-	p, err := peer.NewOutboundPeer(config, address)
+	// Create and connect to the peer
+	netAddr, err := net.ResolveTCPAddr("tcp", address)
 	if err != nil {
-		return fmt.Errorf("failed to create peer: %w", err)
+		return fmt.Errorf("failed to resolve address %s: %w", address, err)
 	}
 
-	// Set connection timeout with enhanced dialing
-	conn, err := netkit.DialHappy(address, 30*time.Second)
+	outboundPeer, err := peer.NewOutboundPeer(config, netAddr.String())
 	if err != nil {
-		return fmt.Errorf("failed to connect with enhanced dialing: %w", err)
+		return fmt.Errorf("failed to create outbound peer: %w", err)
 	}
 
-	// If peer is in Sprint relay cluster list, enforce handshake
-	if c.isSprintPeer(address) {
-		if err := c.auth.PerformHandshakeClient(conn, 5*time.Second); err != nil {
-			c.logger.Warn("Sprint handshake failed", zap.String("peer", address), zap.Error(err))
-			conn.Close()
-			return err
-		}
-		c.logger.Debug("Sprint peer authenticated", zap.String("peer", address))
+	conn, err := net.DialTimeout("tcp", address, 30*time.Second)
+	if err != nil {
+		return fmt.Errorf("failed to connect to %s: %w", address, err)
 	}
 
-	// Add to peer list
-	c.addPeerSafe(p)
+	outboundPeer.AssociateConnection(conn)
 
-	// Associate connection with peer
-	p.AssociateConnection(conn)
+	c.peerMutex.Lock()
+	c.peers[address] = outboundPeer
+	c.peerMutex.Unlock()
 
-	c.logger.Info("Peer connection established",
-		zap.String("peer", address),
-		zap.Int32("total_peers", int32(len(c.peers))))
-
+	c.logger.Info("Successfully connected to peer", zap.String("address", address))
 	return nil
 }
 
@@ -910,14 +919,16 @@ func (c *Client) handleInv(p *peer.Peer, msg *wire.MsgInv) {
 		return
 	}
 
+	getHeaders := wire.NewMsgGetHeaders()
 	getData := wire.NewMsgGetData()
 
 	for _, inv := range msg.InvList {
 		switch inv.Type {
 		case wire.InvTypeBlock:
-			c.logger.Debug("Requesting block from inventory",
+			// Header-first fast-path: request header first for validation
+			c.logger.Debug("Requesting header first for block",
 				zap.String("hash", inv.Hash.String()))
-			getData.AddInvVect(inv)
+			getHeaders.AddBlockLocatorHash(&inv.Hash)
 		case wire.InvTypeTx:
 			c.logger.Debug("Requesting transaction from inventory",
 				zap.String("hash", inv.Hash.String()))
@@ -925,9 +936,17 @@ func (c *Client) handleInv(p *peer.Peer, msg *wire.MsgInv) {
 		}
 	}
 
+	// Send header requests first (fast-path for blocks)
+	if len(getHeaders.BlockLocatorHashes) > 0 {
+		p.QueueMessage(getHeaders, nil)
+		c.logger.Debug("Requested block headers for validation",
+			zap.Int("count", len(getHeaders.BlockLocatorHashes)))
+	}
+
+	// Send transaction requests immediately
 	if len(getData.InvList) > 0 {
 		p.QueueMessage(getData, nil)
-		c.logger.Debug("Requested inventory items",
+		c.logger.Debug("Requested transaction inventory items",
 			zap.Int("count", len(getData.InvList)))
 	}
 }
@@ -939,8 +958,8 @@ func (c *Client) GetActivePeerCount() int32 {
 
 // GetPeerInfo returns information about connected peers
 func (c *Client) GetPeerInfo() []map[string]interface{} {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.peerMutex.RLock()
+	defer c.peerMutex.RUnlock()
 
 	peerInfo := make([]map[string]interface{}, 0, len(c.peers))
 	for _, p := range c.peers {
@@ -989,6 +1008,80 @@ func (c *Client) monitorBackpressure() {
 			}
 		}
 	}
+}
+
+// handleHeaders processes header responses and fetches blocks from best peers
+func (c *Client) handleHeaders(p *peer.Peer, msg *wire.MsgHeaders) {
+	if c.stopped.Load() {
+		return
+	}
+
+	c.logger.Debug("Received headers", 
+		zap.String("peer", p.Addr()),
+		zap.Int("header_count", len(msg.Headers)))
+
+	for _, header := range msg.Headers {
+		blockHash := header.BlockHash()
+		
+		// Basic header validation
+		if header.Version < 1 {
+			c.logger.Warn("Invalid header version", 
+				zap.String("hash", blockHash.String()),
+				zap.Int32("version", header.Version))
+			continue
+		}
+
+		// Header looks valid, now fetch the full block from the best peer
+		bestPeer := c.selectBestPeerForBlock()
+		if bestPeer != nil {
+			c.logger.Debug("Requesting block after header validation",
+				zap.String("hash", blockHash.String()),
+				zap.String("from_peer", bestPeer.Addr()))
+			
+			getData := wire.NewMsgGetData()
+			getData.AddInvVect(wire.NewInvVect(wire.InvTypeBlock, &blockHash))
+			bestPeer.QueueMessage(getData, nil)
+		} else {
+			c.logger.Warn("No suitable peer available for block fetch",
+				zap.String("hash", blockHash.String()))
+		}
+	}
+}
+
+// selectBestPeerForBlock selects the peer with best performance characteristics
+func (c *Client) selectBestPeerForBlock() *peer.Peer {
+	c.peerMutex.RLock()
+	defer c.peerMutex.RUnlock()
+
+	var bestPeer *peer.Peer
+	var bestScore float64
+
+	for _, peer := range c.peers {
+		if !peer.Connected() {
+			continue
+		}
+
+		// Simple scoring based on connection quality
+		// In production, this would use EWMA of response times
+		score := 1.0
+		
+		// Prefer peers with witness support
+		if (uint64(peer.Services()) & SvcNodeWitness) != 0 {
+			score += 0.5
+		}
+		
+		// Prefer newer protocol versions
+		if peer.ProtocolVersion() >= 70016 {
+			score += 0.3
+		}
+
+		if score > bestScore {
+			bestScore = score
+			bestPeer = peer
+		}
+	}
+
+	return bestPeer
 }
 
 // requestHeadersFromPeer requests block headers from a peer with tier-aware limits
@@ -1154,11 +1247,11 @@ func (c *Client) requestFeeEstimation(targetBlocks int) (float64, error) {
 	return 5.0, nil // Minimum fee rate
 }
 
-// addPeerSafe safely adds a peer to the peers slice with proper locking
-func (c *Client) addPeerSafe(p *peer.Peer) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.peers = append(c.peers, p)
+// addPeerSafe safely adds a peer to the peers map with proper locking
+func (c *Client) addPeerSafe(address string, p *peer.Peer) {
+	c.peerMutex.Lock()
+	defer c.peerMutex.Unlock()
+	c.peers[address] = p
 }
 
 // isSprintPeer checks if an address is in the configured Sprint relay peer list

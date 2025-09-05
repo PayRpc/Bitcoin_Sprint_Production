@@ -1,0 +1,7 @@
+Bitcoin Sprint starting…
+ API:      http://0.0.0.0:9000
+ Metrics:  http://127.0.0.1:9090/metrics
+ PProf:    disabled
+ P2P:      enabled (min proto 70016, witness only)
+ Workers:  16
+

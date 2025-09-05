@@ -23,6 +23,8 @@ import (
 	"github.com/PayRpc/Bitcoin-Sprint/internal/messaging"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/p2p"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/relay"
+	gctuning "github.com/PayRpc/Bitcoin-Sprint/internal/runtime"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/throttle"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -39,6 +41,15 @@ func main() {
 	defer logger.Sync()
 
 	logger.Info("=== MAIN FUNCTION STARTED ===")
+
+	// Initialize GC tuning for optimal performance
+	logger.Info("=== INITIALIZING RUNTIME OPTIMIZATIONS ===")
+	if err := gctuning.InitializeGCTuning(logger); err != nil {
+		logger.Warn("Failed to initialize GC tuning", zap.Error(err))
+	}
+
+	// Start GC monitoring
+	gctuning.MonitorGCPerformance(logger, 5*time.Minute)
 
 	logger.Info("Starting Bitcoin Sprint",
 		zap.String("version", "1.0.0"),
@@ -96,8 +107,18 @@ func main() {
 	_ = cache.New(1000, logger) // Cache not currently used
 
 	logger.Info("=== INITIALIZING BROADCASTER ===")
-	// Initialize broadcaster for real-time updates
-	_ = broadcaster.New(logger) // Broadcaster not currently used
+	// Initialize broadcaster for real-time updates with optimizations
+	_ = broadcaster.New(logger) // Broadcaster with fan-out batching and pre-encoded frames
+
+	logger.Info("=== INITIALIZING ENDPOINT THROTTLE ===")
+	// Initialize endpoint throttling for ETH/SOL connections
+	endpointThrottle := throttle.New(logger)
+	// Register common endpoints (example - these would come from config)
+	endpointThrottle.RegisterEndpoint("https://eth-mainnet.g.alchemy.com/v2/demo")
+	endpointThrottle.RegisterEndpoint("https://api.mainnet-beta.solana.com")
+	endpointThrottle.RegisterEndpoint("https://rpc.ankr.com/eth")
+	endpointThrottle.RegisterEndpoint("https://rpc.ankr.com/solana")
+	logger.Info("Endpoint throttling initialized with health monitoring")
 
 	logger.Info("=== INITIALIZING RELAY DISPATCHER ===")
 	// Initialize relay dispatcher for multi-chain support

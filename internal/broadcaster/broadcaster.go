@@ -1,6 +1,8 @@
 package broadcaster
 
 import (
+	"bytes"
+	"encoding/json"
 	"sync"
 	"time"
 
@@ -9,19 +11,58 @@ import (
 	"go.uber.org/zap"
 )
 
-// Broadcaster manages tier-aware block event publishing to subscribers
-type Broadcaster struct {
-	subs   map[chan blocks.BlockEvent]config.Tier
-	mu     sync.RWMutex
-	logger *zap.Logger
+// PreEncodedFrame holds pre-serialized message data for reuse
+type PreEncodedFrame struct {
+	data     []byte
+	size     int
+	created  time.Time
 }
 
-// New creates a new tier-aware broadcaster
+// BlockMessage represents the message structure sent to clients
+type BlockMessage struct {
+	Type      string            `json:"type"`
+	Block     blocks.BlockEvent `json:"block"`
+	Timestamp time.Time         `json:"timestamp"`
+}
+
+// BatchedBroadcast represents a batched broadcast event with pre-encoded frame
+type BatchedBroadcast struct {
+	event   blocks.BlockEvent
+	frame   *PreEncodedFrame
+	clients []chan blocks.BlockEvent
+	tiers   []config.Tier
+}
+
+// Broadcaster manages tier-aware block event publishing to subscribers with fan-out batching
+type Broadcaster struct {
+	subs        map[chan blocks.BlockEvent]config.Tier
+	mu          sync.RWMutex
+	logger      *zap.Logger
+	batchChan   chan BatchedBroadcast
+	stopChan    chan struct{}
+	wg          sync.WaitGroup
+	framePool   sync.Pool // Pool for reusing byte buffers
+}
+
+// New creates a new tier-aware broadcaster with fan-out batching and pre-encoded frames
 func New(logger *zap.Logger) *Broadcaster {
-	return &Broadcaster{
-		subs:   make(map[chan blocks.BlockEvent]config.Tier),
-		logger: logger,
+	b := &Broadcaster{
+		subs:      make(map[chan blocks.BlockEvent]config.Tier),
+		logger:    logger,
+		batchChan: make(chan BatchedBroadcast, 1000),
+		stopChan:  make(chan struct{}),
+		framePool: sync.Pool{
+			New: func() interface{} {
+				return &bytes.Buffer{}
+			},
+		},
 	}
+	
+	// Start the batching worker
+	b.wg.Add(1)
+	go b.fanOutBatcher()
+	
+	return b
 }
 
 // Subscribe adds a new subscriber with the specified tier
@@ -63,72 +104,151 @@ func (b *Broadcaster) Unsubscribe(ch <-chan blocks.BlockEvent) {
 	}
 }
 
-// Publish broadcasts a block event to all subscribers with tier-aware delivery
-func (b *Broadcaster) Publish(evt blocks.BlockEvent) {
+// Publish publishes a block event to all subscribers with pre-encoded frames and fan-out batching
+func (b *Broadcaster) Publish(event blocks.BlockEvent) {
 	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	start := time.Now()
-	delivered := 0
-	turboOverwrites := 0
-	skipped := 0
-
-	for ch, tier := range b.subs {
-		select {
-		case ch <- evt:
-			delivered++
-		default:
-			// Channel is full - apply tier-based strategy
-			if tier == config.TierTurbo || tier == config.TierEnterprise {
-				// Turbo/Enterprise: overwrite old event to ensure latest data
-				select {
-				case <-ch: // Remove old event
-					turboOverwrites++
-				default:
-					// Channel somehow became available
-				}
-
-				select {
-				case ch <- evt: // Send new event
-					delivered++
-				default:
-					// Still full, this shouldn't happen with proper buffer sizing
-					skipped++
-					b.logger.Warn("Turbo channel still full after overwrite",
-						zap.String("tier", string(tier)),
-						zap.String("blockHash", evt.Hash),
-					)
-				}
-			} else {
-				// Lower tiers: just skip if full
-				skipped++
-			}
-		}
+	if len(b.subs) == 0 {
+		b.mu.RUnlock()
+		return
 	}
-
-	elapsed := time.Since(start)
-
-	// Log performance metrics
-	if elapsed > 1*time.Millisecond {
-		b.logger.Warn("Slow broadcast detected",
-			zap.Duration("elapsed", elapsed),
-			zap.Int("delivered", delivered),
-			zap.Int("turboOverwrites", turboOverwrites),
-			zap.Int("skipped", skipped),
-			zap.String("blockHash", evt.Hash),
-		)
-	} else {
-		b.logger.Debug("Block broadcast completed",
-			zap.Duration("elapsed", elapsed),
-			zap.Int("delivered", delivered),
-			zap.Int("turboOverwrites", turboOverwrites),
-			zap.Int("skipped", skipped),
-			zap.String("blockHash", evt.Hash),
-		)
+	
+	// Pre-encode the message once for all subscribers
+	frame, err := b.createPreEncodedFrame(event)
+	if err != nil {
+		b.logger.Error("Failed to create pre-encoded frame", zap.Error(err))
+		b.mu.RUnlock()
+		return
+	}
+	
+	// Collect all subscribers for batching
+	clients := make([]chan blocks.BlockEvent, 0, len(b.subs))
+	tiers := make([]config.Tier, 0, len(b.subs))
+	
+	for ch, tier := range b.subs {
+		clients = append(clients, ch)
+		tiers = append(tiers, tier)
+	}
+	b.mu.RUnlock()
+	
+	// Send to batch channel for aggregated writes
+	select {
+	case b.batchChan <- BatchedBroadcast{
+		event:   event,
+		frame:   frame,
+		clients: clients,
+		tiers:   tiers,
+	}:
+	default:
+		// Channel full, skip this broadcast
+		b.logger.Warn("Batch channel full, dropping broadcast")
 	}
 }
 
-// getBufferSize returns the appropriate buffer size for a tier
+// createPreEncodedFrame serializes the block event once for reuse across all connections
+func (b *Broadcaster) createPreEncodedFrame(event blocks.BlockEvent) (*PreEncodedFrame, error) {
+	// Get buffer from pool
+	buf := b.framePool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer b.framePool.Put(buf)
+	
+	// Create the message structure
+	message := BlockMessage{
+		Type:      "block_event",
+		Block:     event,
+		Timestamp: time.Now(),
+	}
+	
+	// Encode to JSON
+	encoder := json.NewEncoder(buf)
+	if err := encoder.Encode(message); err != nil {
+		return nil, err
+	}
+	
+	// Create frame with copy of the data
+	frame := &PreEncodedFrame{
+		data:    make([]byte, buf.Len()),
+		size:    buf.Len(),
+		created: time.Now(),
+	}
+	copy(frame.data, buf.Bytes())
+	
+	return frame, nil
+}
+
+// fanOutBatcher implements the 5ms tick aggregation with up to 64 clients per batch
+func (b *Broadcaster) fanOutBatcher() {
+	defer b.wg.Done()
+	
+	ticker := time.NewTicker(5 * time.Millisecond)
+	defer ticker.Stop()
+	
+	var pendingBroadcasts []BatchedBroadcast
+	const maxBatchSize = 64
+	
+	for {
+		select {
+		case <-b.stopChan:
+			// Flush remaining broadcasts before stopping
+			b.flushBroadcasts(pendingBroadcasts)
+			return
+			
+		case broadcast := <-b.batchChan:
+			pendingBroadcasts = append(pendingBroadcasts, broadcast)
+			
+			// If we hit the max batch size, flush immediately
+			if len(pendingBroadcasts) >= maxBatchSize {
+				b.flushBroadcasts(pendingBroadcasts)
+				pendingBroadcasts = pendingBroadcasts[:0] // Clear slice while keeping capacity
+			}
+			
+		case <-ticker.C:
+			// 5ms tick - flush all pending broadcasts
+			if len(pendingBroadcasts) > 0 {
+				b.flushBroadcasts(pendingBroadcasts)
+				pendingBroadcasts = pendingBroadcasts[:0] // Clear slice while keeping capacity
+			}
+		}
+	}
+}
+
+// flushBroadcasts writes all pending broadcasts to their respective channels
+func (b *Broadcaster) flushBroadcasts(broadcasts []BatchedBroadcast) {
+	for _, broadcast := range broadcasts {
+		for i, ch := range broadcast.clients {
+			tier := broadcast.tiers[i]
+			
+			select {
+			case ch <- broadcast.event:
+				// Successfully sent
+			default:
+				// Channel full - handle based on tier
+				if tier == config.TierFree {
+					// Free tier: drop the event
+					b.logger.Debug("Dropping event for free tier subscriber (channel full)")
+				} else {
+					// Paid tiers: try to overwrite
+					select {
+					case <-ch: // Remove old event
+						select {
+						case ch <- broadcast.event: // Try to send new event
+						default:
+							b.logger.Warn("Failed to overwrite for paid tier subscriber")
+						}
+					default:
+						b.logger.Warn("Failed to overwrite for paid tier subscriber (channel empty)")
+					}
+				}
+			}
+		}
+	}
+}
+
+// Close stops the broadcaster and its batching worker
+func (b *Broadcaster) Close() {
+	close(b.stopChan)
+	b.wg.Wait()
+	close(b.batchChan)
+}// getBufferSize returns the appropriate buffer size for a tier
 func (b *Broadcaster) getBufferSize(tier config.Tier) int {
 	switch tier {
 	case config.TierEnterprise:
