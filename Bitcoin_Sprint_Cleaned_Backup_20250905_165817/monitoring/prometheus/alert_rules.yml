@@ -1,0 +1,87 @@
+groups:
+  - name: bitcoin_sprint_alerts
+    rules:
+      - alert: BitcoinSprintHighLatency
+        expr: histogram_quantile(0.95, sum by (le) (rate(bitcoin_sprint_request_duration_seconds_bucket{job=~".*bitcoin.*"}[5m]))) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Bitcoin Sprint p95 latency > 1s"
+          description: "Bitcoin Sprint p95 request latency is {{ $value }}s for 5m"
+
+      - alert: BitcoinSprintHighErrorRate
+        expr: sum(rate(http_requests_total{job=~".*bitcoin.*",code=~"[5].*"}[5m])) / sum(rate(http_requests_total{job=~".*bitcoin.*"}[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Bitcoin Sprint 5xx error rate > 5%"
+          description: "Bitcoin Sprint 5xx error rate is {{ $value | humanizePercentage }}"
+
+      - alert: BitcoinSprintDown
+        expr: up{job=~".*bitcoin.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Bitcoin Sprint service is down"
+          description: "Bitcoin Sprint has been down for more than 2 minutes"
+
+  - name: solana_alerts
+    rules:
+      - alert: SolanaExporterDown
+        expr: up{job=~".*solana.*"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Solana exporter is down"
+          description: "Solana exporter has been down for more than 2 minutes"
+
+      - alert: SolanaHighRPCLatency
+        expr: avg(solana_network_latency_ms{job=~".*solana.*"}) > 200
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Solana RPC latency > 200ms"
+          description: "Solana RPC latency is {{ $value }}ms for 5m"
+
+      - alert: SolanaLowTPS
+        expr: max(solana_tps{job=~".*solana.*"}) < 1000
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "Solana TPS below 1000"
+          description: "Solana TPS is {{ $value }} (below normal threshold)"
+
+      - alert: SolanaValidatorCountLow
+        expr: max(solana_validator_count{job=~".*solana.*"}) < 1500
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Solana validator count low"
+          description: "Active Solana validators: {{ $value }} (below 1500)"
+
+  - name: system_alerts
+    rules:
+      - alert: HighCPUUsage
+        expr: (1 - avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m]))) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is {{ $value }}%"
+
+      - alert: HighMemoryUsage
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value }}%"

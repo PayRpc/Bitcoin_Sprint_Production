@@ -1,0 +1,714 @@
+openapi: 3.1.0
+info:
+  title: Multi-Chain Sprint Customer API
+  description: |
+    Enterprise blockchain infrastructure and analytics API supporting Bitcoin, Ethereum, Solana, Cosmos, Polkadot and other major networks with secure memory management.
+    
+    **Security**: All sensitive data secured with Rust SecureBuffer - memory locked and zeroized after use.
+  version: 2.1.0
+  contact:
+    name: Multi-Chain Sprint Support
+    url: https://github.com/PayRpc/Bitcoin-Sprint
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Development server (configurable via APIBase setting)
+
+security:
+  - ApiKeyAuth: []
+  - {}  # Some endpoints allow public access
+
+paths:
+  /status:
+    get:
+      tags:
+        - System Status
+      summary: Get system status and performance metrics
+      description: Returns current system status, license information, and performance metrics
+      security:
+        - {}  # Public access
+      responses:
+        '200':
+          description: System status information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/v1/blocks/:
+    get:
+      tags:
+        - Block Information
+      summary: Get latest block information
+      description: Returns latest block height, hash, and available endpoints
+      security:
+        - ApiKeyAuth: []
+        - {}  # Free tier access
+      responses:
+        '200':
+          description: Latest block information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlocksResponse'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/v1/blocks/{height}:
+    get:
+      tags:
+        - Block Information
+      summary: Get specific block by height
+      description: Returns information about a specific block by height
+      parameters:
+        - name: height
+          in: path
+          required: true
+          description: Block height number
+          schema:
+            type: integer
+            minimum: 0
+            example: 850000
+      security:
+        - ApiKeyAuth: []
+        - {}  # Free tier access
+      responses:
+        '200':
+          description: Block information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SingleBlockResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/v1/blocks/range/{start}/{end}:
+    get:
+      tags:
+        - Block Information
+      summary: Get block range information
+      description: Returns information about a range of blocks
+      parameters:
+        - name: start
+          in: path
+          required: true
+          description: Starting block height
+          schema:
+            type: integer
+            minimum: 0
+            example: 850000
+        - name: end
+          in: path
+          required: true
+          description: Ending block height
+          schema:
+            type: integer
+            minimum: 0
+            example: 850010
+      security:
+        - ApiKeyAuth: []
+        - {}  # Free tier access
+      responses:
+        '200':
+          description: Block range information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockRangeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/v1/license/info:
+    get:
+      tags:
+        - License Management
+      summary: Get license information and usage statistics
+      description: Returns detailed license information, limits, and current usage
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: License information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LicenseResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/v1/analytics/summary:
+    get:
+      tags:
+        - Analytics
+      summary: Get comprehensive analytics summary
+      description: Returns analytics summary including block height, peers, and performance metrics
+      security:
+        - ApiKeyAuth: []
+        - {}  # Free tier access
+      responses:
+        '200':
+          description: Analytics summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsResponse'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /metrics:
+    get:
+      tags:
+        - System Status
+      summary: Get performance metrics
+      description: Returns detailed system performance metrics and statistics
+      security:
+        - {}  # Public access
+      responses:
+        '200':
+          description: Performance metrics array
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Metric'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /stream:
+    get:
+      tags:
+        - System Status
+      summary: Real-time metrics stream
+      description: Server-sent events stream for real-time metrics updates
+      security:
+        - {}  # Public access
+      responses:
+        '200':
+          description: Server-sent events stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Stream of JSON-encoded metrics
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/validate-storage:
+    post:
+      tags:
+        - Storage Validation
+      summary: Validate decentralized storage
+      description: Validate file integrity across IPFS, Filecoin, and Arweave
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateStorageRequest'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidateStorageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/subscription:
+    get:
+      tags:
+        - Subscription Management
+      summary: Get subscription information
+      description: Returns current subscription tier and credit information
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Subscription information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/analytics:
+    get:
+      tags:
+        - Analytics
+      summary: Get storage validation analytics
+      description: Returns analytics for storage validation operations (Professional+ tier)
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Analytics data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API_KEY
+      description: |
+        API key for Pro/Enterprise tiers. Include in Authorization header:
+        `Authorization: Bearer YOUR_API_KEY`
+
+  schemas:
+    StatusResponse:
+      type: object
+      properties:
+        tier:
+          type: string
+          example: "Enterprise"
+          description: License tier (free, pro, enterprise)
+        license_key:
+          type: string
+          example: "btc_****_****_1234"
+          description: Masked license key
+        valid:
+          type: boolean
+          example: true
+        blocks_today:
+          type: integer
+          example: 150
+          description: Blocks processed today
+        block_limit:
+          type: integer
+          example: 1000
+          description: Daily block limit for current tier
+        peers_connected:
+          type: integer
+          example: 8
+          description: Number of connected peers
+        uptime_seconds:
+          type: integer
+          example: 3600
+          description: System uptime in seconds
+        version:
+          type: string
+          example: "1.2.0"
+        turbo_mode_enabled:
+          type: boolean
+          example: true
+
+    BlocksResponse:
+      type: object
+      properties:
+        latest_height:
+          type: integer
+          example: 850000
+        latest_hash:
+          type: string
+          example: "00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72728a054"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-08-24T15:30:00Z"
+        api_version:
+          type: string
+          example: "v1"
+        endpoints:
+          type: array
+          items:
+            type: string
+          example: ["/api/v1/blocks/{height}", "/api/v1/blocks/range/{start}/{end}"]
+
+    SingleBlockResponse:
+      type: object
+      properties:
+        requested_height:
+          type: string
+          example: "850000"
+        latest_height:
+          type: integer
+          example: 850001
+        latest_hash:
+          type: string
+          example: "00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72728a054"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-08-24T15:30:00Z"
+        message:
+          type: string
+          example: "Single block lookup - integrate with your Bitcoin node for full block data"
+
+    BlockRangeResponse:
+      type: object
+      properties:
+        start_height:
+          type: string
+          example: "850000"
+        end_height:
+          type: string
+          example: "850010"
+        message:
+          type: string
+          example: "Block range lookup - integrate with your Bitcoin node for full range data"
+        tip:
+          type: string
+          example: "Consider pagination for large ranges"
+
+    LicenseResponse:
+      type: object
+      properties:
+        tier:
+          type: string
+          example: "Enterprise"
+        valid:
+          type: boolean
+          example: true
+        block_limit:
+          type: integer
+          example: 1000
+        expires_at:
+          type: integer
+          format: int64
+          example: 1735689600
+          description: Unix timestamp of license expiration
+        blocks_today:
+          type: integer
+          example: 150
+        api_version:
+          type: string
+          example: "v1"
+
+    AnalyticsResponse:
+      type: object
+      properties:
+        current_block_height:
+          type: integer
+          example: 850000
+        total_peers:
+          type: integer
+          example: 8
+        blocks_today:
+          type: integer
+          example: 150
+        uptime_seconds:
+          type: integer
+          example: 3600
+        turbo_mode:
+          type: boolean
+          example: true
+        api_version:
+          type: string
+          example: "v1"
+        analytics_features:
+          type: array
+          items:
+            type: string
+          example: ["Real-time block monitoring", "Peer connection tracking", "Performance metrics", "Predictive analytics"]
+
+    Metric:
+      type: object
+      properties:
+        block_hash:
+          type: string
+          example: "00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72728a054"
+        latency_ms:
+          type: number
+          format: double
+          example: 45.6
+        peer_count:
+          type: integer
+          example: 8
+        timestamp:
+          type: integer
+          format: int64
+          example: 1692891000
+        height:
+          type: integer
+          example: 850000
+        success:
+          type: boolean
+          example: true
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Rate limit exceeded"
+        code:
+          type: integer
+          example: 429
+
+  responses:
+    RateLimitError:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Rate limit exceeded"
+            code: 429
+
+    BadRequest:
+      description: Bad request - invalid parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Invalid parameter format"
+            code: 400
+
+    Unauthorized:
+      description: Unauthorized - invalid or missing API key
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Invalid API key"
+            code: 401
+
+    ValidateStorageRequest:
+      type: object
+      required:
+        - file_id
+        - protocol
+      properties:
+        file_id:
+          type: string
+          description: Unique identifier for the file to validate
+          example: "QmYwAPJzv5CZsnAqt4QE4r8..."
+        protocol:
+          type: string
+          enum: [ipfs, filecoin, arweave, custom]
+          description: Storage protocol to use
+          example: "ipfs"
+        provider:
+          type: string
+          description: Storage provider identifier
+          example: "pinata"
+        file_size:
+          type: integer
+          description: File size in bytes
+          example: 1048576
+        tier:
+          type: string
+          description: Subscription tier override
+          example: "professional"
+        webhook_url:
+          type: string
+          format: uri
+          description: Webhook URL for real-time notifications
+          example: "https://api.example.com/webhook"
+        merkle_proof:
+          $ref: '#/components/schemas/MerkleProofData'
+
+    ValidateStorageResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [verified, failed, pending]
+          example: "verified"
+        verified:
+          type: boolean
+          example: true
+        verification_score:
+          type: number
+          minimum: 0
+          maximum: 1
+          example: 0.95
+        response_time_ms:
+          type: integer
+          example: 150
+        challenge_id:
+          type: string
+          example: "chall_abc123_1234567890"
+        protocol:
+          type: string
+          example: "ipfs"
+        provider:
+          type: string
+          example: "pinata"
+        tier_used:
+          type: string
+          example: "professional"
+        credits_used:
+          type: integer
+          example: 1
+        credits_remaining:
+          type: integer
+          example: 49999
+        merkle_root:
+          type: string
+          description: Merkle root hash if provided
+          example: "0x1234567890abcdef..."
+        merkle_proof_valid:
+          type: boolean
+          example: true
+        timestamp:
+          type: integer
+          example: 1693526400
+        webhook_sent:
+          type: boolean
+          example: true
+
+    SubscriptionInfo:
+      type: object
+      properties:
+        tier:
+          type: string
+          example: "professional"
+        credits_remaining:
+          type: integer
+          example: 49999
+        monthly_limit:
+          type: integer
+          example: 50000
+        reset_date:
+          type: integer
+          example: 1696118400
+        features:
+          type: array
+          items:
+            type: string
+          example: ["storage_validation", "analytics", "webhooks"]
+
+    AnalyticsResponse:
+      type: object
+      properties:
+        total_verifications:
+          type: integer
+          example: 1250
+        success_rate:
+          type: number
+          example: 0.98
+        average_response_time:
+          type: number
+          example: 145.5
+        protocol_usage:
+          type: object
+          additionalProperties:
+            type: integer
+          example:
+            ipfs: 800
+            filecoin: 350
+            arweave: 100
+        daily_stats:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyStat'
+        top_providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderStat'
+
+    MerkleProofData:
+      type: object
+      properties:
+        root:
+          type: string
+          description: Merkle root hash
+          example: "0x1234567890abcdef..."
+        proof:
+          type: array
+          items:
+            $ref: '#/components/schemas/MerkleProofElement'
+        leaf:
+          type: string
+          example: "0xabcdef1234567890..."
+        index:
+          type: integer
+          example: 5
+        total_chunks:
+          type: integer
+          example: 16
+        chunk_size:
+          type: integer
+          example: 65536
+        leaf_hashes:
+          type: array
+          items:
+            type: string
+          description: Optional array of leaf hashes for verification
+
+    MerkleProofElement:
+      type: object
+      properties:
+        hash:
+          type: string
+          example: "0x1234567890abcdef..."
+        position:
+          type: string
+          enum: [left, right]
+          example: "left"
+
+    DailyStat:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2025-09-01"
+        verifications:
+          type: integer
+          example: 150
+        success_rate:
+          type: number
+          example: 0.97
+        average_response_time:
+          type: number
+          example: 142.3
+
+    ProviderStat:
+      type: object
+      properties:
+        provider:
+          type: string
+          example: "pinata"
+        verifications:
+          type: integer
+          example: 450
+        success_rate:
+          type: number
+          example: 0.99
+        average_response_time:
+          type: number
+          example: 138.7
+
+tags:
+  - name: System Status
+    description: System health and status endpoints
+  - name: Block Information
+    description: Bitcoin block data and information
+  - name: License Management
+    description: License information and usage tracking
+  - name: Analytics
+    description: Analytics and performance metrics

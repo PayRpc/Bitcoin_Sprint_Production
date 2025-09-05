@@ -1,0 +1,55 @@
+# Simplified Bitcoin Sprint Docker Compose for Port Testing
+# This file contains only the essential services to test port mappings
+
+networks:
+  sprint-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  grafana-data:
+
+services:
+  # ===== MONITORING =====
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: sprint-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=sprint123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  # ===== DATABASE LAYER =====
+  postgres:
+    image: postgres:15-alpine
+    container_name: sprint-postgres
+    ports:
+      - "5433:5432"     # External 5433 to avoid local PostgreSQL conflict
+    environment:
+      - POSTGRES_DB=sprint_db
+      - POSTGRES_USER=sprint
+      - POSTGRES_PASSWORD=sprint
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - sprint-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: sprint-redis
+    ports:
+      - "6380:6379"     # External 6380 to avoid local Redis conflict
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - sprint-network
+    restart: unless-stopped

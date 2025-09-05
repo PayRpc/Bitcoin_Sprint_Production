@@ -1,0 +1,20 @@
+groups:
+- name: sprint
+  rules:
+  - alert: SprintTargetDown
+    expr: up{job=~"bitcoin-sprint-(go|rust)"} == 0
+    for: 1m
+    labels: { severity: critical }
+    annotations:
+      summary: "Target {{ $labels.job }} down"
+      description: "Prometheus cannot scrape {{ $labels.instance }}"
+
+  - alert: HighP99Latency
+    expr: ( histogram_quantile(0.99, sum by (le,job)(rate(bitcoin_sprint_request_duration_seconds_bucket[5m]))) )
+          or ( histogram_quantile(0.99, sum by (le,job)(rate(sprint_request_duration_seconds_bucket[5m]))) )
+          > 0.2
+    for: 2m
+    labels: { severity: warning }
+    annotations:
+      summary: "High P99 latency on {{ $labels.job }}"
+      description: "P99 > 200ms for 2m (current {{ $value }}s)"

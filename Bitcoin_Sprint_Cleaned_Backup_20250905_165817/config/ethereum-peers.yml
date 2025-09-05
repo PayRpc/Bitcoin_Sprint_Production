@@ -1,0 +1,51 @@
+# Ethereum Node Configuration
+# Enhanced with specific enode URLs for direct peer connections
+
+ethereum:
+  network: "mainnet"
+  
+  # WebSocket RPC Endpoints
+  ws_endpoints:
+    - "ws://18.138.108.67:30303"   # EF Bootnode (Singapore)
+    - "ws://3.209.45.79:30303"     # EF Bootnode (US-East)
+    - "ws://34.255.23.113:30303"   # EF Bootnode (Ireland)
+    - "ws://35.158.244.151:30303"  # EF Bootnode (Germany)
+    - "ws://52.74.57.123:30303"    # EF Bootnode (Singapore)
+  
+  # Direct Peer Enode URLs
+  enode_peers:
+    - "enode://[node_id]@52.16.188.185:30303"
+    - "enode://[node_id]@13.93.54.137:30303"
+    - "enode://[node_id]@191.235.84.50:30303"
+  
+  # P2P Discovery Seeds
+  discovery_seeds:
+    - "18.138.108.67:30303"   # EF Bootnode (Singapore)
+    - "3.209.45.79:30303"     # EF Bootnode (US-East)
+    - "34.255.23.113:30303"   # EF Bootnode (Ireland)
+    - "35.158.244.151:30303"  # EF Bootnode (Germany)
+    - "52.74.57.123:30303"    # EF Bootnode (Singapore)
+  
+  # Connection Settings
+  connection:
+    timeout: "30s"
+    retry_attempts: 3
+    retry_delay: "5s"
+    max_concurrency: 4
+    buffer_size: 1000
+    enable_compression: true
+  
+  # P2P Network Configuration
+  p2p:
+    max_peers: 50
+    discovery_enabled: true
+    protocols:
+      - "eth/67"
+      - "eth/66"
+      - "snap/1"
+    
+# Notes:
+# - Enode URLs require full node IDs (64-byte hex strings)
+# - These IPs are added as discovery seeds for peer connections
+# - WebSocket endpoints support JSON-RPC calls
+# - P2P connections use devp2p protocol for direct peer communication
