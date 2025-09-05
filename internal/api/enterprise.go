@@ -44,10 +44,6 @@ func (esm *EnterpriseSecurityManager) RegisterEnterpriseRoutes() {
 			"POST /api/v1/enterprise/security/audit/disable",
 			"POST /api/v1/enterprise/security/policy",
 			"GET /api/v1/enterprise/security/compliance-report",
-			"POST /api/v1/enterprise/bloom/new",
-			"POST /api/v1/enterprise/bloom/insert-utxo",
-			"POST /api/v1/enterprise/bloom/check-utxo",
-			"GET /api/v1/enterprise/bloom/stats",
 		}))
 }
 
@@ -224,7 +220,7 @@ func (esm *EnterpriseSecurityManager) handleCPUTemperature(w http.ResponseWriter
 	}
 
 	response := CPUTemperatureResponse{
-		Temperature: temperature,
+		Temperature: float64(temperature),
 		Timestamp:   time.Now(),
 	}
 
@@ -284,22 +280,24 @@ func (esm *EnterpriseSecurityManager) handleNewSecureBuffer(w http.ResponseWrite
 		secLevel = securebuf.SecurityStandard
 	}
 
-	// Create buffer
-	var buffer *securebuf.Buffer
-	var err error
-
+	// Create buffer (handle both Buffer and EnterpriseBuffer types)
 	if req.FillWithEntropy {
-		buffer, err = securebuf.NewWithFastEntropy(req.Size)
+		buf, err := securebuf.NewWithFastEntropy(req.Size)
+		if err != nil {
+			esm.logger.Error("Failed to create secure buffer", zap.Error(err))
+			esm.jsonError(w, http.StatusInternalServerError, "Failed to create secure buffer")
+			return
+		}
+		defer buf.Free()
 	} else {
-		buffer, err = securebuf.NewWithSecurityLevel(req.Size, secLevel)
+		entBuf, err := securebuf.NewWithSecurityLevel(req.Size, secLevel)
+		if err != nil {
+			esm.logger.Error("Failed to create secure buffer", zap.Error(err))
+			esm.jsonError(w, http.StatusInternalServerError, "Failed to create secure buffer")
+			return
+		}
+		defer entBuf.Free()
 	}
-
-	if err != nil {
-		esm.logger.Error("Failed to create secure buffer", zap.Error(err))
-		esm.jsonError(w, http.StatusInternalServerError, "Failed to create secure buffer")
-		return
-	}
-	defer buffer.Free() // In a real implementation, we'd store this in a buffer manager
 
 	response := SecureBufferResponse{
 		BufferID:      fmt.Sprintf("buf_%d", time.Now().UnixNano()),
@@ -465,73 +463,7 @@ func (esm *EnterpriseSecurityManager) handleComplianceReport(w http.ResponseWrit
 }
 
 // === BITCOIN BLOOM FILTER ENDPOINTS ===
-
-// BloomFilterRequest represents a request to create a Bitcoin bloom filter
-type BloomFilterRequest struct {
-	NumBits       int    `json:"num_bits"`
-	HashFunctions int    `json:"hash_functions"`
-	Tweak         uint32 `json:"tweak"`
-	Flags         uint8  `json:"flags"`
-	MaxAge        int    `json:"max_age"`
-	BatchSize     int    `json:"batch_size"`
-}
-
-// BloomFilterResponse represents the response for bloom filter operations
-type BloomFilterResponse struct {
-	FilterID  string    `json:"filter_id"`
-	NumBits   int       `json:"num_bits"`
-	HashFns   int       `json:"hash_functions"`
-	Timestamp time.Time `json:"timestamp"`
-}
-
-// handleNewBloomFilter creates a new Bitcoin bloom filter
-func (esm *EnterpriseSecurityManager) handleNewBloomFilter(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		esm.jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	var req BloomFilterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		esm.jsonError(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-
-	// Set defaults if not provided
-	if req.NumBits == 0 {
-		req.NumBits = 1000000
-	}
-	if req.HashFunctions == 0 {
-		req.HashFunctions = 7
-	}
-	if req.MaxAge == 0 {
-		req.MaxAge = 3600
-	}
-	if req.BatchSize == 0 {
-		req.BatchSize = 1000
-	}
-
-	// Create bloom filter
-	filter, err := securebuf.NewBitcoinBloomFilter(
-		req.NumBits, req.HashFunctions, req.Tweak,
-		req.Flags, req.MaxAge, req.BatchSize,
-	)
-	if err != nil {
-		esm.logger.Error("Failed to create Bitcoin bloom filter", zap.Error(err))
-		esm.jsonError(w, http.StatusInternalServerError, "Failed to create bloom filter")
-		return
-	}
-	defer filter.Free() // In real implementation, we'd store this in a filter manager
-
-	response := BloomFilterResponse{
-		FilterID:  fmt.Sprintf("bloom_%d", time.Now().UnixNano()),
-		NumBits:   req.NumBits,
-		HashFns:   req.HashFunctions,
-		Timestamp: time.Now(),
-	}
-
-	esm.jsonResponse(w, http.StatusOK, response)
-}
+// Bloom filter endpoints are available only when built with cgo. See enterprise_bloom_cgo.go.
 
 // === UTILITY METHODS ===
 
