@@ -994,13 +994,80 @@
     </div>
 
     <script>
-        // API endpoints - flexible for different environments
-        const API_BASE = window.location.hostname === 'localhost'
-            ? 'http://localhost:8080'
-            : `${window.location.protocol}//${window.location.hostname}:8080`;
+        // Backend Tier Detection for Dynamic API Endpoints
+        class BackendDetector {
+            constructor() {
+                this.backends = [
+                    { tier: 'enterprise', port: 9000 },
+                    { tier: 'business', port: 8082 },
+                    { tier: 'free', port: 8080 }
+                ];
+                this.activeBackend = null;
+            }
 
-        // Internal metrics API (local)
-        const INTERNAL_METRICS_API = 'http://localhost:8080/metrics';
+            async detectBackend() {
+                if (this.activeBackend) return this.activeBackend;
+
+                for (const backend of this.backends) {
+                    try {
+                        const url = `http://localhost:${backend.port}/health`;
+                        const response = await fetch(url, { 
+                            method: 'GET',
+                            signal: AbortSignal.timeout(2000)
+                        });
+                        
+                        if (response.ok) {
+                            this.activeBackend = {
+                                tier: backend.tier,
+                                port: backend.port,
+                                url: `http://localhost:${backend.port}`
+                            };
+                            console.log(`✅ Detected ${backend.tier.toUpperCase()} tier backend`);
+                            return this.activeBackend;
+                        }
+                    } catch (error) {
+                        // Backend not available, try next
+                    }
+                }
+
+                // Fallback to FREE tier
+                console.log('⚠️ No backend detected, using FREE tier default');
+                this.activeBackend = {
+                    tier: 'free',
+                    port: 8080,
+                    url: 'http://localhost:8080'
+                };
+                return this.activeBackend;
+            }
+
+            async getApiBase() {
+                const backend = await this.detectBackend();
+                return backend.url;
+            }
+
+            async getMetricsUrl() {
+                const backend = await this.detectBackend();
+                return `${backend.url}/metrics`;
+            }
+        }
+
+        // Initialize backend detector
+        const backendDetector = new BackendDetector();
+
+        // API endpoints - dynamic based on detected backend
+        let API_BASE = 'http://localhost:8080'; // Default fallback
+        let INTERNAL_METRICS_API = 'http://localhost:8080/metrics'; // Default fallback
+
+        // Initialize dynamic API endpoints
+        (async () => {
+            try {
+                API_BASE = await backendDetector.getApiBase();
+                INTERNAL_METRICS_API = await backendDetector.getMetricsUrl();
+                console.log(`🔗 Using backend: ${API_BASE}`);
+            } catch (error) {
+                console.warn('⚠️ Backend detection failed, using defaults:', error);
+            }
+        })();
 
         const MEMPOOL_API = 'https://mempool.space/api/v1/blocks';
         const BLOCKSTREAM_API = 'https://blockstream.info/api/blocks';
@@ -1036,14 +1103,18 @@
 
         async function refreshHealth() {
             try {
-                // Fetch health from your local Bitcoin API
-                const healthResponse = await fetch('http://localhost:8080/health');
+                // Ensure we have the latest backend URL
+                const apiBase = await backendDetector.getApiBase();
+                const metricsUrl = await backendDetector.getMetricsUrl();
+                
+                // Fetch health from detected Bitcoin backend
+                const healthResponse = await fetch(`${apiBase}/health`);
                 if (!healthResponse.ok) throw new Error(`HTTP ${healthResponse.status}`);
 
                 const healthData = await healthResponse.json();
 
                 // Fetch metrics for additional data
-                const metricsResponse = await fetch('http://localhost:8080/metrics');
+                const metricsResponse = await fetch(metricsUrl);
                 const metricsText = await metricsResponse.text();
                 const metrics = parseMetrics(metricsText);
 
@@ -1081,8 +1152,9 @@
 
         async function refreshPerformance() {
             try {
-                // Fetch metrics from your local Bitcoin API
-                const response = await fetch('http://localhost:8080/metrics');
+                // Fetch metrics from detected Bitcoin backend
+                const metricsUrl = await backendDetector.getMetricsUrl();
+                const response = await fetch(metricsUrl);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
                 const metricsText = await response.text();
@@ -1137,8 +1209,9 @@
 
         async function refreshEntropy() {
             try {
-                // Fetch metrics from your local Bitcoin API for entropy calculation
-                const response = await fetch('http://localhost:8080/metrics');
+                // Fetch metrics from detected Bitcoin backend for entropy calculation
+                const metricsUrl = await backendDetector.getMetricsUrl();
+                const response = await fetch(metricsUrl);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
                 const metricsText = await response.text();

@@ -1,5 +1,14 @@
-// Next.js API configuration to proxy to Go backend
-const GO_API_BASE = process.env.GO_API_URL || 'http://localhost:8080';
+// Next.js API configuration to proxy to Go backend with tier detection
+import { tierDetector } from './tier-detector.js';
+
+let GO_API_BASE = process.env.GO_API_URL || 'http://localhost:8080';
+
+// Update GO_API_BASE dynamically based on detected tier
+tierDetector.getTierConfig().then(config => {
+  GO_API_BASE = config.url;
+}).catch(() => {
+  // Keep default if detection fails
+});
 
 export interface ApiResponse<T = any> {
   data?: T;
@@ -10,16 +19,37 @@ export interface ApiResponse<T = any> {
 export class GoApiClient {
   private baseUrl: string;
   private apiKey: string;
+  private tierConfig: any = null;
 
-  constructor(baseUrl: string = GO_API_BASE, apiKey: string = process.env.API_KEY || '') {
-    this.baseUrl = baseUrl;
-    this.apiKey = apiKey;
+  constructor(baseUrl?: string, apiKey?: string) {
+    this.baseUrl = baseUrl || GO_API_BASE;
+    this.apiKey = apiKey || process.env.API_KEY || '';
+    this.initializeTierConfig();
+  }
+
+  private async initializeTierConfig() {
+    try {
+      this.tierConfig = await tierDetector.getTierConfig();
+      this.baseUrl = this.tierConfig.url;
+      this.apiKey = this.tierConfig.apiKey;
+    } catch (error) {
+      console.warn('Failed to detect tier, using defaults:', error);
+    }
+  }
+
+  async ensureTierConfig() {
+    if (!this.tierConfig) {
+      await this.initializeTierConfig();
+    }
   }
 
   private async request<T>(
     endpoint: string, 
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
+    // Ensure tier config is loaded
+    await this.ensureTierConfig();
+    
     const url = `${this.baseUrl}${endpoint}`;
     
     const headers: HeadersInit = {

@@ -1,5 +1,14 @@
-// Storage Verification API Client for Rust Web Server
-const STORAGE_API_BASE = process.env.STORAGE_API_URL || 'http://localhost:8080';
+// Storage Verification API Client for Rust Web Server with tier detection
+import { tierDetector } from './tier-detector.js';
+
+let STORAGE_API_BASE = process.env.STORAGE_API_URL || 'http://localhost:8080';
+
+// Update STORAGE_API_BASE dynamically based on detected tier
+tierDetector.getTierConfig().then(config => {
+  STORAGE_API_BASE = config.url;
+}).catch(() => {
+  // Keep default if detection fails
+});
 
 export interface StorageVerificationRequest {
   file_id: string;

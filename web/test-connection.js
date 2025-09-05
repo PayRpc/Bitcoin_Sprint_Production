@@ -2,24 +2,69 @@
 
 /**
  * Bitcoin Sprint Web API Connection Test
- * Tests connectivity to the Go backend and validates API endpoints
+ * Tests connectivity to the Go backend with automatic tier detection
  */
 
-const https = require('https');
-const http = require('http');
+import https from 'https';
+import http from 'http';
 
-const BASE_URL = process.env.GO_API_URL || 'http://localhost:8080';
-const API_KEY = process.env.API_KEY || 'test-key';
+// Tier configuration
+const BACKENDS = [
+  { tier: 'enterprise', port: 9000, url: 'http://localhost:9000' },
+  { tier: 'business', port: 8082, url: 'http://localhost:8082' },
+  { tier: 'free', port: 8080, url: 'http://localhost:8080' }
+];
+
+let detectedBackend = null;
+
+// API Keys per tier
+const API_KEYS = {
+  free: process.env.BITCOIN_SPRINT_FREE_API_KEY || 'free-api-key-changeme',
+  business: process.env.BITCOIN_SPRINT_BUSINESS_API_KEY || 'business-api-key-changeme',
+  enterprise: process.env.BITCOIN_SPRINT_ENTERPRISE_API_KEY || 'enterprise-api-key-changeme'
+};
 
 console.log('🔍 Bitcoin Sprint Web API Connection Test');
 console.log('==========================================');
-console.log(`Target URL: ${BASE_URL}`);
-console.log(`API Key: ${API_KEY ? 'Set' : 'Not Set'}`);
-console.log('');
 
-async function testEndpoint(endpoint, method = 'GET', expectAuth = false) {
+/**
+ * Detect which backend tier is running
+ */
+async function detectBackend() {
+  console.log('🔍 Detecting active backend tier...');
+  
+  for (const backend of BACKENDS) {
+    console.log(`   Checking ${backend.tier.toUpperCase()} tier (port ${backend.port})...`);
+    
+    try {
+      const testResult = await testEndpoint('/health', 'GET', false, backend.url);
+      if (testResult.success) {
+        console.log(`✅ Found active ${backend.tier.toUpperCase()} tier backend!`);
+        detectedBackend = {
+          ...backend,
+          apiKey: API_KEYS[backend.tier]
+        };
+        return detectedBackend;
+      }
+    } catch (error) {
+      // Continue to next backend
+    }
+  }
+  
+  console.log('⚠️  No backend detected, using FREE tier default');
+  detectedBackend = {
+    ...BACKENDS[2], // Free tier
+    apiKey: API_KEYS.free
+  };
+  return detectedBackend;
+}
+
+async function testEndpoint(endpoint, method = 'GET', expectAuth = false, baseUrl = null) {
+  const targetUrl = baseUrl || (detectedBackend ? detectedBackend.url : 'http://localhost:8080');
+  const apiKey = detectedBackend ? detectedBackend.apiKey : (process.env.API_KEY || 'test-key');
+  
   return new Promise((resolve) => {
-    const url = new URL(endpoint, BASE_URL);
+    const url = new URL(endpoint, targetUrl);
     const protocol = url.protocol === 'https:' ? https : http;
 
     const options = {
@@ -29,7 +74,7 @@ async function testEndpoint(endpoint, method = 'GET', expectAuth = false) {
       method: method,
       headers: {
         'Content-Type': 'application/json',
-        ...(expectAuth && API_KEY && { 'Authorization': `Bearer ${API_KEY}` })
+        ...(expectAuth && apiKey && { 'Authorization': `Bearer ${apiKey}` })
       }
     };
 
@@ -81,6 +126,14 @@ async function testEndpoint(endpoint, method = 'GET', expectAuth = false) {
 }
 
 async function runTests() {
+  // First detect the backend
+  const backend = await detectBackend();
+  
+  console.log('');
+  console.log(`🎯 Testing backend: ${backend.tier.toUpperCase()} tier`);
+  console.log(`   URL: ${backend.url}`);
+  console.log(`   API Key: ${backend.apiKey ? 'Set' : 'Not Set'}`);
+  console.log('');
   const tests = [
     { name: 'Health Check', endpoint: '/health', method: 'GET', auth: false },
     { name: 'API Status', endpoint: '/api/status', method: 'GET', auth: true },

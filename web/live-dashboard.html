@@ -223,9 +223,65 @@
             document.getElementById('systemLog').textContent = logEntries.join('\n');
         }
 
+        // Backend Tier Detection for Live Dashboard
+        class BackendDetector {
+            constructor() {
+                this.backends = [
+                    { tier: 'enterprise', port: 9000 },
+                    { tier: 'business', port: 8082 },
+                    { tier: 'free', port: 8080 }
+                ];
+                this.activeBackend = null;
+            }
+
+            async detectBackend() {
+                if (this.activeBackend) return this.activeBackend;
+
+                for (const backend of this.backends) {
+                    try {
+                        const url = `http://localhost:${backend.port}/health`;
+                        const response = await fetch(url, { 
+                            method: 'GET',
+                            signal: AbortSignal.timeout(2000)
+                        });
+                        
+                        if (response.ok) {
+                            this.activeBackend = {
+                                tier: backend.tier,
+                                port: backend.port,
+                                url: `http://localhost:${backend.port}`
+                            };
+                            addLogEntry(`✅ Detected ${backend.tier.toUpperCase()} tier backend`, 'success');
+                            return this.activeBackend;
+                        }
+                    } catch (error) {
+                        // Backend not available, try next
+                    }
+                }
+
+                // Fallback to FREE tier
+                addLogEntry('⚠️ No backend detected, using FREE tier default', 'warning');
+                this.activeBackend = {
+                    tier: 'free',
+                    port: 8080,
+                    url: 'http://localhost:8080'
+                };
+                return this.activeBackend;
+            }
+
+            async getMetricsUrl() {
+                const backend = await this.detectBackend();
+                return `${backend.url}/metrics`;
+            }
+        }
+
+        // Initialize backend detector
+        const backendDetector = new BackendDetector();
+
         async function fetchMetrics() {
             try {
-                const response = await fetch('http://localhost:8080/metrics');
+                const metricsUrl = await backendDetector.getMetricsUrl();
+                const response = await fetch(metricsUrl);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
                 const text = await response.text();
