@@ -16,7 +16,7 @@ Run the monitoring stack with:
 
 ## Access Dashboards
 
-- **Grafana**: http://localhost:3000 (default login: admin/admin)
+- **Grafana**: http://localhost:3003 (default login: admin/admin)
 - **Prometheus**: http://localhost:9090
 
 ## Components

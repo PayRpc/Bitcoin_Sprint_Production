@@ -28,7 +28,7 @@ start-all.bat
 | **Next.js Frontend** | 3002 | Active - Running | Web interface with entropy generator |
 | **Go Backend** | 8080 | Active - Connected | Core Bitcoin Sprint application |
 | **Rust Web Server** | 8443/8444 | Active - Hardened | Enterprise-grade storage verification API |
-| **Grafana** | 3000 | Active - Monitoring | Performance monitoring dashboard |
+| **Grafana** | 3003 | Active - Monitoring | Performance monitoring dashboard |
 | **Entropy API** | 3002/api/entropy | Active | Cryptographically secure randomness |
 
 ### Rust Web Server (Enterprise Hardening)
@@ -636,7 +636,7 @@ Monitor your Bitcoin Sprint application with Grafana and Prometheus:
 ```
 
 Access dashboards at:
-- Grafana: http://localhost:3000 (admin/admin)
+- Grafana: http://localhost:3003 (admin/admin)
 - Prometheus: http://localhost:9090
 
 See the [monitoring README](./monitoring/README.md) for more details.
