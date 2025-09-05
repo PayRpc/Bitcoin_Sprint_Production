@@ -98,11 +98,11 @@ try {
 # =============================================================================
 Write-Host "🔧 Starting Go backend..." -ForegroundColor Yellow
 
-$backendExe = if ($Production) { "bitcoin-sprint-integrated.exe" } else { "bitcoin-sprint-dev.exe" }
+$backendExe = if ($Production) { "sprintd.exe" } else { "bitcoin-sprint-dev.exe" }
 
 if (-not (Test-Path $backendExe)) {
     Write-Error "❌ Backend executable not found: $backendExe"
-    Write-Host "Please run: .\build-integrated.ps1 $(if ($Production) { '-Release' } else { '' })" -ForegroundColor Yellow
+    Write-Host "Please run: go build -o $backendExe ./cmd/sprintd" -ForegroundColor Yellow
     exit 1
 }
 
