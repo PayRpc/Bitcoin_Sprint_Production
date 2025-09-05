@@ -4,6 +4,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -284,7 +285,7 @@ func (s *Server) Run(ctx context.Context) {
 				zap.Error(err))
 				
 			// Print diagnostic information to help troubleshoot
-			checkLocalPort(s.cfg.APIPort, s.logger)
+			// checkLocalPort(s.cfg.APIPort, s.logger) // Moved after function definition
 		}
 	}()
 	
@@ -302,6 +303,9 @@ func (s *Server) Run(ctx context.Context) {
 				zap.Int("port", port))
 		}
 	}
+	
+	// Now call the function after it's defined
+	checkLocalPort(s.cfg.APIPort, s.logger)
 
 	// Try to listen on the specified port with explicit socket options
 	listener, err := net.Listen("tcp", addr)
@@ -313,13 +317,11 @@ func (s *Server) Run(ctx context.Context) {
 	}
 	
 	// Set TCP keep-alive to detect dead connections
-	tcpListener, ok := listener.(*net.TCPListener)
-	if ok {
-		s.logger.Info("Setting TCP keep-alive for listener")
-		_ = tcpListener.SetKeepAlive(true)
-		_ = tcpListener.SetKeepAlivePeriod(3 * time.Minute)
+	if _, ok := listener.(*net.TCPListener); ok {
+		s.logger.Info("TCP listener created successfully")
+		// Note: Keep-alive settings would require custom implementation
 	} else {
-		s.logger.Warn("Could not set TCP keep-alive options, not a TCP listener")
+		s.logger.Warn("Could not access TCP listener options")
 	}
 	
 	s.logger.Info("HTTP server listener created successfully", zap.String("addr", addr))

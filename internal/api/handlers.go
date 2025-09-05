@@ -499,11 +499,21 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 		"relay": map[string]interface{}{
 			"ethereum": map[string]interface{}{
 				"status": ethRelayStatus,
-				"peers":  s.ethereumRelay != nil && s.ethereumRelay.IsConnected() ? s.ethereumRelay.GetPeerCount() : 0,
+				"peers": func() int {
+					if s.ethereumRelay != nil && s.ethereumRelay.IsConnected() {
+						return s.ethereumRelay.GetPeerCount()
+					}
+					return 0
+				}(),
 			},
 			"solana": map[string]interface{}{
 				"status": solRelayStatus,
-				"peers":  s.solanaRelay != nil && s.solanaRelay.IsConnected() ? s.solanaRelay.GetPeerCount() : 0,
+				"peers": func() int {
+					if s.solanaRelay != nil && s.solanaRelay.IsConnected() {
+						return s.solanaRelay.GetPeerCount()
+					}
+					return 0
+				}(),
 			},
 		},
 		"connections": map[string]interface{}{

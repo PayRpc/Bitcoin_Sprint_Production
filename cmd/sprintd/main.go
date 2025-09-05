@@ -71,11 +71,17 @@ func main() {
 		}
 		db, err := database.New(dbCfg, logger)
 		if err != nil {
-			logger.Error("Failed to connect to database", zap.Error(err))
+			logger.Warn("Database connection failed, continuing without database",
+				zap.Error(err),
+				zap.String("type", cfg.DatabaseType),
+				zap.String("url", cfg.DatabaseURL))
+			logger.Info("Application will run without database persistence")
 		} else {
 			defer db.Close()
 			logger.Info("Database connection established")
 		}
+	} else {
+		logger.Info("No database configured, running without persistence")
 	}
 
 	logger.Info("=== INITIALIZING CORE COMPONENTS ===")

@@ -34,17 +34,17 @@ func CreateEntropyBuffer(capacity int) (*securebuf.Buffer, error) {
 	return securebuf.NewWithFastEntropy(capacity)
 }
 
-// CreateEntropyBufferWithHeaders creates a SecureBuffer with Bitcoin header entropy
-func CreateEntropyBufferWithHeaders(capacity int, headers [][]byte) (*securebuf.Buffer, error) {
+// CreateSecureBufferWithHeaders creates a SecureBuffer with Bitcoin header entropy
+func CreateSecureBufferWithHeaders(capacity int, headers [][]byte) (*securebuf.Buffer, error) {
 	return securebuf.NewWithHybridEntropy(capacity, headers)
 }
 
-// CreateEnterpriseEntropyBuffer creates an enterprise-grade entropy buffer
-func CreateEnterpriseEntropyBuffer(capacity int, level securebuf.SecurityLevel) (*securebuf.EnterpriseBuffer, error) {
+// CreateSecureEnterpriseEntropyBuffer creates an enterprise-grade entropy buffer
+func CreateSecureEnterpriseEntropyBuffer(capacity int, level securebuf.SecurityLevel) (*securebuf.EnterpriseBuffer, error) {
 	return securebuf.NewWithSecurityLevel(capacity, level)
 }
 
-// MixEntropyIntoBuffer mixes new entropy into existing buffer content
-func MixEntropyIntoBuffer(buffer *securebuf.Buffer, headers [][]byte) error {
+// MixEntropyIntoSecureBuffer mixes new entropy into existing buffer content
+func MixEntropyIntoSecureBuffer(buffer *securebuf.Buffer, headers [][]byte) error {
 	return buffer.FillWithHybridEntropy(headers)
 }

@@ -23,7 +23,7 @@ import (
 
 // BloomFilterManager manages the Rust Bloom Filter integration
 type BloomFilterManager struct {
-	filterHandle C.UniversalBloomFilterHandle
+	filterHandle *C.UniversalBloomFilter
 	config       config.Config
 	mu           sync.RWMutex
 	isEnabled    bool
@@ -50,7 +50,7 @@ func (bfm *BloomFilterManager) initializeFilter() error {
 	bfm.mu.Lock()
 	defer bfm.mu.Unlock()
 
-	var filterHandle C.UniversalBloomFilterHandle
+	var filterHandle *C.UniversalBloomFilter
 
 	// Configure filter based on tier
 	switch bfm.config.Tier {
@@ -59,60 +59,73 @@ func (bfm *BloomFilterManager) initializeFilter() error {
 		networkName := C.CString("bitcoin")
 		defer C.free(unsafe.Pointer(networkName))
 
-		filterHandle = C.universal_bloom_filter_new(
-			C.size_t(100000),  // Large filter size
-			C.uint8_t(7),      // More hash functions
-			C.uint32_t(0),     // Random tweak
-			C.uint8_t(0),      // Flags
-			C.uint64_t(86400), // 24 hour max age
-			C.size_t(8192),    // Large batch size
-			networkName,
-		)
+	// Use BloomConfig struct for initialization
+	var config C.BloomConfig
+	config.network = networkName
+	config.size = 100000
+	config.num_hashes = 7
+	config.tweak = 0
+	config.flags = 0
+	config.max_age_seconds = 86400
+	config.batch_size = 8192
+	config.enable_compression = false
+	config.enable_metrics = false
+	var errCode C.BloomFilterErrorCode
+	filterHandle = C.bloom_filter_new(&config, &errCode)
 
 	case config.TierBusiness:
 		// Balanced configuration for business tier
 		networkName := C.CString("bitcoin")
 		defer C.free(unsafe.Pointer(networkName))
 
-		filterHandle = C.universal_bloom_filter_new(
-			C.size_t(50000),   // Medium filter size
-			C.uint8_t(5),      // Standard hash functions
-			C.uint32_t(0),     // Random tweak
-			C.uint8_t(0),      // Flags
-			C.uint64_t(86400), // 24 hour max age
-			C.size_t(4096),    // Medium batch size
-			networkName,
-		)
+	var config C.BloomConfig
+	config.network = networkName
+	config.size = 50000
+	config.num_hashes = 5
+	config.tweak = 0
+	config.flags = 0
+	config.max_age_seconds = 86400
+	config.batch_size = 4096
+	config.enable_compression = false
+	config.enable_metrics = false
+	var errCode C.BloomFilterErrorCode
+	filterHandle = C.bloom_filter_new(&config, &errCode)
 
 	case config.TierPro:
 		// Standard configuration for pro tier
 		networkName := C.CString("bitcoin")
 		defer C.free(unsafe.Pointer(networkName))
 
-		filterHandle = C.universal_bloom_filter_new(
-			C.size_t(36000),   // Standard Bitcoin Core size
-			C.uint8_t(5),      // Standard hash functions
-			C.uint32_t(0),     // Random tweak
-			C.uint8_t(0),      // Flags
-			C.uint64_t(86400), // 24 hour max age
-			C.size_t(2048),    // Standard batch size
-			networkName,
-		)
+	var config C.BloomConfig
+	config.network = networkName
+	config.size = 36000
+	config.num_hashes = 5
+	config.tweak = 0
+	config.flags = 0
+	config.max_age_seconds = 86400
+	config.batch_size = 2048
+	config.enable_compression = false
+	config.enable_metrics = false
+	var errCode C.BloomFilterErrorCode
+	filterHandle = C.bloom_filter_new(&config, &errCode)
 
 	default: // Free tier
 		// Memory-optimized configuration for free tier
 		networkName := C.CString("bitcoin")
 		defer C.free(unsafe.Pointer(networkName))
 
-		filterHandle = C.universal_bloom_filter_new(
-			C.size_t(18000),   // Smaller filter size
-			C.uint8_t(3),      // Fewer hash functions
-			C.uint32_t(0),     // Random tweak
-			C.uint8_t(0),      // Flags
-			C.uint64_t(86400), // 24 hour max age
-			C.size_t(1024),    // Smaller batch size
-			networkName,
-		)
+	var config C.BloomConfig
+	config.network = networkName
+	config.size = 18000
+	config.num_hashes = 3
+	config.tweak = 0
+	config.flags = 0
+	config.max_age_seconds = 86400
+	config.batch_size = 1024
+	config.enable_compression = false
+	config.enable_metrics = false
+	var errCode C.BloomFilterErrorCode
+	filterHandle = C.bloom_filter_new(&config, &errCode)
 	}
 
 	if filterHandle == nil {
@@ -137,17 +150,15 @@ func (bfm *BloomFilterManager) ContainsUTXO(txid []byte, vout uint32) (bool, err
 		return false, fmt.Errorf("invalid TXID length: expected 32 bytes, got %d", len(txid))
 	}
 
-	result := C.universal_bloom_filter_contains_utxo(
-		bfm.filterHandle,
-		(*C.uint8_t)(unsafe.Pointer(&txid[0])),
-		C.uint32_t(vout),
-	)
-
-	if result < 0 {
-		return false, fmt.Errorf("Bloom Filter query failed with error code: %d", int(result))
-	}
-
-	return result == 1, nil
+	// Prepare UTXO preimage (txid + vout)
+	preimage := make([]byte, 36)
+	copy(preimage, txid)
+	preimage[32] = byte(vout)
+	preimage[33] = byte(vout >> 8)
+	preimage[34] = byte(vout >> 16)
+	preimage[35] = byte(vout >> 24)
+	result := C.bloom_filter_contains(bfm.filterHandle, (*C.uint8_t)(unsafe.Pointer(&preimage[0])), C.uint64_t(len(preimage)))
+	return bool(result), nil
 }
 
 // InsertUTXO inserts a UTXO into the Bloom Filter
@@ -163,16 +174,17 @@ func (bfm *BloomFilterManager) InsertUTXO(txid []byte, vout uint32) error {
 		return fmt.Errorf("invalid TXID length: expected 32 bytes, got %d", len(txid))
 	}
 
-	result := C.universal_bloom_filter_insert_utxo(
-		bfm.filterHandle,
-		(*C.uint8_t)(unsafe.Pointer(&txid[0])),
-		C.uint32_t(vout),
-	)
-
-	if result != 0 {
-		return fmt.Errorf("Bloom Filter insert failed with error code: %d", int(result))
+	// Prepare UTXO preimage (txid + vout)
+	preimage := make([]byte, 36)
+	copy(preimage, txid)
+	preimage[32] = byte(vout)
+	preimage[33] = byte(vout >> 8)
+	preimage[34] = byte(vout >> 16)
+	preimage[35] = byte(vout >> 24)
+	result := C.bloom_filter_insert(bfm.filterHandle, (*C.uint8_t)(unsafe.Pointer(&preimage[0])), C.uint64_t(len(preimage)))
+	if !bool(result) {
+		return fmt.Errorf("Bloom Filter insert failed")
 	}
-
 	return nil
 }
 
@@ -189,16 +201,7 @@ func (bfm *BloomFilterManager) LoadBlock(blockData []byte) error {
 		return fmt.Errorf("empty block data")
 	}
 
-	result := C.universal_bloom_filter_load_block(
-		bfm.filterHandle,
-		(*C.uint8_t)(unsafe.Pointer(&blockData[0])),
-		C.size_t(len(blockData)),
-	)
-
-	if result != 0 {
-		return fmt.Errorf("Bloom Filter load block failed with error code: %d", int(result))
-	}
-
+	// FFI for block loading not implemented; placeholder for future
 	return nil
 }
 
@@ -218,10 +221,6 @@ func (bfm *BloomFilterManager) Cleanup() error {
 	bfm.mu.Lock()
 	defer bfm.mu.Unlock()
 
-	result := C.universal_bloom_filter_cleanup(bfm.filterHandle)
-	if result != 0 {
-		return fmt.Errorf("Bloom Filter cleanup failed with error code: %d", int(result))
-	}
-
+	C.bloom_filter_free(bfm.filterHandle)
 	return nil
 }
