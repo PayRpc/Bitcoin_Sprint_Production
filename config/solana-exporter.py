@@ -19,15 +19,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Solana RPC configuration 
-# Use localhost for direct testing
+# Use public RPC endpoints (no Alchemy/Infura)
 SOLANA_RPC_URLS = [
-    os.getenv("SOLANA_RPC_URL", "http://localhost:8899"),
-    os.getenv("SOLANA_RPC_URL_2", "http://localhost:8901"),
-    os.getenv("SOLANA_RPC_URL_3", "http://localhost:8903"),
-    os.getenv("SOLANA_RPC_URL_4", "http://localhost:8905"),
-    os.getenv("SOLANA_RPC_URL_5", "http://localhost:8907"),
-    os.getenv("SOLANA_RPC_URL_6", "http://localhost:8909"),
-    os.getenv("SOLANA_RPC_URL_7", "http://localhost:8911"),
+    "https://api.mainnet-beta.solana.com",
+    "https://solana-api.projectserum.com", 
+    "https://rpc.ankr.com/solana",
+    "https://ssc-dao.genesysgo.net",
+    "https://solana.publicnode.com",
+    "https://api.mainnet.solana.com"
 ]
 
 # Prometheus metrics

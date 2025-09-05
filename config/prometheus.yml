@@ -7,122 +7,37 @@ rule_files:
   # - "second_rules.yml"
 
 scrape_configs:
-  # Bitcoin Sprint Core Service (Go)
-  - job_name: 'bitcoin-sprint-go'
+  # Prometheus itself
+  - job_name: 'prometheus'
     static_configs:
-      - targets: ['bitcoin-sprint-core:9090']
+      - targets: ['localhost:9090']
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+
+  # Bitcoin Sprint API (PRIMARY TARGET)
+  - job_name: 'bitcoin_sprint'
+    static_configs:
+      - targets: ['bitcoin-sprint:8080']
     scrape_interval: 5s
     metrics_path: '/metrics'
 
-  # Bitcoin Sprint Rust Service
-  - job_name: 'bitcoin-sprint-rust'
+  # Grafana
+  - job_name: 'grafana'
     static_configs:
-      - targets: ['bitcoin-sprint-rust:9092']
-    scrape_interval: 5s
-    metrics_path: '/metrics'
-
-  # FastAPI Gateway
-  - job_name: 'fastapi-gateway'
-    static_configs:
-      - targets: ['bitcoin-sprint-core:8080']
-    scrape_interval: 10s
-    metrics_path: '/metrics'
-
-  # Bitcoin Core (via exporter)
-  - job_name: 'bitcoin-core'
-    static_configs:
-      - targets: ['bitcoin-exporter:8080']
+      - targets: ['sprint-grafana:3000']
     scrape_interval: 30s
     metrics_path: '/metrics'
-    
-  # Solana Enterprise Metrics Server
-  - job_name: 'solana-enterprise-metrics'
-    static_configs:
-      - targets: ['solana-enterprise:21000']
-    scrape_interval: 10s
-    metrics_path: '/metrics'
 
-  # Ethereum Geth
-  - job_name: 'ethereum-geth'
-    static_configs:
-      - targets: ['geth:6060']
-    scrape_interval: 15s
-    metrics_path: '/debug/metrics/prometheus'
-
-  # Solana Exporter
+  # Solana Exporter (if running)
   - job_name: 'solana-exporter'
     static_configs:
       - targets: ['solana-exporter:8080']
     scrape_interval: 15s
     metrics_path: '/metrics'
 
-  # Redis Exporter
-  - job_name: 'redis'
+  # Solana Validator (if any are running)
+  - job_name: 'solana-validator'
     static_configs:
-      - targets: ['redis-exporter:9121']
+      - targets: ['solana-validator:8899']
     scrape_interval: 15s
     metrics_path: '/metrics'
-
-  # PostgreSQL Exporter
-  - job_name: 'postgres'
-    static_configs:
-      - targets: ['postgres-exporter:9187']
-    scrape_interval: 15s
-    metrics_path: '/metrics'
-
-  # Node Exporter (system metrics)
-  - job_name: 'node'
-    static_configs:
-      - targets: ['node-exporter:9100']
-    scrape_interval: 15s
-    metrics_path: '/metrics'
-
-  # Prometheus itself
-  - job_name: 'prometheus'
-    static_configs:
-      - targets: ['localhost:9090']
-    scrape_interval: 15s
-    metrics_path: '/metrics'
-    metrics_path: '/metrics'
-
-  # Prometheus itself
-  - job_name: 'prometheus'
-    static_configs:
-      - targets: ['localhost:9090']
-    scrape_interval: 30s
-
-  # Grafana
-  - job_name: 'grafana'
-    static_configs:
-      - targets: ['grafana:3000']
-    scrape_interval: 30s
-
-  # PostgreSQL
-  - job_name: 'postgres'
-    static_configs:
-      - targets: ['postgres:5432']
-    scrape_interval: 30s
-
-  # Redis
-  - job_name: 'redis'
-    static_configs:
-      - targets: ['redis:6379']
-    scrape_interval: 15s
-
-  # Bitcoin Sprint Web Dashboard
-  - job_name: 'bitcoin-sprint-web'
-    static_configs:
-      - targets: ['bitcoin-sprint-web:3002']
-    scrape_interval: 15s
-    metrics_path: '/api/metrics'
-
-  # Rust Web Server (Hardened)
-  - job_name: 'bitcoin-sprint-rust'
-    static_configs:
-      - targets: ['bitcoin-sprint-rust:9092']
-    scrape_interval: 10s
-    metrics_path: '/metrics'
-    # TLS configuration for HTTPS metrics endpoint
-    scheme: https
-    tls_config:
-      insecure_skip_verify: true  # For self-signed certificates in development

@@ -1,0 +1,13 @@
+# Bitcoin Sprint Service Configuration
+[service]
+name = "bitcoin-sprint"
+version = "1.0.0"
+port = 8080
+
+[logging]
+level = "info"
+format = "json"
+
+[database]
+type = "sqlite"
+path = "data/bitcoin-sprint.db"
