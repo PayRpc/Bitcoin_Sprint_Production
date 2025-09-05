@@ -5,10 +5,20 @@ param(
     [string]$CertDir = "config\tls",
     [string]$CertFile = "cert.pem",
     [string]$KeyFile = "key.pem",
-    [string]$Subject = "/C=US/ST=State/L=City/O=Bitcoin Sprint/CN=localhost"
+    [string]$Subject = "/C=US/ST=State/L=City/O=Bitcoin Sprint/CN=localhost",
+    [string[]]$SANs = @("localhost", "bitcoin-sprint-rust"),
+    [ValidateSet("ECC", "RSA")][string]$KeyType = "ECC",
+    [switch]$Force
 )
 
+
 $ErrorActionPreference = "Stop"
+
+# Check OpenSSL availability
+if (-not (Get-Command openssl -ErrorAction SilentlyContinue)) {
+    Write-Host "OpenSSL is not installed or not in PATH. Please install OpenSSL to proceed." -ForegroundColor Red
+    exit 1
+}
 
 # Create certificate directory if it doesn't exist
 if (!(Test-Path $CertDir)) {
@@ -20,10 +30,11 @@ $CertPath = Join-Path $CertDir $CertFile
 $KeyPath = Join-Path $CertDir $KeyFile
 
 # Check if certificates already exist
-if ((Test-Path $CertPath) -and (Test-Path $KeyPath)) {
+if ((Test-Path $CertPath) -and (Test-Path $KeyPath) -and -not $Force) {
     Write-Host "TLS certificates already exist:" -ForegroundColor Yellow
     Write-Host "  Certificate: $CertPath" -ForegroundColor White
     Write-Host "  Private Key: $KeyPath" -ForegroundColor White
+    Write-Host "Use -Force to regenerate certificates." -ForegroundColor Cyan
     exit 0
 }
 
@@ -38,37 +49,37 @@ try {
 [req]
 distinguished_name = req_distinguished_name
 req_extensions = v3_req
-prompt = no
-
-[req_distinguished_name]
-C = US
-ST = State
-L = City
-O = Bitcoin Sprint
-CN = localhost
-
-[v3_req]
-keyUsage = keyEncipherment, dataEncipherment
-extendedKeyUsage = serverAuth
-subjectAltName = @alt_names
-
-[alt_names]
-DNS.1 = localhost
-DNS.2 = bitcoin-sprint-rust
-IP.1 = 127.0.0.1
-IP.2 = 0.0.0.0
-"@
-
-    $configPath = Join-Path $CertDir "openssl.cnf"
-    $opensslConfig | Out-File -FilePath $configPath -Encoding ASCII
+    $sanEntries = @()
+    $dnsIndex = 1
+    $ipIndex = 1
+    foreach ($san in $SANs) {
+        if ($san -match "^\d+\.\d+\.\d+\.\d+$") {
+            $sanEntries += "IP.$ipIndex = $san"
+            $ipIndex++
+        } else {
+            $sanEntries += "DNS.$dnsIndex = $san"
+            $dnsIndex++
+        }
+    }
+    $sanBlock = $sanEntries -join "`n"
+    $opensslConfig = @"
+[req]
 
     # Generate certificate
-    & openssl req -x509 -newkey rsa:4096 -keyout $KeyPath -out $CertPath -days 365 -nodes -config $configPath
+    if ($KeyType -eq "ECC") {
+        & openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:secp384r1 -keyout $KeyPath -out $CertPath -days 365 -nodes -config $configPath -subj $Subject
+    } else {
+        & openssl req -x509 -newkey rsa:4096 -keyout $KeyPath -out $CertPath -days 365 -nodes -config $configPath -subj $Subject
+    }
+
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host "TLS certificates generated successfully!" -ForegroundColor Green
         Write-Host "Certificate details:" -ForegroundColor Cyan
-        & openssl x509 -in $CertPath -text -noout | Select-String -Pattern "Subject:|Issuer:|Not Before:|Not After:"
+        & openssl x509 -in $CertPath -text -noout | Select-String -Pattern "Subject:|Issuer:|Not Before:|Not After:|Public-Key:|Curve:"
+        Write-Host "Key Type: $KeyType" -ForegroundColor Magenta
+        Write-Host "SANs: $($SANs -join ', ')" -ForegroundColor Magenta
+        Write-Host "Security Note: ECC (secp384r1) is recommended for modern deployments. Use RSA only if required for legacy compatibility." -ForegroundColor Yellow
     } else {
         throw "OpenSSL command failed"
     }

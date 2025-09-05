@@ -607,3 +607,46 @@ cd secure/rust && cargo test
 
 SPDX-License-Identifier: MIT  
 Copyright (c) 2025 BitcoinCab.inc
+
+## Database Setup
+
+The project uses PostgreSQL. Initialize your database with:
+
+```powershell
+# Create and initialize a new database
+./db/init-database.ps1 -CreateDb -DbName bitcoin_sprint -DbUser postgres
+```
+
+See the [database README](./db/README.md) for more options.
+
+## TLS Certificate Automation
+
+### Script: `generate-tls-certs.ps1`
+Automates generation of self-signed TLS certificates for development and staging.
+
+**Usage Examples:**
+```powershell
+# Generate ECC certs with custom SANs
+./generate-tls-certs.ps1 -KeyType ECC -SANs "localhost","yourdomain.com","127.0.0.1" -Force
+
+# Generate RSA certs (legacy)
+./generate-tls-certs.ps1 -KeyType RSA -SANs "localhost" -Force
+```
+
+**Security Notes:**
+- ECC (secp384r1) is recommended for modern deployments.
+- Self-signed certificates are for development/staging only. For production, use a real CA (e.g., Let's Encrypt).
+- Use the `-Force` flag to regenerate certificates if needed.
+
+**CI/CD Integration:**
+- Add a step in your pipeline to run the script for dev/staging environments.
+- Store generated certs securely and clean up after use.
+
+### Certificate Expiry Monitoring
+Use the provided script to check certificate expiry and alert if renewal is needed:
+```powershell
+./config/tls/check-cert-expiry.ps1 -CertPath "config/tls/cert.pem" -WarnDays 30
+```
+This will warn you if the certificate expires within 30 days.
+
+---

@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use std::error::Error;
 use std::fmt;
-use prometheus::{Opts, Gauge, Registry};
 
 /// Validation errors for blocks/transactions
 #[derive(Debug)]
@@ -34,9 +33,12 @@ impl Error for ValidationError {}
 /// Policy for PQC mix-in weighting and controls
 #[derive(Debug, Clone)]
 pub struct PQCPolicy {
+    /// Enable Kyber PQC verification
     pub kyber_enabled: bool,
+    /// Enable Dilithium PQC verification
     pub dilithium_enabled: bool,
-    pub entropy_pqc_weight: f64, // 0.0..1.0
+    /// Entropy PQC weight (0.0..1.0)
+    pub entropy_pqc_weight: f64,
 }
 
 impl Default for PQCPolicy {
@@ -49,32 +51,21 @@ impl Default for PQCPolicy {
     }
 }
 
-/// TurboValidator struct: stateless, thread-safe, with PQC policy and Prometheus gauge
+/// TurboValidator struct: stateless, thread-safe, with PQC policy
+#[derive(Debug, Clone)]
 pub struct TurboValidator {
     pub pqc_policy: PQCPolicy,
-    pub pqc_weight_gauge: Gauge,
-    pub registry: Registry,
 }
 
 impl Default for TurboValidator {
     fn default() -> Self {
-        let registry = Registry::new();
-        let gauge_opts = Opts::new("entropy_pqc_weight", "Current PQC entropy weighting");
-        let pqc_weight_gauge = Gauge::with_opts(gauge_opts).unwrap();
-        registry.register(Box::new(pqc_weight_gauge.clone())).unwrap();
-        let mut validator = Self {
+        Self {
             pqc_policy: PQCPolicy::default(),
-            pqc_weight_gauge,
-            registry,
-        };
-        validator.update_pqc_weight_metric();
-        validator
+        }
     }
+}
+
 impl TurboValidator {
-    /// Update Prometheus gauge to match current entropy_pqc_weight
-    pub fn update_pqc_weight_metric(&mut self) {
-        self.pqc_weight_gauge.set(self.pqc_policy.entropy_pqc_weight);
-    }
     /// Validate a block (stub: extend with real logic)
     pub fn validate_block(&self, block: &[u8]) -> Result<(), ValidationError> {
         if block.is_empty() {
@@ -113,14 +104,6 @@ impl TurboValidator {
     /// Set PQC policy (for ops control)
     pub fn set_pqc_policy(&mut self, policy: PQCPolicy) {
         self.pqc_policy = policy;
-        self.update_pqc_weight_metric();
-    }
-    /// Expose Prometheus metrics in text format for scraping
-    pub fn prometheus_metrics(&self) -> String {
-        let mf = self.registry.gather();
-        let mut buffer = vec![];
-        prometheus::TextEncoder::new().encode(&mf, &mut buffer).unwrap();
-        String::from_utf8(buffer).unwrap()
     }
 
     /// Generate a receipt + proof bundle for /entropy/hybrid
@@ -163,8 +146,6 @@ mod pqc_tests {
     fn test_entropy_pqc_weight() {
         let validator = TurboValidator::default();
         assert_eq!(validator.entropy_pqc_weight(), 0.5);
-        // Prometheus gauge should match
-        assert_eq!(validator.pqc_weight_gauge.get(), 0.5);
     }
     #[test]
     fn test_receipt_json() {
@@ -173,12 +154,6 @@ mod pqc_tests {
         let json = TurboValidator::serialize_receipt_json(&receipt).unwrap();
         assert!(json.contains("beacon_round"));
         assert!(json.contains("verifierX"));
-    }
-    #[test]
-    fn test_prometheus_metrics() {
-        let validator = TurboValidator::default();
-        let metrics = validator.prometheus_metrics();
-        assert!(metrics.contains("entropy_pqc_weight"));
     }
 }
 
