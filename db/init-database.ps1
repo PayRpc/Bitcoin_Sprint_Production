@@ -1,5 +1,5 @@
 # Initialize PostgreSQL database for Bitcoin Sprint
-# Runs the SQL script in ./db/init-db.sql
+# Runs the production SQL script: init-db.sql
 
 param(
     [string]$DbName = "bitcoin_sprint",
@@ -7,7 +7,7 @@ param(
     [string]$DbPassword = $null,
     [string]$DbHost = "localhost",
     [string]$DbPort = "5432",
-    [string]$SqlFile = "db/init-db.sql",
+    [string]$SqlFile = "init-db.sql",
     [switch]$CreateDb = $false,
     [switch]$Force = $false
 )
