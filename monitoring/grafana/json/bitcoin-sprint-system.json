@@ -1,0 +1,49 @@
+{
+  "id": null,
+  
+  "title": "Bitcoin Sprint - System Health (v2)",
+  "tags": ["bitcoin-sprint", "system"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Go Routines",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [{ "expr": "go_goroutines", "refId": "A" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Heap In Use (MB)",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [{ "expr": "go_memstats_heap_inuse_bytes / 1024 / 1024", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "megabytes" }, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "Process RSS (MB)",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [{ "expr": "process_resident_memory_bytes / 1024 / 1024", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "megabytes" }, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP Requests/sec",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 7 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [{ "expr": "sum(rate(http_requests_total[5m])) by (handler)", "legendFormat": "{{handler}}", "refId": "A" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "GC Pauses (s)",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 7 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [{ "expr": "rate(go_gc_duration_seconds_sum[5m]) / rate(go_gc_duration_seconds_count[5m])", "refId": "A" }]
+    }
+  ]
+}

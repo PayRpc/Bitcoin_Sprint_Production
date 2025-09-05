@@ -1,0 +1,40 @@
+{
+  "id": null,
+  
+  "title": "Bitcoin Sprint - Network Services (v2)",
+  "tags": ["bitcoin-sprint", "network"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Bitcoin P2P Connections",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [{ "expr": "bitcoin_p2p_active_connections", "legendFormat": "p2p", "refId": "A" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Solana Active Connections",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [{ "expr": "solana_active_connections", "legendFormat": "solana", "refId": "A" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Ethereum Active Connections",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [{ "expr": "ethereum_active_connections", "legendFormat": "ethereum", "refId": "A" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "RTC Active Connections",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [{ "expr": "rtc_active_connections", "legendFormat": "rtc", "refId": "A" }]
+    }
+  ]
+}

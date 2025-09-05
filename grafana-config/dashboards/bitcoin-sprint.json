@@ -142,6 +142,58 @@
           "y": 8
         }
       }
+      ,
+      {
+        "id": 7,
+        "title": "RTC Active Connections",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rtc_active_connections",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 0,
+          "y": 17
+        }
+      },
+      {
+        "id": 8,
+        "title": "Solana Active Connections",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "solana_active_connections",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 6,
+          "y": 17
+        }
+      },
+      {
+        "id": 9,
+        "title": "Ethereum Active Connections",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "ethereum_active_connections",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 12,
+          "y": 17
+        }
+      }
     ],
     "time": {
       "from": "now-5m",
