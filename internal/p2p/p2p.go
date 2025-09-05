@@ -12,6 +12,7 @@ import (
 
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/dedup"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/metrics"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/netkit"
@@ -57,6 +58,9 @@ type Client struct {
 
 	auth *Authenticator
 
+	// Enterprise deduplication system
+	deduper *EnterpriseP2PDeduper
+
 	// Concurrent processing pipeline
 	blockProcessor *BlockProcessor
 
@@ -94,6 +98,10 @@ type BlockProcessor struct {
 	maxQueueDepth  int64
 	backpressureMu sync.RWMutex
 	circuitBreaker *CircuitBreaker
+
+	// Peer tracking for deduplication
+	currentPeer   string
+	peerMutex     sync.RWMutex
 
 	// Metrics
 	processedBlocks    int64
@@ -191,6 +199,19 @@ func New(cfg config.Config, blockChan chan blocks.BlockEvent, mem *mempool.Mempo
 		return nil, fmt.Errorf("failed to create authenticator: %w", err)
 	}
 
+	// Initialize enterprise P2P deduplicator based on service tier
+	tierStr := "FREE" // Default fallback
+	switch cfg.Tier {
+	case config.TierFree:
+		tierStr = "FREE"
+	case config.TierPro, config.TierBusiness:
+		tierStr = "BUSINESS"
+	case config.TierTurbo, config.TierEnterprise:
+		tierStr = "ENTERPRISE"
+	}
+	
+	deduper := NewEnterpriseP2PDeduper(tierStr, logger)
+
 	return &Client{
 		cfg:         cfg,
 		blockChan:   blockChan,
@@ -198,6 +219,7 @@ func New(cfg config.Config, blockChan chan blocks.BlockEvent, mem *mempool.Mempo
 		logger:      logger,
 		peers:       make(map[string]*peer.Peer),
 		auth:        auth,
+		deduper:     deduper,
 		peerMetrics: make(map[string]*PeerMetrics),
 	}, nil
 }
@@ -354,15 +376,30 @@ func (c *Client) parallelConnect(address string, connectionChan chan<- *PeerConn
 				c.logger.Debug("Pong received", zap.String("peer", address))
 			},
 			OnBlock: func(p *peer.Peer, msg *wire.MsgBlock, buf []byte) {
+				// Track peer for enterprise deduplication system (parallel connect)
+				peerAddr := address // capture address from closure
+				if c.deduper != nil {
+					c.deduper.TrackPeer(peerAddr)
+				}
 				c.handleBlock(msg)
 			},
 			OnHeaders: func(p *peer.Peer, msg *wire.MsgHeaders) {
 				c.handleHeaders(p, msg)
 			},
 			OnInv: func(p *peer.Peer, msg *wire.MsgInv) {
+				// Track peer for enterprise deduplication system (parallel connect)
+				peerAddr := address // capture address from closure
+				if c.deduper != nil {
+					c.deduper.TrackPeer(peerAddr)
+				}
 				c.handleInv(p, msg)
 			},
 			OnTx: func(p *peer.Peer, msg *wire.MsgTx) {
+				// Track peer for enterprise deduplication system (parallel connect)
+				peerAddr := address // capture address from closure
+				if c.deduper != nil {
+					c.deduper.TrackPeer(peerAddr)
+				}
 				c.logger.Debug("Received transaction",
 					zap.String("txid", msg.TxHash().String()),
 					zap.String("peer", address))
@@ -391,11 +428,28 @@ func (c *Client) parallelConnect(address string, connectionChan chan<- *PeerConn
 	if c.isSprintPeer(address) {
 		if err := c.auth.PerformHandshakeClient(conn, 5*time.Second); err != nil {
 			c.logger.Warn("Sprint handshake failed", zap.String("peer", address), zap.Error(err))
+			
+			// Update peer reputation for handshake failure
+			c.deduper.IsDuplicate("handshake_failure", "handshake", address, 
+				dedup.WithSource("p2p_handshake"),
+				dedup.WithProperties(map[string]interface{}{
+					"handshake_result": "failure",
+					"error": err.Error(),
+				}))
+			
 			conn.Close()
 			connectionChan <- nil
 			return
 		}
+		
 		c.logger.Debug("Sprint peer authenticated", zap.String("peer", address))
+		
+		// Update peer reputation for successful handshake
+		c.deduper.IsDuplicate("handshake_success", "handshake", address,
+			dedup.WithSource("p2p_handshake"),
+			dedup.WithProperties(map[string]interface{}{
+				"handshake_result": "success",
+			}))
 	}
 
 	// Add to peer list
@@ -451,20 +505,31 @@ func (c *Client) blockProcessingWorker() {
 	for block := range c.blockProcessor.workChan {
 		blockHash := block.BlockHash().String()
 
-		// TODO: Use global block deduplication index
-		// source := "p2p"
-		// if end, ok := dedup.BlockIdx.TryBegin(blockHash); !ok {
-		// 	c.logger.Info("Duplicate block ignored",
-		// 		zap.String("hash", blockHash),
-		// 		zap.String("source", source),
-		// 		zap.String("reason", "recent-seen"))
-		// 	metrics.BlockDuplicatesIgnored.WithLabelValues(source).Inc()
-		// 	atomic.AddInt64(&c.blockProcessor.duplicateBlocks, 1)
-		// 	continue
-		// }
-		// defer end(true)
-
+		// Enterprise P2P deduplication with peer tracking
 		source := "p2p"
+		peerID := "unknown"
+		
+		// Extract peer ID if available from block context
+		if c.blockProcessor.currentPeer != "" {
+			peerID = c.blockProcessor.currentPeer
+		}
+		
+		// Check for duplicate using enterprise deduplication
+		if c.deduper.IsDuplicate(blockHash, "block", peerID, 
+			dedup.WithSource(source),
+			dedup.WithSize(int64(block.SerializeSize()))) {
+			
+			c.logger.Info("Duplicate block ignored by enterprise deduplication",
+				zap.String("hash", blockHash),
+				zap.String("source", source),
+				zap.String("peer_id", peerID),
+				zap.String("reason", "enterprise-dedup-detected"))
+			
+			metrics.BlockDuplicatesIgnored.WithLabelValues(source).Inc()
+			atomic.AddInt64(&c.blockProcessor.duplicateBlocks, 1)
+			continue
+		}
+
 		c.logger.Info("Processing block",
 			zap.String("hash", blockHash),
 			zap.Int("tx_count", len(block.Transactions)),
@@ -837,15 +902,30 @@ func (c *Client) connectToPeer(address string) error {
 				c.logger.Debug("Pong received", zap.String("peer", address))
 			},
 			OnBlock: func(p *peer.Peer, msg *wire.MsgBlock, buf []byte) {
+				// Track peer for enterprise deduplication system (connect to peer)
+				peerAddr := address // capture address from closure
+				if c.deduper != nil {
+					c.deduper.TrackPeer(peerAddr)
+				}
 				c.handleBlock(msg)
 			},
 			OnHeaders: func(p *peer.Peer, msg *wire.MsgHeaders) {
 				c.handleHeaders(p, msg)
 			},
 			OnInv: func(p *peer.Peer, msg *wire.MsgInv) {
+				// Track peer for enterprise deduplication system (connect to peer)
+				peerAddr := address // capture address from closure
+				if c.deduper != nil {
+					c.deduper.TrackPeer(peerAddr)
+				}
 				c.handleInv(p, msg)
 			},
 			OnTx: func(p *peer.Peer, msg *wire.MsgTx) {
+				// Track peer for enterprise deduplication system (connect to peer)
+				peerAddr := address // capture address from closure
+				if c.deduper != nil {
+					c.deduper.TrackPeer(peerAddr)
+				}
 				c.logger.Debug("Received transaction",
 					zap.String("txid", msg.TxHash().String()),
 					zap.String("peer", address))

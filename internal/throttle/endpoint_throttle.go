@@ -52,7 +52,6 @@ func DefaultThrottleConfig() *ThrottleConfig {
 // New creates a new endpoint throttle manager
 func New(logger *zap.Logger) *EndpointThrottle {
 	return &EndpointThrottle{
-	P95LatencyMs  float64 // p95 observed latency in ms
 		config:    DefaultThrottleConfig(),
 		endpoints: make(map[string]*EndpointStatus),
 		logger:    logger,

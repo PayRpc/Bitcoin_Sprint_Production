@@ -3,8 +3,6 @@ package circuitbreaker
 import (
 	"context"
 	"fmt"
-	"math"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"

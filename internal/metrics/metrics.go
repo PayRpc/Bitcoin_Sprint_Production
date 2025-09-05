@@ -51,4 +51,59 @@ var (
 		},
 		[]string{"source"},
 	)
+
+	// DeduplicationProcessingTime tracks processing time for deduplication operations
+	DeduplicationProcessingTime = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "deduplication_processing_duration_seconds",
+			Help:    "Time spent on deduplication processing",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"operation", "network"},
+	)
+
+	// DeduplicationDuplicatesDetected tracks number of duplicates detected
+	DeduplicationDuplicatesDetected = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "deduplication_duplicates_detected_total",
+			Help: "Number of duplicate entries detected",
+		},
+		[]string{"network", "type"},
+	)
+
+	// DeduplicationMemoryUsage tracks memory usage of deduplication system
+	DeduplicationMemoryUsage = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "deduplication_memory_usage_bytes",
+			Help: "Memory usage of deduplication system",
+		},
+		[]string{"component"},
+	)
+
+	// DeduplicationEfficiency tracks efficiency metrics
+	DeduplicationEfficiency = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "deduplication_efficiency_ratio",
+			Help: "Efficiency ratio of deduplication system",
+		},
+		[]string{"network", "metric"},
+	)
+
+	// DeduplicationNetworkDuplicateRate tracks network-specific duplicate rates
+	DeduplicationNetworkDuplicateRate = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "deduplication_network_duplicate_rate",
+			Help: "Duplicate rate per network",
+		},
+		[]string{"network"},
+	)
+
+	// DeduplicationNetworkTTL tracks network-specific TTL values
+	DeduplicationNetworkTTL = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "deduplication_network_ttl_seconds",
+			Help: "TTL values per network",
+		},
+		[]string{"network"},
+	)
 )

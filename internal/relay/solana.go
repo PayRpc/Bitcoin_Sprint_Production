@@ -43,7 +43,7 @@ type SolanaRelay struct {
 	
 	// Enhanced components
 	healthMgr *endpointHealth
-	deduper   *solanaDeduper
+	deduper   *SolanaDeduper
 	metrics   *solanaProm
 	metricsMu sync.RWMutex
 

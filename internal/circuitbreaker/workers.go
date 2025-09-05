@@ -1,9 +1,9 @@
 package circuitbreaker
 
 import (
-	"context"
 	"fmt"
 	"runtime"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -194,7 +194,7 @@ func (cb *EnterpriseCircuitBreaker) updateSystemHealth() {
 	}
 	
 	// Get current statistics
-	requests, failures, failureRate, avgLatency := cb.slidingWindow.GetStatistics()
+	requests, _, failureRate, avgLatency := cb.slidingWindow.GetStatistics()
 	
 	// Calculate throughput rate
 	windowDuration := cb.config.WindowSize.Seconds()

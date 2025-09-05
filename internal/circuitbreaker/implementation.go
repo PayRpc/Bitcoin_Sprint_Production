@@ -200,7 +200,7 @@ func (cb *EnterpriseCircuitBreaker) handleSuccessfulRequest() {
 	switch cb.state {
 	case StateHalfOpen:
 		// Check if we should transition back to closed
-		if cb.consecutiveSuccesses >= cb.config.HalfOpenMaxCalls {
+		if cb.consecutiveSuccesses >= int64(cb.config.HalfOpenMaxCalls) {
 			cb.setState(StateClosed)
 			atomic.StoreInt64(&cb.halfOpenCalls, 0)
 			
@@ -234,7 +234,7 @@ func (cb *EnterpriseCircuitBreaker) handleFailedRequest(failureType FailureType)
 // shouldTripCircuit determines if the circuit should trip based on current conditions
 func (cb *EnterpriseCircuitBreaker) shouldTripCircuit() bool {
 	// Get current failure statistics
-	requests, failures, failureRate, _ := cb.slidingWindow.GetStatistics()
+	requests, _, failureRate, _ := cb.slidingWindow.GetStatistics()
 	
 	// Check minimum request threshold
 	if requests < int64(cb.config.MinRequestsThreshold) {

@@ -2,7 +2,6 @@ package migrations
 
 import (
 	"context"
-	"database/sql"
 	"embed"
 	"fmt"
 	"path/filepath"
