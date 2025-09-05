@@ -619,6 +619,28 @@ The project uses PostgreSQL. Initialize your database with:
 
 See the [database README](./db/README.md) for more options.
 
+## Monitoring
+
+Monitor your Bitcoin Sprint application with Grafana and Prometheus:
+
+### Docker Option
+```powershell
+# Start monitoring with Docker
+./start-monitoring.ps1
+```
+
+### Standalone Option (No Docker Required)
+```powershell
+# Start monitoring without Docker
+./start-standalone-monitoring.ps1
+```
+
+Access dashboards at:
+- Grafana: http://localhost:3000 (admin/admin)
+- Prometheus: http://localhost:9090
+
+See the [monitoring README](./monitoring/README.md) for more details.
+
 ## TLS Certificate Automation
 
 ### Script: `generate-tls-certs.ps1`
