@@ -218,6 +218,11 @@ func Load() Config {
 		RPCRetryAttempts: getEnvInt("RPC_RETRY_ATTEMPTS", 3),
 		RPCRetryMaxWait:  time.Duration(getEnvInt("RPC_RETRY_MAX_WAIT_MIN", 5)) * time.Minute,
 		RPCSkipMempool:   getEnvBool("RPC_SKIP_MEMPOOL", false),
+
+		// API timeouts
+		APIReadTimeout:  time.Duration(getEnvInt("API_READ_TIMEOUT_SEC", 30)) * time.Second,
+		APIWriteTimeout: time.Duration(getEnvInt("API_WRITE_TIMEOUT_SEC", 30)) * time.Second,
+		P2PPeerTimeout:  time.Duration(getEnvInt("P2P_PEER_TIMEOUT_SEC", 30)) * time.Second,
 		RPCFailedTxFile:  getEnv("RPC_FAILED_TX_FILE", "./failed_txs.txt"),
 		RPCLastIDFile:    getEnv("RPC_LAST_ID_FILE", "./last_id.txt"),
 		RPCWorkers:       getEnvInt("RPC_WORKERS", 10),
