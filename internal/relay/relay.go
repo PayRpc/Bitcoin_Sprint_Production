@@ -136,6 +136,15 @@ type TLSConfig struct {
 	CAFile             string `json:"ca_file,omitempty"`
 }
 
+// Config holds configuration for the relay dispatcher
+type Config struct {
+	MaxConcurrent  int
+	Timeout        time.Duration
+	RetryAttempts  int
+	RetryDelay     time.Duration
+	CircuitBreaker interface{} // We use interface{} to avoid circular dependencies
+}
+
 // NewRelayDispatcher creates a new relay dispatcher
 func NewRelayDispatcher(cfg config.Config, logger *zap.Logger) *RelayDispatcher {
 	dispatcher := &RelayDispatcher{
@@ -145,6 +154,66 @@ func NewRelayDispatcher(cfg config.Config, logger *zap.Logger) *RelayDispatcher 
 		deduper:    NewBlockDeduper(8192, 5*time.Minute), // 8K capacity with 5min TTL
 		dedupeStop: make(chan struct{}),
 	}
+}
+
+// MetricsProvider defines the interface for metrics collection
+type MetricsProvider interface {
+	IncrementCounter(name string, tags map[string]string)
+	RecordGauge(name string, value float64, tags map[string]string)
+	RecordHistogram(name string, value float64, tags map[string]string)
+}
+
+// NewRelayDispatcherWithMetricsAndConfig creates a new relay dispatcher with metrics and custom config
+func NewRelayDispatcherWithMetricsAndConfig(config Config, cfg config.Config, logger *zap.Logger, metrics MetricsProvider) (*RelayDispatcher, error) {
+	dispatcher := &RelayDispatcher{
+		clients:    make(map[string]RelayClient),
+		logger:     logger,
+		cfg:        cfg,
+		deduper:    NewBlockDeduper(8192, 5*time.Minute), // 8K capacity with 5min TTL
+		dedupeStop: make(chan struct{}),
+	}
+	
+	// Start background cleanup for the deduper
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				dispatcher.deduper.Cleanup()
+			case <-dispatcher.dedupeStop:
+				return
+			}
+		}
+	}()
+	
+	// Register metrics
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				for network, client := range dispatcher.clients {
+					if health, err := client.GetHealth(); err == nil {
+						metrics.RecordGauge("relay_health", float64(health.Score), 
+							map[string]string{"network": network})
+					}
+					
+					if relayMetrics, err := client.GetMetrics(); err == nil {
+						metrics.RecordGauge("relay_blocks_processed", float64(relayMetrics.BlocksProcessed), 
+							map[string]string{"network": network})
+						metrics.RecordGauge("relay_tx_processed", float64(relayMetrics.TransactionsProcessed), 
+							map[string]string{"network": network})
+					}
+				}
+			case <-dispatcher.dedupeStop:
+				return
+			}
+		}
+	}()
+	
+	return dispatcher, nil
 	
 	// Start background cleanup for the deduper
 	go func() {

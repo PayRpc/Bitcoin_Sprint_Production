@@ -10,17 +10,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// State represents the circuit breaker state with enterprise features
-type State int
-
+// Additional states for enterprise features
 const (
-	StateClosed State = iota
-	StateOpen
-	StateHalfOpen
-	StateForceOpen
+	StateForceOpen State = iota + 3 // Starting from 3 since types.go defines 0, 1, 2
 	StateForceClose
 )
 
+// String overrides the base implementation to include enterprise states
 func (s State) String() string {
 	switch s {
 	case StateClosed:
@@ -60,14 +56,15 @@ const (
 	PolicyTierBased
 )
 
-// Config provides comprehensive configuration for enterprise circuit breaker
-type Config struct {
-	// Basic settings
-	Name                  string            `json:"name"`
+// EnterpriseConfig extends the base Config with additional enterprise features
+type EnterpriseConfig struct {
+	// Embed the base Config
+	Config
+
+	// Enterprise-specific settings
 	MaxFailures          int               `json:"max_failures"`
 	ResetTimeout         time.Duration     `json:"reset_timeout"`
 	HalfOpenMaxCalls     int               `json:"half_open_max_calls"`
-	Timeout              time.Duration     `json:"timeout"`
 	
 	// Advanced algorithm settings
 	Policy               Policy            `json:"policy"`
@@ -116,64 +113,7 @@ type ExecutionResult struct {
 	Metadata     map[string]interface{} `json:"metadata,omitempty"`
 }
 
-// SlidingWindow tracks statistics over a time window
-type SlidingWindow struct {
-	mu           sync.RWMutex
-	buckets      []WindowBucket
-	bucketSize   time.Duration
-	windowSize   time.Duration
-	currentIndex int
-	lastUpdate   time.Time
-}
-
-// WindowBucket holds statistics for a time bucket
-type WindowBucket struct {
-	timestamp     time.Time
-	requests      int64
-	failures      int64
-	latencySum    int64
-	latencyCount  int64
-	maxLatency    time.Duration
-	minLatency    time.Duration
-}
-
-// AdaptiveThreshold manages dynamic threshold adjustment
-type AdaptiveThreshold struct {
-	mu                  sync.RWMutex
-	currentThreshold    float64
-	baseThreshold       float64
-	multiplier          float64
-	lastAdjustment      time.Time
-	adjustmentHistory   []float64
-	performanceHistory  []float64
-}
-
-// HealthScorer calculates overall system health
-type HealthScorer struct {
-	mu                sync.RWMutex
-	metrics           HealthMetrics
-	weights           HealthWeights
-	lastCalculation   time.Time
-	calculationInterval time.Duration
-}
-
-// HealthMetrics tracks various health indicators
-type HealthMetrics struct {
-	SuccessRate       float64 `json:"success_rate"`
-	AverageLatency    time.Duration `json:"average_latency"`
-	ErrorRate         float64 `json:"error_rate"`
-	ResourceUtilization float64 `json:"resource_utilization"`
-	ThroughputRate    float64 `json:"throughput_rate"`
-}
-
-// HealthWeights defines importance of different health factors
-type HealthWeights struct {
-	SuccessRate       float64 `json:"success_rate"`
-	Latency           float64 `json:"latency"`
-	ErrorRate         float64 `json:"error_rate"`
-	ResourceUsage     float64 `json:"resource_usage"`
-	Throughput        float64 `json:"throughput"`
-}
+// All algorithm-related types have been moved to algorithms.go
 
 // CircuitBreakerMetrics tracks comprehensive performance metrics
 type CircuitBreakerMetrics struct {
@@ -275,9 +215,9 @@ func NewCircuitBreaker(cfg Config) (*EnterpriseCircuitBreaker, error) {
 	}
 	
 	// Initialize advanced components
-	cb.slidingWindow = newSlidingWindow(cfg.WindowSize, time.Minute)
-	cb.adaptiveThreshold = newAdaptiveThreshold(cfg.FailureThreshold, cfg.AdaptiveMultiplier)
-	cb.healthScorer = newHealthScorer()
+	cb.slidingWindow = NewSlidingWindow(10*time.Second, time.Second)
+	cb.adaptiveThreshold = NewAdaptiveThreshold(cfg.FailureThreshold, 0.1)
+	cb.healthScorer = NewHealthScorer()
 	
 	// Start background workers
 	cb.startBackgroundWorkers()

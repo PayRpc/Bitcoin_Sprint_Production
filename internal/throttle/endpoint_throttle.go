@@ -23,64 +23,116 @@ type EndpointStatus struct {
 
 // ThrottleConfig holds throttling configuration
 type ThrottleConfig struct {
-	MinSuccessRate    float64       // Minimum success rate to prefer endpoint (0.90 = 90%)
-	InitialBackoff    time.Duration // Initial backoff duration
-	MaxBackoff        time.Duration // Maximum backoff duration
-	BackoffMultiplier float64       // Exponential backoff multiplier
-	HealthCheckWindow int64         // Number of recent requests to consider for health
+	MaxRetries        int
+	InitialBackoff    time.Duration
+	MaxBackoff        time.Duration
+	BackoffMultiplier float64
+	SuccessThreshold  float64
 }
 
-// EndpointThrottle manages endpoint throttling and health tracking
+// EndpointThrottle manages endpoint throttling with adaptive backoff
 type EndpointThrottle struct {
-	config    *ThrottleConfig
-	endpoints map[string]*EndpointStatus
 	mu        sync.RWMutex
+	endpoints map[string]*EndpointStatus
+	config    *ThrottleConfig
 	logger    *zap.Logger
 }
 
-// DefaultThrottleConfig returns optimized throttling settings
-func DefaultThrottleConfig() *ThrottleConfig {
-	return &ThrottleConfig{
-		MinSuccessRate:    0.90,              // Prefer endpoints with ≥90% success rate
-		InitialBackoff:    10 * time.Minute,  // Start with 10m backoff
-		MaxBackoff:        30 * time.Minute,  // Max 30m backoff
-		BackoffMultiplier: 1.5,               // Moderate exponential increase
-		HealthCheckWindow: 100,               // Consider last 100 requests
+// NewEndpointThrottle creates a new endpoint throttle manager
+func NewEndpointThrottle(config *ThrottleConfig, logger *zap.Logger) *EndpointThrottle {
+	if config == nil {
+		config = &ThrottleConfig{
+			MaxRetries:        3,
+			InitialBackoff:    time.Second,
+			MaxBackoff:        time.Minute * 5,
+			BackoffMultiplier: 2.0,
+			SuccessThreshold:  0.8,
+		}
 	}
-}
 
-// New creates a new endpoint throttle manager
-func New(logger *zap.Logger) *EndpointThrottle {
 	return &EndpointThrottle{
-		config:    DefaultThrottleConfig(),
 		endpoints: make(map[string]*EndpointStatus),
+		config:    config,
 		logger:    logger,
 	}
 }
 
-// RegisterEndpoint adds an endpoint to the throttle manager
-func (et *EndpointThrottle) RegisterEndpoint(url string) {
+// MetricsProvider defines the interface for metrics collection
+type MetricsProvider interface {
+	IncrementCounter(name string, tags map[string]string)
+	RecordGauge(name string, value float64, tags map[string]string)
+	RecordHistogram(name string, value float64, tags map[string]string)
+}
+
+// EndpointThrottleWithMetrics extends EndpointThrottle with metrics
+type EndpointThrottleWithMetrics struct {
+	*EndpointThrottle
+	metrics MetricsProvider
+}
+
+// NewWithMetrics creates a new endpoint throttle with metrics support
+func NewWithMetrics(logger *zap.Logger, metrics MetricsProvider) *EndpointThrottleWithMetrics {
+	baseThrottle := NewEndpointThrottle(nil, logger)
+	return &EndpointThrottleWithMetrics{
+		EndpointThrottle: baseThrottle,
+		metrics:          metrics,
+	}
+}
+
+// CircuitBreaker defines the interface for circuit breakers
+type CircuitBreaker interface {
+	Execute(func() (interface{}, error)) (interface{}, error)
+	AllowRequest() bool
+	Name() string
+}
+
+// ProtectedEndpoint represents an endpoint with circuit breaker protection
+type ProtectedEndpoint struct {
+	URL            string
+	Priority       int
+	Timeout        time.Duration
+	CircuitBreaker CircuitBreaker
+}
+
+// RegisterEndpoint registers a protected endpoint
+func (et *EndpointThrottleWithMetrics) RegisterEndpoint(endpoint ProtectedEndpoint) {
 	et.mu.Lock()
 	defer et.mu.Unlock()
+	
+	et.registerEndpoint(endpoint.URL)
+	
+	et.metrics.IncrementCounter("endpoint_registered", map[string]string{
+		"url":      endpoint.URL,
+		"priority": fmt.Sprintf("%d", endpoint.Priority),
+	})
+	
+	et.logger.Info("Registered protected endpoint", 
+		zap.String("url", endpoint.URL), 
+		zap.Int("priority", endpoint.Priority),
+		zap.Duration("timeout", endpoint.Timeout),
+		zap.String("circuit_breaker", endpoint.CircuitBreaker.Name()))
+}
+}
+
 // ThrottleCfg holds all scoring and throttle parameters
 type ThrottleCfg struct {
-	MinSuccessRate     float64 // 0.90
-	BonusIfAbove       float64 // 0.10
-	RecentSuccessMax   float64 // 0.05
-	RecentFailureMax   float64 // 0.10
+	MinSuccessRate     float64       // 0.90
+	BonusIfAbove       float64       // 0.10
+	RecentSuccessMax   float64       // 0.05
+	RecentFailureMax   float64       // 0.10
 	SuccessHalfLife    time.Duration // 10 * time.Minute
 	FailureHalfLife    time.Duration // 60 * time.Minute
-	Cap                float64 // 1.15
-	Floor              float64 // 0.20
+	Cap                float64       // 1.15
+	Floor              float64       // 0.20
 	InitialBackoff     time.Duration // 10 * time.Minute
 	MaxBackoff         time.Duration // 30 * time.Minute
-	BackoffMultiplier  float64 // 1.5
-	HealthCheckWindow  int64 // 100
+	BackoffMultiplier  float64       // 1.5
+	HealthCheckWindow  int64         // 100
 	EnableLatencyBlend bool
 	LatencyWeight      float64 // 0.20
 	LatencyRefMs       float64 // p95 fleet median in ms
 }
-	
+
 func DefaultThrottleCfg() *ThrottleCfg {
 	return &ThrottleCfg{
 		MinSuccessRate:     0.90,
@@ -100,6 +152,8 @@ func DefaultThrottleCfg() *ThrottleCfg {
 		LatencyRefMs:       200.0, // Example default
 	}
 }
+
+func (et *EndpointThrottle) registerEndpoint(url string) {
 	if _, exists := et.endpoints[url]; !exists {
 		et.endpoints[url] = &EndpointStatus{
 			URL:            url,
@@ -120,6 +174,84 @@ func (et *EndpointThrottle) RecordSuccess(url string) {
 	if !exists {
 		return
 	}
+	
+	status.SuccessCount++
+	status.LastSuccess = time.Now()
+	status.CurrentBackoff = et.config.InitialBackoff // Reset backoff on success
+}
+
+// RecordFailure records a failed request to an endpoint
+func (et *EndpointThrottle) RecordFailure(url string) {
+	et.mu.Lock()
+	defer et.mu.Unlock()
+	
+	status, exists := et.endpoints[url]
+	if !exists {
+		et.registerEndpoint(url)
+		status = et.endpoints[url]
+	}
+	
+	status.FailureCount++
+	status.LastFailure = time.Now()
+	
+	// Increase backoff
+	status.CurrentBackoff = time.Duration(float64(status.CurrentBackoff) * et.config.BackoffMultiplier)
+	if status.CurrentBackoff > et.config.MaxBackoff {
+		status.CurrentBackoff = et.config.MaxBackoff
+	}
+	
+	status.NextRetry = time.Now().Add(status.CurrentBackoff)
+}
+
+// ShouldThrottle checks if an endpoint should be throttled
+func (et *EndpointThrottle) ShouldThrottle(url string) bool {
+	et.mu.RLock()
+	defer et.mu.RUnlock()
+	
+	status, exists := et.endpoints[url]
+	if !exists {
+		return false
+	}
+	
+	// Check if we're in backoff period
+	if time.Now().Before(status.NextRetry) {
+		return true
+	}
+	
+	// Check success rate
+	total := status.SuccessCount + status.FailureCount
+	if total > 0 {
+		successRate := float64(status.SuccessCount) / float64(total)
+		status.SuccessRate = successRate
+		return successRate < et.config.SuccessThreshold
+	}
+	
+	return false
+}
+
+// GetStatus returns the current status of an endpoint
+func (et *EndpointThrottle) GetStatus(url string) (*EndpointStatus, error) {
+	et.mu.RLock()
+	defer et.mu.RUnlock()
+	
+	status, exists := et.endpoints[url]
+	if !exists {
+		return nil, fmt.Errorf("endpoint not found: %s", url)
+	}
+	
+	// Return a copy to avoid race conditions
+	return &EndpointStatus{
+		URL:           status.URL,
+		SuccessCount:  status.SuccessCount,
+		FailureCount:  status.FailureCount,
+		LastSuccess:   status.LastSuccess,
+		LastFailure:   status.LastFailure,
+		NextRetry:     status.NextRetry,
+		CurrentBackoff: status.CurrentBackoff,
+		SuccessRate:   status.SuccessRate,
+	}, nil
+}
+
 // Exponential decay helper
 func expDecay(dt time.Duration, halfLife time.Duration) float64 {
 	if halfLife <= 0 {
@@ -127,7 +259,7 @@ func expDecay(dt time.Duration, halfLife time.Duration) float64 {
 	}
 	return math.Exp(-math.Ln2 * float64(dt) / float64(halfLife))
 }
-	
+
 // Clamp helper
 func clamp(x, lo, hi float64) float64 {
 	if x < lo {
@@ -138,7 +270,7 @@ func clamp(x, lo, hi float64) float64 {
 	}
 	return x
 }
-	status.SuccessCount++
+
 // calculateEndpointScore implements exponential decay, cap/floor, and latency blend
 func calculateEndpointScore(
 	successRate float64,
@@ -167,203 +299,34 @@ func calculateEndpointScore(
 	score = clamp(score, cfg.Floor, cfg.Cap)
 	return score
 }
-	status.LastSuccess = time.Now()
-	status.CurrentBackoff = et.config.InitialBackoff // Reset backoff on success
-	status.NextRetry = time.Time{} // Clear retry delay
-	
-	et.updateSuccessRate(status)
-	
-	et.logger.Debug("Recorded success", 
-		zap.String("url", url),
-		zap.Float64("success_rate", status.SuccessRate),
-		zap.Int64("success_count", status.SuccessCount),
-	)
-}
 
-// RecordFailure records a failed request to an endpoint
-func (et *EndpointThrottle) RecordFailure(url string, err error) {
+// Reset clears all endpoint statistics
+func (et *EndpointThrottle) Reset() {
 	et.mu.Lock()
 	defer et.mu.Unlock()
 	
-	status, exists := et.endpoints[url]
-	if !exists {
-		return
-	}
-	
-	status.FailureCount++
-	status.LastFailure = time.Now()
-	
-	// Calculate exponential backoff
-	status.CurrentBackoff = time.Duration(float64(status.CurrentBackoff) * et.config.BackoffMultiplier)
-	if status.CurrentBackoff > et.config.MaxBackoff {
-		status.CurrentBackoff = et.config.MaxBackoff
-	}
-	
-	status.NextRetry = time.Now().Add(status.CurrentBackoff)
-	
-	et.updateSuccessRate(status)
-	
-	et.logger.Warn("Recorded failure",
-		zap.String("url", url),
-		zap.Error(err),
-		zap.Float64("success_rate", status.SuccessRate),
-		zap.Duration("backoff", status.CurrentBackoff),
-		zap.Time("next_retry", status.NextRetry),
-	)
+	et.endpoints = make(map[string]*EndpointStatus)
+	et.logger.Info("Endpoint throttle statistics reset")
 }
 
-// updateSuccessRate calculates the current success rate for an endpoint
-func (et *EndpointThrottle) updateSuccessRate(status *EndpointStatus) {
-	total := status.SuccessCount + status.FailureCount
-	if total == 0 {
-		status.SuccessRate = 1.0
-		return
-	}
-	
-	// Limit to recent requests for health window
-	if total > et.config.HealthCheckWindow {
-		// For simplicity, use overall ratio. In production, you'd track a sliding window
-		status.SuccessRate = float64(status.SuccessCount) / float64(total)
-	} else {
-		status.SuccessRate = float64(status.SuccessCount) / float64(total)
-	}
-}
-
-// GetBestEndpoint returns the best available endpoint based on success rate and throttling
-func (et *EndpointThrottle) GetBestEndpoint(endpoints []string) (string, error) {
-	et.mu.RLock()
-	defer et.mu.RUnlock()
-	
-	now := time.Now()
-	var bestEndpoint string
-	var bestScore float64 = -1
-	
-	for _, url := range endpoints {
-		status, exists := et.endpoints[url]
-		if !exists {
-			// Unknown endpoint - register it and consider it viable
-			et.mu.RUnlock()
-			et.RegisterEndpoint(url)
-			et.mu.RLock()
-			status = et.endpoints[url]
-		}
-		
-		// Skip endpoints that are in backoff
-		if !status.NextRetry.IsZero() && now.Before(status.NextRetry) {
-			et.logger.Debug("Endpoint in backoff", 
-				zap.String("url", url),
-				zap.Duration("remaining", status.NextRetry.Sub(now)),
-			)
-			continue
-		}
-		
-		// Calculate score based on success rate and recency
-		score := et.calculateEndpointScore(status, now)
-		
-		if score > bestScore {
-			bestScore = score
-			bestEndpoint = url
-		}
-	}
-	
-	if bestEndpoint == "" {
-		return "", fmt.Errorf("no available endpoints (all in backoff)")
-	}
-	
-	et.logger.Debug("Selected best endpoint",
-		zap.String("url", bestEndpoint),
-		zap.Float64("score", bestScore),
-	)
-	
-	return bestEndpoint, nil
-}
-
-// calculateEndpointScore computes a score for endpoint selection
-func (et *EndpointThrottle) calculateEndpointScore(status *EndpointStatus, now time.Time) float64 {
-	// Base score from success rate
-	score := status.SuccessRate
-	
-	// Bonus for high success rate endpoints
-	if status.SuccessRate >= et.config.MinSuccessRate {
-		score += 0.1 // 10% bonus for meeting minimum success rate
-	}
-	
-	// Bonus for recent successful activity
-	timeSinceSuccess := now.Sub(status.LastSuccess)
-	if timeSinceSuccess < time.Hour {
-		// Recent success gets a small bonus
-		recencyBonus := math.Max(0, 0.05*(1.0-timeSinceSuccess.Hours()))
-		score += recencyBonus
-	}
-	
-	// Penalty for recent failures
-	if !status.LastFailure.IsZero() {
-		timeSinceFailure := now.Sub(status.LastFailure)
-		if timeSinceFailure < time.Hour {
-			failurePenalty := math.Max(0, 0.1*(1.0-timeSinceFailure.Hours()))
-			score -= failurePenalty
-		}
-	}
-	
-	return math.Max(0, score) // Ensure score is non-negative
-}
-
-// GetEndpointStatus returns the current status of an endpoint
-func (et *EndpointThrottle) GetEndpointStatus(url string) (*EndpointStatus, bool) {
-	et.mu.RLock()
-	defer et.mu.RUnlock()
-	
-	status, exists := et.endpoints[url]
-	if !exists {
-		return nil, false
-	}
-	
-	// Return a copy to avoid races
-	statusCopy := *status
-	return &statusCopy, true
-}
-
-// GetAllStatuses returns status for all registered endpoints
+// GetAllStatuses returns the status of all tracked endpoints
 func (et *EndpointThrottle) GetAllStatuses() map[string]*EndpointStatus {
 	et.mu.RLock()
 	defer et.mu.RUnlock()
 	
-	result := make(map[string]*EndpointStatus, len(et.endpoints))
+	result := make(map[string]*EndpointStatus)
 	for url, status := range et.endpoints {
-		statusCopy := *status
-		result[url] = &statusCopy
+		result[url] = &EndpointStatus{
+			URL:           status.URL,
+			SuccessCount:  status.SuccessCount,
+			FailureCount:  status.FailureCount,
+			LastSuccess:   status.LastSuccess,
+			LastFailure:   status.LastFailure,
+			NextRetry:     status.NextRetry,
+			CurrentBackoff: status.CurrentBackoff,
+			SuccessRate:   status.SuccessRate,
+		}
 	}
 	
 	return result
-}
-
-// IsEndpointHealthy checks if an endpoint meets the minimum health requirements
-func (et *EndpointThrottle) IsEndpointHealthy(url string) bool {
-	status, exists := et.GetEndpointStatus(url)
-	if !exists {
-		return false
-	}
-	
-	// Check if endpoint is not in backoff and meets minimum success rate
-	now := time.Now()
-	notInBackoff := status.NextRetry.IsZero() || now.After(status.NextRetry)
-	meetsSuccessRate := status.SuccessRate >= et.config.MinSuccessRate
-	
-	return notInBackoff && meetsSuccessRate
-}
-
-// ResetEndpoint clears the failure history for an endpoint (for manual recovery)
-func (et *EndpointThrottle) ResetEndpoint(url string) {
-	et.mu.Lock()
-	defer et.mu.Unlock()
-	
-	if status, exists := et.endpoints[url]; exists {
-		status.FailureCount = 0
-		status.CurrentBackoff = et.config.InitialBackoff
-		status.NextRetry = time.Time{}
-		status.LastFailure = time.Time{}
-		et.updateSuccessRate(status)
-		
-		et.logger.Info("Reset endpoint", zap.String("url", url))
-	}
 }

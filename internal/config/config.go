@@ -48,6 +48,12 @@ type Config struct {
 	UseDirectP2P     bool
 	UseMemoryChannel bool
 	OptimizeSystem   bool
+	NodeID           string // Unique identifier for this node
+	RequireDatabase  bool   // Whether database is required
+	BlockChannelBuffer int  // Size of block channel buffer
+	BlockDeduplicationWindow time.Duration // Time window for deduplication
+	CacheSize        int    // Size of cache in entries
+	MempoolMaxSize   int    // Maximum size of mempool in entries
 
 	// Performance optimizations (permanent for 99.9% SLA compliance)
 	GCPercent       int  // Aggressive GC tuning (default: 25)
@@ -109,6 +115,42 @@ type Config struct {
 	RPCLastIDFile      string        `json:"rpc_last_id_file"`
 	RPCWorkers         int           `json:"rpc_workers"`
 	RPCMessageTopic    string        `json:"rpc_message_topic"`
+	
+	// API timeouts
+	APIReadTimeout   time.Duration `json:"api_read_timeout"`
+	APIWriteTimeout  time.Duration `json:"api_write_timeout"`
+	APIIdleTimeout   time.Duration `json:"api_idle_timeout"`
+	
+	// P2P configuration
+	P2PListenAddress  string        `json:"p2p_listen_address"`
+	P2PBootstrapPeers []string      `json:"p2p_bootstrap_peers"`
+	P2PMaxPeers       int           `json:"p2p_max_peers"`
+	P2PPeerTimeout    time.Duration `json:"p2p_peer_timeout"`
+	P2PDialTimeout    time.Duration `json:"p2p_dial_timeout"`
+	P2PProtocolVersion string       `json:"p2p_protocol_version"`
+	
+	// WebSocket configuration
+	WSWriteTimeout   time.Duration `json:"ws_write_timeout"`
+	WSPingInterval   time.Duration `json:"ws_ping_interval"`
+	WSMaxMessageSize int           `json:"ws_max_message_size"`
+	
+	// CORS configuration
+	EnableCORS      bool     `json:"enable_cors"`
+	CORSOrigins     []string `json:"cors_origins"`
+	TrustedProxies  []string `json:"trusted_proxies"`
+	
+	// Compression and security
+	EnableCompression     bool `json:"enable_compression"`
+	EnableSecurityHeaders bool `json:"enable_security_headers"`
+	
+	// Relay configuration
+	RelayMaxConcurrent int           `json:"relay_max_concurrent"`
+	RelayTimeout       time.Duration `json:"relay_timeout"`
+	RelayRetryAttempts int           `json:"relay_retry_attempts"`
+	RelayRetryDelay    time.Duration `json:"relay_retry_delay"`
+	
+	// External endpoint configuration
+	ExternalEndpoints []ExternalEndpoint `json:"external_endpoints"`
 }
 
 // Load reads config from env
@@ -129,6 +171,11 @@ func Load() Config {
 		UseDirectP2P:     getEnvBool("USE_DIRECT_P2P", false),
 		UseMemoryChannel: getEnvBool("USE_MEMORY_CHANNEL", false),
 		OptimizeSystem:   getEnvBool("OPTIMIZE_SYSTEM", true),
+		RequireDatabase:  getEnvBool("REQUIRE_DATABASE", false),
+		BlockChannelBuffer: getEnvInt("BLOCK_CHANNEL_BUFFER", 1000),
+		BlockDeduplicationWindow: time.Duration(getEnvInt("BLOCK_DEDUPLICATION_WINDOW", 60)) * time.Second,
+		CacheSize:        getEnvInt("CACHE_SIZE", 10000),
+		MempoolMaxSize:   getEnvInt("MEMPOOL_MAX_SIZE", 50000),
 
 		// Performance optimizations (permanent defaults for 99.9% SLA)
 		GCPercent:       getEnvInt("GC_PERCENT", 25),

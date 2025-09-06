@@ -20,28 +20,27 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/PayRpc/Bitcoin-Sprint/internal/api"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/broadcaster"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/cache"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/circuitbreaker"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/config"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/database"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/dedup"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/license"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/mempool"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/messaging"
-	"github.com/PayRpc/Bitcoin-Sprint/internal/p2p"
-	"github.com/PayRpc/Bitcoin-Sprint/internal/relay"
-	gctuning "github.com/PayRpc/Bitcoin-Sprint/internal/runtime"
-	"github.com/PayRpc/Bitcoin-Sprint/internal/throttle"
-	"github.com/PayRpc/Bitcoin-Sprint/internal/broadcaster"
-	"github.com/PayRpc/Bitcoin-Sprint/internal/circuitbreaker"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/metrics"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/middleware"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/migrations"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/p2p"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/ratelimit"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/relay"
+	gctuning "github.com/PayRpc/Bitcoin-Sprint/internal/runtime"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/throttle"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -70,10 +69,10 @@ type ServiceManager struct {
 	logger *zap.Logger
 
 	// Core infrastructure
-	db               database.Database
-	metrics          *metrics.Registry
+	db               *database.DB
+	metricsRegistry  *metrics.PrometheusRegistry
 	blockIdx         *dedup.BlockIndex
-	circuitBreakers  map[string]*circuitbreaker.CircuitBreaker
+	circuitBreakers  map[string]*circuitbreaker.Manager
 
 	// Communication channels
 	blockChan        chan blocks.BlockEvent
@@ -83,7 +82,7 @@ type ServiceManager struct {
 	mempool          *mempool.Mempool
 	cache            *cache.Cache
 	broadcaster      *broadcaster.Broadcaster
-	throttle         *throttle.Manager
+	throttleManager  *throttle.EndpointThrottle
 	relayDispatcher  *relay.RelayDispatcher
 	p2pClient        p2p.Client
 	apiServer        *api.Server
@@ -98,7 +97,8 @@ type ServiceManager struct {
 	healthServer     *http.Server
 	startTime        time.Time
 	// Security
-	licenseValidator *license.Validator
+	licenseKey       string
+	licenseInfo      *license.LicenseInfo
 }
 
 func main() {
@@ -142,7 +142,7 @@ func main() {
 	logger.Info("Bitcoin Sprint startup complete",
 		zap.String("api_address", fmt.Sprintf("%s:%d", sm.cfg.APIHost, sm.cfg.APIPort)),
 		zap.String("health_address", fmt.Sprintf("%s:%d", sm.cfg.APIHost, sm.cfg.APIPort+1)),
-		zap.String("node_id", sm.cfg.NodeID))
+		zap.String("tier", string(sm.cfg.Tier)))
 
 	// Wait for shutdown signal with startup error monitoring
 	select {
@@ -190,8 +190,8 @@ func NewServiceManager(logger *zap.Logger) (*ServiceManager, error) {
 		startupErrors:    make(chan error, 20), // Increased buffer for startup errors
 		blockIdx:         dedup.NewBlockIndex(cfg.BlockDeduplicationWindow),
 		startTime:        time.Now(),
-		circuitBreakers:  make(map[string]*circuitbreaker.CircuitBreaker),
-		licenseValidator: license.NewValidator(cfg.LicenseKey),
+		circuitBreakers:  make(map[string]*circuitbreaker.Manager),
+		licenseInfo:      &license.LicenseInfo{},
 	}
 
 	return sm, nil
@@ -360,14 +360,17 @@ func (sm *ServiceManager) initializeRuntime() error {
 // validateLicense checks license validity with proper error handling
 func (sm *ServiceManager) validateLicense() error {
 	if sm.cfg.LicenseKey == "" {
-		if sm.cfg.RequireLicense {
+		if requireLicense := getEnvBool("REQUIRE_LICENSE", false); requireLicense {
 			return fmt.Errorf("license key is required but not provided")
 		}
 		sm.logger.Info("No license key provided, running in open source mode")
 		return nil
 	}
+	
+	// Create license validator
+	validator := license.NewValidator(sm.cfg.LicenseKey)
 
-	validationResult, err := sm.licenseValidator.ValidateWithDetails(sm.cfg.NodeID)
+	validationResult, err := validator.ValidateWithDetails(sm.cfg.NodeID)
 	if err != nil {
 		return fmt.Errorf("license validation error: %w", err)
 	}
@@ -375,6 +378,9 @@ func (sm *ServiceManager) validateLicense() error {
 	if !validationResult.Valid {
 		return fmt.Errorf("invalid license key: %s", validationResult.Message)
 	}
+	
+	// Store license info for later use
+	sm.licenseInfo = &validationResult
 
 	sm.logger.Info("License validated successfully",
 		zap.String("issued_to", validationResult.IssuedTo),
@@ -393,17 +399,27 @@ func (sm *ServiceManager) validateLicense() error {
 
 // initializeMetrics sets up metrics collection and export
 func (sm *ServiceManager) initializeMetrics() error {
-	var err error
-	sm.metrics, err = metrics.NewRegistry(sm.cfg.MetricsConfig, sm.logger)
-	if err != nil {
-		return fmt.Errorf("metrics registry creation failed: %w", err)
+	// Create new registry
+	sm.metricsRegistry = metrics.NewRegistry()
+	
+	// Register metrics in the service manager for convenient access
+	if sm.cfg.EnablePrometheus {
+		// Set up HTTP server for metrics export if configured
+		go func() {
+			metricsAddr := fmt.Sprintf(":%d", sm.cfg.PrometheusPort)
+			sm.logger.Info("Starting Prometheus metrics server", zap.String("address", metricsAddr))
+			
+			http.Handle("/metrics", promhttp.HandlerFor(
+				sm.metricsRegistry.GetRegistry(),
+				promhttp.HandlerOpts{},
+			))
+			
+			if err := http.ListenAndServe(metricsAddr, nil); err != nil {
+				sm.logger.Error("Prometheus server error", zap.Error(err))
+			}
+		}()
 	}
-
-	// Register runtime metrics
-	sm.metrics.RegisterRuntimeMetrics()
-	// Register application-specific metrics
-	sm.metrics.RegisterAppMetrics()
-
+	
 	return nil
 }
 
@@ -415,9 +431,11 @@ func (sm *ServiceManager) initializeCircuitBreakers() {
 			Name:              "external_apis",
 			MaxFailures:       5,
 			ResetTimeout:      30 * time.Second,
-			HalfOpenMaxCalls:  3,
+			FailureThreshold:  0.5,
+			SuccessThreshold:  3,
 			Timeout:           10 * time.Second,
 			OnStateChange:     sm.onCircuitBreakerStateChange,
+			Logger:            sm.logger,
 		},
 	)
 
@@ -427,9 +445,11 @@ func (sm *ServiceManager) initializeCircuitBreakers() {
 			Name:              "database",
 			MaxFailures:       3,
 			ResetTimeout:      60 * time.Second,
-			HalfOpenMaxCalls:  2,
+			FailureThreshold:  0.5,
+			SuccessThreshold:  2,
 			Timeout:           15 * time.Second,
 			OnStateChange:     sm.onCircuitBreakerStateChange,
+			Logger:            sm.logger,
 		},
 	)
 }
@@ -1095,7 +1115,7 @@ func (sm *ServiceManager) onCircuitBreakerStateChange(name string, from, to circ
 }
 
 // validateConfig validates the loaded configuration
-func validateConfig(cfg *config.Config) error {
+func validateConfig(cfg config.Config) error {
 	// Validate API configuration
 	if cfg.APIPort <= 0 || cfg.APIPort > 65535 {
 		return fmt.Errorf("invalid API port: %d", cfg.APIPort)
