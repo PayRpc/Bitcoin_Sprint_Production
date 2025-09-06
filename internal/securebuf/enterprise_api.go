@@ -285,32 +285,6 @@ type BloomFilter struct {
 	hashFns  int
 }
 
-// BloomFilterStats contains bloom filter statistics
-type BloomFilterStats struct {
-	ItemCount            int
-	TheoreticalFPRate    float64
-	MemoryUsageBytes     int
-	OptimalHashFunctions int
-}
-
-// NewBitcoinBloomFilterDefault creates default Bitcoin bloom filter
-func NewBitcoinBloomFilterDefault() (*BloomFilter, error) {
-	return &BloomFilter{
-		data:     make([]byte, 125000), // 1M bits / 8
-		capacity: 1000000,
-		hashFns:  7,
-	}, nil
-}
-
-// NewBitcoinBloomFilter creates Bitcoin bloom filter with custom parameters
-func NewBitcoinBloomFilter(numBits int, hashFunctions int, tweak uint32, flags uint8, maxAge int, batchSize int) (*BloomFilter, error) {
-	return &BloomFilter{
-		data:     make([]byte, (numBits+7)/8),
-		capacity: numBits,
-		hashFns:  hashFunctions,
-	}, nil
-}
-
 // InsertUTXO inserts a UTXO into the bloom filter
 func (bf *BloomFilter) InsertUTXO(txid []byte, outputIndex uint32) error {
 	if !CGoEnabled {
@@ -334,10 +308,12 @@ func (bf *BloomFilter) ContainsUTXO(txid []byte, outputIndex uint32) (bool, erro
 // GetStats returns bloom filter statistics
 func (bf *BloomFilter) GetStats() (BloomFilterStats, error) {
 	return BloomFilterStats{
-		ItemCount:            0, // Mock stats
-		TheoreticalFPRate:    0.001,
-		MemoryUsageBytes:     len(bf.data),
-		OptimalHashFunctions: bf.hashFns,
+		ItemCount:          0, // Mock stats
+		FalsePositiveRate:  0.001,
+		MemoryUsageBytes:   uint64(len(bf.data)),
+		CompressionEnabled: false,
+		TimestampEntries:   0,
+		AverageAgeSeconds:  0,
 	}, nil
 }
 

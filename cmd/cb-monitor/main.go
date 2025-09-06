@@ -16,7 +16,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 
-	"bitcoin-sprint/internal/circuitbreaker"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/circuitbreaker"
 )
 
 // CircuitBreakerMonitor provides real-time monitoring of circuit breakers

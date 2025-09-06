@@ -1,0 +1,58 @@
+[
+  {
+    "id": "demo-enterprise-001",
+    "key": "sprint-ent_XbF9YlK8mNqPzR3vW7dGhJ2cA5eT1uI9oL6sQ4rE8wY",
+    "email": "demo@enterprise.com",
+    "company": "Enterprise Demo Corp",
+    "tier": "ENTERPRISE",
+    "created_at": "2025-09-05T23:16:25.000Z",
+    "expires_at": "2026-09-05T23:16:25.000Z",
+    "revoked": false,
+    "last_used_at": null,
+    "requests": 0,
+    "requests_today": 0,
+    "blocks_today": 0
+  },
+  {
+    "id": "demo-pro-002",
+    "key": "sprint-pro_MnB4VcX1kLp3YzR7wE5sQ8dF2hG6jT9uI0oA3vN8xK7",
+    "email": "demo@pro.com",
+    "company": "Pro Demo Inc",
+    "tier": "PRO",
+    "created_at": "2025-09-05T23:16:25.000Z",
+    "expires_at": "2026-09-05T23:16:25.000Z",
+    "revoked": false,
+    "last_used_at": null,
+    "requests": 0,
+    "requests_today": 0,
+    "blocks_today": 0
+  },
+  {
+    "id": "demo-free-003",
+    "key": "sprint-free_QrS5ZlM9pNv2YkF8xG3wE6dA1hJ4tU7oI0cL8bV9mX2",
+    "email": "demo@free.com",
+    "company": null,
+    "tier": "FREE",
+    "created_at": "2025-09-05T23:16:25.000Z",
+    "expires_at": "2026-09-05T23:16:25.000Z",
+    "revoked": false,
+    "last_used_at": null,
+    "requests": 0,
+    "requests_today": 0,
+    "blocks_today": 0
+  },
+  {
+    "id": "dashboard-demo-004",
+    "key": "changeme",
+    "email": "dashboard@demo.com",
+    "company": "Dashboard Demo",
+    "tier": "ENTERPRISE",
+    "created_at": "2025-09-06T00:00:00.000Z",
+    "expires_at": "2026-09-06T00:00:00.000Z",
+    "revoked": false,
+    "last_used_at": null,
+    "requests": 0,
+    "requests_today": 0,
+    "blocks_today": 0
+  }
+]

@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/PayRpc/Bitcoin-Sprint/internal/relay"
 	"go.uber.org/zap"
 )
 

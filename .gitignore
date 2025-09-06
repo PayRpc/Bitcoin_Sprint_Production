@@ -56,6 +56,12 @@ __pycache__/
 /web/.vercel/
 /web/public/sw.js
 /web/public/workbox-*.js
+
+# Batch files - prevent loose files in web root
+/web/run-*.bat
+/web/start-*.bat
+!web/start-web-dev.bat
+
 # Python
 *.py[cod]
 *$py.class
@@ -476,3 +482,7 @@ Bitcoin_Sprint_Cleaned_*/
 /*-temp*/
 
 # ────────── End of .gitignore ──────────
+
+# Environment Protection
+.env.enterprise.protected
+.env.checksum

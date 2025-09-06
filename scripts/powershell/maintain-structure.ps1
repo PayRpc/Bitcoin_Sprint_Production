@@ -70,6 +70,31 @@ if ($looseJS -or $webLooseJS) {
     Write-Host "✅ No loose JavaScript files" -ForegroundColor Green
 }
 
+# Check for loose batch files
+Write-Host "`n📋 Checking Batch Files..." -ForegroundColor Yellow
+$looseBat = Get-ChildItem "web\" -Filter "*.bat" -ErrorAction SilentlyContinue | Where-Object {$_.Name -ne "start-web-dev.bat"}
+
+if ($looseBat) {
+    $totalBat = $looseBat.Count
+    $violations += "Loose batch files found: $totalBat files"
+    Write-Host "❌ Found $totalBat loose batch files in web directory" -ForegroundColor Red
+    
+    if ($Fix) {
+        Write-Host "🔧 Organizing batch files..." -ForegroundColor Green
+        New-Item -ItemType Directory -Path "web\scripts\utilities" -Force | Out-Null
+        
+        # Move legacy batch files
+        if (Test-Path "web\run-*.bat") { Move-Item -Path "web\run-*.bat" -Destination "web\scripts\utilities\" -Force -ErrorAction SilentlyContinue }
+        if (Test-Path "web\start-*.bat") { 
+            Get-ChildItem "web\start-*.bat" | Where-Object {$_.Name -ne "start-web-dev.bat"} | Move-Item -Destination "web\scripts\utilities\" -Force -ErrorAction SilentlyContinue 
+        }
+        
+        Write-Host "✅ Fixed: Batch files organized" -ForegroundColor Green
+    }
+} else {
+    Write-Host "✅ No loose batch files" -ForegroundColor Green
+}
+
 # Check for loose Go files
 Write-Host "`n🐹 Checking Go Files..." -ForegroundColor Yellow
 $looseGo = Get-ChildItem -Filter "*.go" -ErrorAction SilentlyContinue | Where-Object {$_.Directory.Name -eq "BItcoin_Sprint"}
@@ -135,6 +160,24 @@ if ($emptyFiles) {
     }
 } else {
     Write-Host "✅ No empty files found" -ForegroundColor Green
+}
+
+# Check environment integrity
+Write-Host "`n🛡️ Checking Environment Protection..." -ForegroundColor Yellow
+$envCheckProcess = Start-Process -FilePath "powershell" -ArgumentList "-ExecutionPolicy Bypass -Command `"& '.\scripts\powershell\protect-environment.ps1' -Check`"" -Wait -PassThru -WindowStyle Hidden
+$envCheckPassed = $envCheckProcess.ExitCode -eq 0
+
+if (-not $envCheckPassed) {
+    $violations += "Environment configuration corrupted or missing"
+    Write-Host "❌ Environment integrity check failed" -ForegroundColor Red
+    
+    if ($Fix) {
+        Write-Host "🔧 Restoring enterprise environment..." -ForegroundColor Green
+        & ".\scripts\powershell\protect-environment.ps1" -Restore | Out-Null
+        Write-Host "✅ Fixed: Enterprise environment restored" -ForegroundColor Green
+    }
+} else {
+    Write-Host "✅ Environment integrity verified" -ForegroundColor Green
 }
 
 # Check for legacy simple_api

@@ -11,13 +11,18 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
+	"os/signal"
+	"strfunc (r *ResultCache) Put(key string, msg Message) {
+	r.mu.Lock()
+	r.cache.Add(key, msg)
+	r.mu.Unlock()
+}
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	lru "github.com/decred/dcrd/lru"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -206,7 +211,10 @@ func NewResultCache(size int) (*ResultCache, error) {
 	if size <= 0 {
 		size = 1024
 	}
-	c := lru.NewCache(size)
+	c, err := lru.New(size)
+	if err != nil {
+		return nil, err
+	}
 	return &ResultCache{cache: c}, nil
 }
 

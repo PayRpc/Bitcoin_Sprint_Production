@@ -18,6 +18,15 @@ $FastApiDir = Join-Path $ProjectRoot "Bitcoin_Sprint_fastapi\fastapi-gateway"
 Write-Host "[ROCKET] Bitcoin Sprint Development Environment Startup" -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Cyan
 
+# Pre-start validation
+Write-Host "[VALIDATION] Running pre-start checks..." -ForegroundColor Yellow
+& "$ProjectRoot\scripts\powershell\pre-start-validation.ps1"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[ERROR] Pre-start validation failed!" -ForegroundColor Red
+    exit 1
+}
+Write-Host "[OK] Pre-start validation passed!" -ForegroundColor Green
+
 # Function to check if port is in use
 function Test-Port {
     param($Port)

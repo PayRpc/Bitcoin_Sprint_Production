@@ -278,6 +278,8 @@ func NewBlockProcessor(config ProcessorConfig, logger *zap.Logger) (*BlockProces
 	processor := &BlockProcessor{
 		config:           config,
 		logger:           logger,
+		validators:       make(map[Chain]BlockValidator),
+		processors:       make(map[Chain]ChainProcessor),
 		inflightRequests: new(sync.Map),
 		procMetrics: &ProcessingMetrics{
 			ProcessedBlocks:     0,
