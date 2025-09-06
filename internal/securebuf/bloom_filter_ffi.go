@@ -8,6 +8,7 @@ package securebuf
 
 /*
 #cgo LDFLAGS: -lsecurebuffer
+#include "../../secure/rust/include/bloom_filter.h"
 #include "../../secure/rust/include/securebuffer.h"
 #include <stdlib.h>
 #include <stdint.h>

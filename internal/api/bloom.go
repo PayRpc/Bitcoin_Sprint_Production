@@ -3,7 +3,7 @@ package api
 
 /*
 #cgo CFLAGS: -I../../secure/rust/include
-#cgo LDFLAGS: -L../../secure/rust/target/release -lsecurebuffer -lws2_32 -luserenv -lntdll -lbcrypt -lmsvcrt -lkernel32 -lstdc++
+#cgo LDFLAGS: -L../../secure/rust/target/release -lsecurebuffer -lws2_32 -luserenv -lntdll -lbcrypt -lmsvcrt -lkernel32 -lstdc++ -lpdh -lnetapi32 -lsecur32 -liphlpapi -lole32 -loleaut32 -luuid -lpowrprof -lpsapi
 #include "../../secure/rust/include/bloom_filter.h"
 #include <stdlib.h>
 #include <stdint.h>

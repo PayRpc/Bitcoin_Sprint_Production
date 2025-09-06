@@ -6,7 +6,7 @@ package cgobindings
 
 /*
 #cgo CFLAGS: -I../../../secure/rust/include
-#cgo LDFLAGS: -L../../../secure/rust/target/release -lsecurebuffer -lws2_32 -luserenv -lntdll -lbcrypt -lmsvcrt -lkernel32 -lstdc++ -lchkstk_ms
+#cgo LDFLAGS: -L../../../secure/rust/target/release -lsecurebuffer -lws2_32 -luserenv -lntdll -lbcrypt -lmsvcrt -lkernel32 -lstdc++ -lpdh -lnetapi32 -lsecur32 -liphlpapi -lole32 -loleaut32 -luuid -lpowrprof -lpsapi
 
 #include <securebuffer.h>
 #include <stdlib.h>
