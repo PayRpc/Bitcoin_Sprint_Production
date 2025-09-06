@@ -187,7 +187,7 @@ type BlockProcessor struct {
 	resultCache      map[string]ProcessingResult
 	dedupLock        *sync.RWMutex
 	statusCache      *sync.Map
-	procMetrics      *ProcessorMetrics
+	procMetrics      *ProcessingMetrics
 	lastMetricsTime  time.Time
 
 	// Atomic counters
@@ -242,19 +242,6 @@ type ProcessorConfig struct {
 	EnableStatusCache   bool          `json:"enable_status_cache"`
 }
 
-// ProcessingMetrics tracks block processing performance
-type ProcessingMetrics struct {
-	mu                    sync.RWMutex
-	TotalBlocks           int64                   `json:"total_blocks"`
-	ProcessedBlocks       int64                   `json:"processed_blocks"`
-	FailedBlocks          int64                   `json:"failed_blocks"`
-	OrphanedBlocks        int64                   `json:"orphaned_blocks"`
-	AverageProcessingTime time.Duration           `json:"average_processing_time"`
-	ThroughputPerSecond   float64                 `json:"throughput_per_second"`
-	LastProcessedAt       time.Time               `json:"last_processed_at"`
-	ChainStats            map[Chain]*ChainMetrics `json:"chain_stats"`
-}
-
 // ChainMetrics tracks per-chain processing statistics
 type ChainMetrics struct {
 	BlocksProcessed       int64         `json:"blocks_processed"`
@@ -292,7 +279,7 @@ func NewBlockProcessor(config ProcessorConfig, logger *zap.Logger) (*BlockProces
 		config:           config,
 		logger:           logger,
 		inflightRequests: new(sync.Map),
-		procMetrics: &ProcessorMetrics{
+		procMetrics: &ProcessingMetrics{
 			ProcessedBlocks:     0,
 			FailedBlocks:        0,
 			ValidationErrors:    0,

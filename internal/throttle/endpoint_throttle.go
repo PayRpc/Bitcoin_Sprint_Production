@@ -11,14 +11,14 @@ import (
 
 // EndpointStatus tracks the health and performance of an endpoint
 type EndpointStatus struct {
-	URL           string
-	SuccessCount  int64
-	FailureCount  int64
-	LastSuccess   time.Time
-	LastFailure   time.Time
-	NextRetry     time.Time
+	URL            string
+	SuccessCount   int64
+	FailureCount   int64
+	LastSuccess    time.Time
+	LastFailure    time.Time
+	NextRetry      time.Time
 	CurrentBackoff time.Duration
-	SuccessRate   float64
+	SuccessRate    float64
 }
 
 // ThrottleConfig holds throttling configuration
@@ -98,20 +98,19 @@ type ProtectedEndpoint struct {
 func (et *EndpointThrottleWithMetrics) RegisterEndpoint(endpoint ProtectedEndpoint) {
 	et.mu.Lock()
 	defer et.mu.Unlock()
-	
+
 	et.registerEndpoint(endpoint.URL)
-	
+
 	et.metrics.IncrementCounter("endpoint_registered", map[string]string{
 		"url":      endpoint.URL,
 		"priority": fmt.Sprintf("%d", endpoint.Priority),
 	})
-	
-	et.logger.Info("Registered protected endpoint", 
-		zap.String("url", endpoint.URL), 
+
+	et.logger.Info("Registered protected endpoint",
+		zap.String("url", endpoint.URL),
 		zap.Int("priority", endpoint.Priority),
 		zap.Duration("timeout", endpoint.Timeout),
 		zap.String("circuit_breaker", endpoint.CircuitBreaker.Name()))
-}
 }
 
 // ThrottleCfg holds all scoring and throttle parameters
@@ -169,12 +168,12 @@ func (et *EndpointThrottle) registerEndpoint(url string) {
 func (et *EndpointThrottle) RecordSuccess(url string) {
 	et.mu.Lock()
 	defer et.mu.Unlock()
-	
+
 	status, exists := et.endpoints[url]
 	if !exists {
 		return
 	}
-	
+
 	status.SuccessCount++
 	status.LastSuccess = time.Now()
 	status.CurrentBackoff = et.config.InitialBackoff // Reset backoff on success
@@ -184,22 +183,22 @@ func (et *EndpointThrottle) RecordSuccess(url string) {
 func (et *EndpointThrottle) RecordFailure(url string) {
 	et.mu.Lock()
 	defer et.mu.Unlock()
-	
+
 	status, exists := et.endpoints[url]
 	if !exists {
 		et.registerEndpoint(url)
 		status = et.endpoints[url]
 	}
-	
+
 	status.FailureCount++
 	status.LastFailure = time.Now()
-	
+
 	// Increase backoff
 	status.CurrentBackoff = time.Duration(float64(status.CurrentBackoff) * et.config.BackoffMultiplier)
 	if status.CurrentBackoff > et.config.MaxBackoff {
 		status.CurrentBackoff = et.config.MaxBackoff
 	}
-	
+
 	status.NextRetry = time.Now().Add(status.CurrentBackoff)
 }
 
@@ -207,17 +206,17 @@ func (et *EndpointThrottle) RecordFailure(url string) {
 func (et *EndpointThrottle) ShouldThrottle(url string) bool {
 	et.mu.RLock()
 	defer et.mu.RUnlock()
-	
+
 	status, exists := et.endpoints[url]
 	if !exists {
 		return false
 	}
-	
+
 	// Check if we're in backoff period
 	if time.Now().Before(status.NextRetry) {
 		return true
 	}
-	
+
 	// Check success rate
 	total := status.SuccessCount + status.FailureCount
 	if total > 0 {
@@ -225,7 +224,7 @@ func (et *EndpointThrottle) ShouldThrottle(url string) bool {
 		status.SuccessRate = successRate
 		return successRate < et.config.SuccessThreshold
 	}
-	
+
 	return false
 }
 
@@ -233,22 +232,22 @@ func (et *EndpointThrottle) ShouldThrottle(url string) bool {
 func (et *EndpointThrottle) GetStatus(url string) (*EndpointStatus, error) {
 	et.mu.RLock()
 	defer et.mu.RUnlock()
-	
+
 	status, exists := et.endpoints[url]
 	if !exists {
 		return nil, fmt.Errorf("endpoint not found: %s", url)
 	}
-	
+
 	// Return a copy to avoid race conditions
 	return &EndpointStatus{
-		URL:           status.URL,
-		SuccessCount:  status.SuccessCount,
-		FailureCount:  status.FailureCount,
-		LastSuccess:   status.LastSuccess,
-		LastFailure:   status.LastFailure,
-		NextRetry:     status.NextRetry,
+		URL:            status.URL,
+		SuccessCount:   status.SuccessCount,
+		FailureCount:   status.FailureCount,
+		LastSuccess:    status.LastSuccess,
+		LastFailure:    status.LastFailure,
+		NextRetry:      status.NextRetry,
 		CurrentBackoff: status.CurrentBackoff,
-		SuccessRate:   status.SuccessRate,
+		SuccessRate:    status.SuccessRate,
 	}, nil
 }
 
@@ -304,7 +303,7 @@ func calculateEndpointScore(
 func (et *EndpointThrottle) Reset() {
 	et.mu.Lock()
 	defer et.mu.Unlock()
-	
+
 	et.endpoints = make(map[string]*EndpointStatus)
 	et.logger.Info("Endpoint throttle statistics reset")
 }
@@ -313,20 +312,20 @@ func (et *EndpointThrottle) Reset() {
 func (et *EndpointThrottle) GetAllStatuses() map[string]*EndpointStatus {
 	et.mu.RLock()
 	defer et.mu.RUnlock()
-	
+
 	result := make(map[string]*EndpointStatus)
 	for url, status := range et.endpoints {
 		result[url] = &EndpointStatus{
-			URL:           status.URL,
-			SuccessCount:  status.SuccessCount,
-			FailureCount:  status.FailureCount,
-			LastSuccess:   status.LastSuccess,
-			LastFailure:   status.LastFailure,
-			NextRetry:     status.NextRetry,
+			URL:            status.URL,
+			SuccessCount:   status.SuccessCount,
+			FailureCount:   status.FailureCount,
+			LastSuccess:    status.LastSuccess,
+			LastFailure:    status.LastFailure,
+			NextRetry:      status.NextRetry,
 			CurrentBackoff: status.CurrentBackoff,
-			SuccessRate:   status.SuccessRate,
+			SuccessRate:    status.SuccessRate,
 		}
 	}
-	
+
 	return result
 }

@@ -1,37 +1,19 @@
-//go:build cgo
-// +build cgo
+//go:build !cgo
+// +build !cgo
 
-// Package securechan provides secure channel communication with native C library integration.
-// This package offers enterprise-grade secure channel management with comprehensive error handling,
-// metrics collection, and circuit breaker protection for mission-critical Bitcoin Sprint operations.
+// Package securechan provides secure channel communication with fallback implementation
+// for environments where CGO is not available. This package offers the same API
+// interface as the CGO version but with a pure Go implementation for compatibility.
 package securechan
-
-/*
-#cgo LDFLAGS: -L. -lsecurechannel
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdbool.h>
-
-// C Library Interface for Secure Channel Operations
-extern void* secure_channel_new(const char* endpoint);
-extern void secure_channel_free(void* channel);
-extern bool secure_channel_start(void* channel);
-extern bool secure_channel_stop(void* channel);
-extern bool secure_channel_is_connected(void* channel);
-extern int secure_channel_send(void* channel, const char* data, int len);
-extern int secure_channel_receive(void* channel, char* buffer, int max_len);
-extern const char* secure_channel_get_error(void* channel);
-extern void secure_channel_reset_error(void* channel);
-*/
-import "C"
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"net"
 	"sync"
 	"time"
-	"unsafe"
 
 	"go.uber.org/zap"
 )
@@ -89,37 +71,6 @@ type ChannelMetrics struct {
 	AverageLatency      time.Duration
 }
 
-// Channel represents a secure communication channel with enterprise-grade features
-type Channel struct {
-	// Core channel data
-	ptr      unsafe.Pointer
-	endpoint string
-	state    ChannelState
-	
-	// Synchronization and lifecycle management
-	mu            sync.RWMutex
-	shutdownChan  chan struct{}
-	stateChan     chan ChannelState
-	
-	// Logging and monitoring
-	logger        *zap.Logger
-	metrics       *ChannelMetrics
-	
-	// Error handling and recovery
-	lastError     error
-	errorCount    int64
-	retryAttempts int
-	maxRetries    int
-	retryDelay    time.Duration
-	
-	// Lifecycle tracking
-	createdAt     time.Time
-	startedAt     *time.Time
-	
-	// Configuration
-	config        *ChannelConfig
-}
-
 // ChannelConfig holds configuration parameters for secure channel operations
 type ChannelConfig struct {
 	// Connection settings
@@ -169,7 +120,38 @@ func DefaultChannelConfig() *ChannelConfig {
 	}
 }
 
-// NewChannel creates a new secure channel with enterprise-grade configuration and monitoring
+// Channel represents a secure communication channel with pure Go implementation
+type Channel struct {
+	// Core channel data
+	conn      net.Conn
+	endpoint  string
+	state     ChannelState
+	
+	// Synchronization and lifecycle management
+	mu            sync.RWMutex
+	shutdownChan  chan struct{}
+	stateChan     chan ChannelState
+	
+	// Logging and monitoring
+	logger        *zap.Logger
+	metrics       *ChannelMetrics
+	
+	// Error handling and recovery
+	lastError     error
+	errorCount    int64
+	retryAttempts int
+	maxRetries    int
+	retryDelay    time.Duration
+	
+	// Lifecycle tracking
+	createdAt     time.Time
+	startedAt     *time.Time
+	
+	// Configuration
+	config        *ChannelConfig
+}
+
+// NewChannel creates a new secure channel with pure Go implementation
 func NewChannel(endpoint string, config *ChannelConfig, logger *zap.Logger) (*Channel, error) {
 	if endpoint == "" {
 		return nil, &SecureChannelError{
@@ -191,27 +173,12 @@ func NewChannel(endpoint string, config *ChannelConfig, logger *zap.Logger) (*Ch
 		}
 	}
 	
-	// Create C string for endpoint
-	cstr := C.CString(endpoint)
-	defer C.free(unsafe.Pointer(cstr))
-	
-	// Initialize secure channel via C library
-	ptr := C.secure_channel_new(cstr)
-	if ptr == nil {
-		return nil, &SecureChannelError{
-			Operation: "create",
-			Endpoint:  endpoint,
-			Err:       errors.New("failed to create secure channel instance"),
-		}
-	}
-	
 	channel := &Channel{
-		ptr:           ptr,
 		endpoint:      endpoint,
 		state:         StateDisconnected,
 		shutdownChan:  make(chan struct{}),
 		stateChan:     make(chan ChannelState, 10),
-		logger:        logger.With(zap.String("component", "securechan"), zap.String("endpoint", endpoint)),
+		logger:        logger.With(zap.String("component", "securechan"), zap.String("endpoint", endpoint), zap.String("implementation", "pure-go")),
 		metrics:       &ChannelMetrics{},
 		maxRetries:    config.MaxRetries,
 		retryDelay:    config.RetryDelay,
@@ -219,7 +186,7 @@ func NewChannel(endpoint string, config *ChannelConfig, logger *zap.Logger) (*Ch
 		config:        config,
 	}
 	
-	channel.logger.Info("Secure channel created",
+	channel.logger.Info("Secure channel created (pure Go implementation)",
 		zap.String("endpoint", endpoint),
 		zap.Time("created_at", channel.createdAt),
 		zap.Any("config", config))
@@ -227,7 +194,7 @@ func NewChannel(endpoint string, config *ChannelConfig, logger *zap.Logger) (*Ch
 	return channel, nil
 }
 
-// Start initiates the secure channel connection with retry logic and monitoring
+// Start initiates the secure channel connection with retry logic
 func (c *Channel) Start(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -237,7 +204,7 @@ func (c *Channel) Start(ctx context.Context) error {
 		return nil
 	}
 	
-	c.logger.Info("Starting secure channel connection",
+	c.logger.Info("Starting secure channel connection (pure Go)",
 		zap.String("endpoint", c.endpoint),
 		zap.Int("max_retries", c.maxRetries))
 	
@@ -261,8 +228,9 @@ func (c *Channel) Start(ctx context.Context) error {
 		}
 		
 		// Attempt connection
-		success := bool(C.secure_channel_start(c.ptr))
-		if success {
+		conn, err := c.createConnection(ctx)
+		if err == nil {
+			c.conn = conn
 			now := time.Now()
 			c.startedAt = &now
 			c.metrics.SuccessfulConnects++
@@ -283,7 +251,7 @@ func (c *Channel) Start(ctx context.Context) error {
 		
 		// Handle connection failure
 		c.metrics.FailedConnects++
-		lastErr = c.getLastError()
+		lastErr = err
 		c.logger.Warn("Connection attempt failed",
 			zap.Int("attempt", attempt+1),
 			zap.Error(lastErr))
@@ -327,16 +295,18 @@ func (c *Channel) Stop(ctx context.Context) error {
 	// Signal shutdown to monitoring goroutines
 	close(c.shutdownChan)
 	
-	// Stop the secure channel
-	success := bool(C.secure_channel_stop(c.ptr))
-	if !success {
-		lastErr := c.getLastError()
-		c.logger.Error("Failed to stop secure channel gracefully", zap.Error(lastErr))
-		return &SecureChannelError{
-			Operation: "stop",
-			Endpoint:  c.endpoint,
-			Err:       lastErr,
+	// Close the connection
+	if c.conn != nil {
+		err := c.conn.Close()
+		if err != nil {
+			c.logger.Error("Failed to close connection gracefully", zap.Error(err))
+			return &SecureChannelError{
+				Operation: "stop",
+				Endpoint:  c.endpoint,
+				Err:       err,
+			}
 		}
+		c.conn = nil
 	}
 	
 	c.setState(StateDisconnected)
@@ -344,12 +314,12 @@ func (c *Channel) Stop(ctx context.Context) error {
 	return nil
 }
 
-// Send transmits data through the secure channel with error handling and metrics tracking
+// Send transmits data through the secure channel
 func (c *Channel) Send(ctx context.Context, data []byte) (int, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	
-	if c.state != StateConnected {
+	if c.state != StateConnected || c.conn == nil {
 		return 0, &SecureChannelError{
 			Operation: "send",
 			Endpoint:  c.endpoint,
@@ -369,33 +339,31 @@ func (c *Channel) Send(ctx context.Context, data []byte) (int, error) {
 		}
 	}
 	
-	// Apply write timeout
-	ctx, cancel := context.WithTimeout(ctx, c.config.WriteTimeout)
-	defer cancel()
+	// Set write deadline
+	deadline := time.Now().Add(c.config.WriteTimeout)
+	if err := c.conn.SetWriteDeadline(deadline); err != nil {
+		return 0, &SecureChannelError{
+			Operation: "send",
+			Endpoint:  c.endpoint,
+			Err:       fmt.Errorf("failed to set write deadline: %w", err),
+		}
+	}
 	
 	startTime := time.Now()
-	
-	// Convert Go bytes to C char array
-	cdata := C.CString(string(data))
-	defer C.free(unsafe.Pointer(cdata))
-	
-	// Send data through secure channel
-	bytesSent := int(C.secure_channel_send(c.ptr, cdata, C.int(len(data))))
-	
+	bytesSent, err := c.conn.Write(data)
 	duration := time.Since(startTime)
 	
-	if bytesSent < 0 {
+	if err != nil {
 		c.metrics.ErrorCount++
-		lastErr := c.getLastError()
 		c.logger.Error("Failed to send data",
 			zap.Int("data_size", len(data)),
 			zap.Duration("duration", duration),
-			zap.Error(lastErr))
+			zap.Error(err))
 		
 		return 0, &SecureChannelError{
 			Operation: "send",
 			Endpoint:  c.endpoint,
-			Err:       lastErr,
+			Err:       err,
 		}
 	}
 	
@@ -411,12 +379,12 @@ func (c *Channel) Send(ctx context.Context, data []byte) (int, error) {
 	return bytesSent, nil
 }
 
-// Receive reads data from the secure channel with timeout and error handling
+// Receive reads data from the secure channel
 func (c *Channel) Receive(ctx context.Context, buffer []byte) (int, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	
-	if c.state != StateConnected {
+	if c.state != StateConnected || c.conn == nil {
 		return 0, &SecureChannelError{
 			Operation: "receive",
 			Endpoint:  c.endpoint,
@@ -428,39 +396,35 @@ func (c *Channel) Receive(ctx context.Context, buffer []byte) (int, error) {
 		return 0, errors.New("receive buffer cannot be empty")
 	}
 	
-	// Apply read timeout
-	ctx, cancel := context.WithTimeout(ctx, c.config.ReadTimeout)
-	defer cancel()
+	// Set read deadline
+	deadline := time.Now().Add(c.config.ReadTimeout)
+	if err := c.conn.SetReadDeadline(deadline); err != nil {
+		return 0, &SecureChannelError{
+			Operation: "receive",
+			Endpoint:  c.endpoint,
+			Err:       fmt.Errorf("failed to set read deadline: %w", err),
+		}
+	}
 	
 	startTime := time.Now()
-	
-	// Allocate C buffer
-	cbuffer := (*C.char)(C.malloc(C.size_t(len(buffer))))
-	defer C.free(unsafe.Pointer(cbuffer))
-	
-	// Receive data through secure channel
-	bytesReceived := int(C.secure_channel_receive(c.ptr, cbuffer, C.int(len(buffer))))
-	
+	bytesReceived, err := c.conn.Read(buffer)
 	duration := time.Since(startTime)
 	
-	if bytesReceived < 0 {
+	if err != nil {
 		c.metrics.ErrorCount++
-		lastErr := c.getLastError()
 		c.logger.Error("Failed to receive data",
 			zap.Int("buffer_size", len(buffer)),
 			zap.Duration("duration", duration),
-			zap.Error(lastErr))
+			zap.Error(err))
 		
 		return 0, &SecureChannelError{
 			Operation: "receive",
 			Endpoint:  c.endpoint,
-			Err:       lastErr,
+			Err:       err,
 		}
 	}
 	
 	if bytesReceived > 0 {
-		// Copy received data to Go buffer
-		copy(buffer, C.GoBytes(unsafe.Pointer(cbuffer), C.int(bytesReceived)))
 		c.metrics.BytesReceived += int64(bytesReceived)
 	}
 	
@@ -479,12 +443,7 @@ func (c *Channel) IsConnected() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	
-	if c.state != StateConnected {
-		return false
-	}
-	
-	// Verify connection status via C library
-	return bool(C.secure_channel_is_connected(c.ptr))
+	return c.state == StateConnected && c.conn != nil
 }
 
 // GetState returns the current state of the secure channel
@@ -517,10 +476,6 @@ func (c *Channel) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	
-	if c.ptr == nil {
-		return nil
-	}
-	
 	c.logger.Info("Closing secure channel", zap.String("endpoint", c.endpoint))
 	
 	// Signal shutdown to any running goroutines
@@ -531,16 +486,49 @@ func (c *Channel) Close() error {
 		close(c.shutdownChan)
 	}
 	
-	// Free C resources
-	C.secure_channel_free(c.ptr)
-	c.ptr = nil
-	c.setState(StateDisconnected)
+	// Close connection if it exists
+	if c.conn != nil {
+		err := c.conn.Close()
+		if err != nil {
+			c.logger.Warn("Error closing connection", zap.Error(err))
+		}
+		c.conn = nil
+	}
 	
+	c.setState(StateDisconnected)
 	c.logger.Info("Secure channel closed successfully")
 	return nil
 }
 
 // Private helper methods
+
+func (c *Channel) createConnection(ctx context.Context) (net.Conn, error) {
+	dialer := &net.Dialer{
+		Timeout: c.config.ConnectionTimeout,
+	}
+	
+	// Parse endpoint to determine protocol
+	if c.config.EnableEncryption {
+		// Use TLS connection
+		tlsConfig := &tls.Config{
+			ServerName: c.endpoint,
+			MinVersion: tls.VersionTLS12,
+		}
+		
+		if c.config.CertificatePath != "" && c.config.KeyPath != "" {
+			cert, err := tls.LoadX509KeyPair(c.config.CertificatePath, c.config.KeyPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load TLS certificate: %w", err)
+			}
+			tlsConfig.Certificates = []tls.Certificate{cert}
+		}
+		
+		return tls.DialWithDialer(dialer, "tcp", c.endpoint, tlsConfig)
+	}
+	
+	// Use plain TCP connection
+	return dialer.DialContext(ctx, "tcp", c.endpoint)
+}
 
 func (c *Channel) setState(newState ChannelState) {
 	oldState := c.state
@@ -558,26 +546,6 @@ func (c *Channel) setState(newState ChannelState) {
 			zap.String("old_state", oldState.String()),
 			zap.String("new_state", newState.String()))
 	}
-}
-
-func (c *Channel) getLastError() error {
-	if c.ptr == nil {
-		return errors.New("channel pointer is nil")
-	}
-	
-	cErr := C.secure_channel_get_error(c.ptr)
-	if cErr == nil {
-		return errors.New("unknown error")
-	}
-	
-	errStr := C.GoString(cErr)
-	C.secure_channel_reset_error(c.ptr)
-	
-	if errStr == "" {
-		return errors.New("empty error message")
-	}
-	
-	return errors.New(errStr)
 }
 
 func (c *Channel) calculateRetryDelay(attempt int) time.Duration {
@@ -598,7 +566,6 @@ func (c *Channel) updateLatencyMetrics(duration time.Duration) {
 	}
 	
 	// Simple running average calculation
-	// In production, consider using a more sophisticated algorithm
 	if c.metrics.AverageLatency == 0 {
 		c.metrics.AverageLatency = duration
 	} else {
@@ -629,7 +596,7 @@ func (c *Channel) collectHealthMetrics() {
 	if c.state == StateConnected && c.startedAt != nil {
 		uptime := time.Since(*c.startedAt)
 		
-		c.logger.Debug("Health check",
+		c.logger.Debug("Health check (pure Go)",
 			zap.String("endpoint", c.endpoint),
 			zap.String("state", c.state.String()),
 			zap.Duration("uptime", uptime),

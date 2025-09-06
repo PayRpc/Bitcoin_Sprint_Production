@@ -3,6 +3,7 @@ package circuitbreaker
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -365,4 +366,432 @@ func (cb *EnterpriseCircuitBreaker) Shutdown(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// Core implementation methods
+
+// allowRequest determines if a request should be allowed
+func (cb *EnterpriseCircuitBreaker) allowRequest() bool {
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
+
+	// Handle forced states
+	if cb.forceState != nil {
+		switch *cb.forceState {
+		case StateForceOpen:
+			return false
+		case StateForceClose:
+			return true
+		}
+	}
+
+	switch cb.state {
+	case StateClosed:
+		return true
+	case StateOpen:
+		// Check if it's time to try half-open
+		if time.Since(cb.stateChangedAt) >= cb.config.ResetTimeout {
+			cb.changeState(StateHalfOpen)
+			return true
+		}
+		return false
+	case StateHalfOpen:
+		// Allow limited requests in half-open state
+		halfOpenCalls := atomic.LoadInt64(&cb.halfOpenCalls)
+		return halfOpenCalls < int64(cb.config.HalfOpenMaxCalls)
+	default:
+		return false
+	}
+}
+
+// executeWithMonitoring executes function with comprehensive monitoring
+func (cb *EnterpriseCircuitBreaker) executeWithMonitoring(ctx context.Context, fn func() (interface{}, error), startTime time.Time) *ExecutionResult {
+	result := &ExecutionResult{
+		State:   cb.state,
+		Attempt: 1,
+	}
+
+	// Create execution context with timeout
+	execCtx := ctx
+	if cb.config.Timeout > 0 {
+		var cancel context.CancelFunc
+		execCtx, cancel = context.WithTimeout(ctx, cb.config.Timeout)
+		defer cancel()
+	}
+
+	// Execute in goroutine for timeout handling
+	resultChan := make(chan struct {
+		value interface{}
+		err   error
+	}, 1)
+
+	go func() {
+		value, err := fn()
+		resultChan <- struct {
+			value interface{}
+			err   error
+		}{value, err}
+	}()
+
+	// Wait for completion or timeout
+	select {
+	case res := <-resultChan:
+		result.Duration = time.Since(startTime)
+		result.Success = res.err == nil
+		result.Error = res.err
+		
+		if res.err != nil {
+			result.FailureType = cb.classifyFailure(res.err, result.Duration)
+		}
+
+	case <-execCtx.Done():
+		result.Duration = time.Since(startTime)
+		result.Success = false
+		result.Error = fmt.Errorf("execution timeout after %v", result.Duration)
+		result.FailureType = FailureTypeTimeout
+	}
+
+	return result
+}
+
+// recordResult records execution result and updates circuit breaker state
+func (cb *EnterpriseCircuitBreaker) recordResult(result *ExecutionResult) {
+	atomic.AddInt64(&cb.metrics.TotalRequests, 1)
+
+	if result.Success {
+		atomic.AddInt64(&cb.metrics.SuccessfulRequests, 1)
+		cb.onSuccess(result)
+	} else {
+		atomic.AddInt64(&cb.metrics.FailedRequests, 1)
+		cb.onFailure(result)
+	}
+
+	// Update latency tracking
+	cb.updateLatencyMetrics(result.Duration)
+
+	// Update sliding window
+	if cb.slidingWindow != nil {
+		cb.slidingWindow.Record(result.Success, result.Duration)
+	}
+
+	// Update health scorer
+	if cb.healthScorer != nil {
+		cb.healthScorer.RecordResult(result.Success, result.Duration)
+	}
+}
+
+// onSuccess handles successful execution
+func (cb *EnterpriseCircuitBreaker) onSuccess(result *ExecutionResult) {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	atomic.AddInt64(&cb.consecutiveSuccesses, 1)
+	atomic.StoreInt64(&cb.consecutiveFailures, 0)
+	cb.lastSuccessTime = time.Now()
+
+	switch cb.state {
+	case StateHalfOpen:
+		successCount := atomic.LoadInt64(&cb.consecutiveSuccesses)
+		if successCount >= int64(cb.config.HalfOpenMaxCalls) {
+			cb.changeState(StateClosed)
+		}
+	}
+
+	// Notify callback
+	if cb.config.OnRecovery != nil && cb.consecutiveFailures == 0 {
+		recoveryTime := time.Since(cb.lastFailureTime)
+		go cb.config.OnRecovery(cb.config.Name, recoveryTime)
+	}
+}
+
+// onFailure handles failed execution
+func (cb *EnterpriseCircuitBreaker) onFailure(result *ExecutionResult) {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	atomic.AddInt64(&cb.consecutiveFailures, 1)
+	atomic.StoreInt64(&cb.consecutiveSuccesses, 0)
+	cb.lastFailureTime = time.Now()
+
+	switch cb.state {
+	case StateClosed:
+		if atomic.LoadInt64(&cb.consecutiveFailures) >= int64(cb.config.MaxFailures) {
+			cb.changeState(StateOpen)
+		}
+	case StateHalfOpen:
+		cb.changeState(StateOpen)
+	}
+
+	// Notify callback
+	if cb.config.OnFailure != nil {
+		go cb.config.OnFailure(cb.config.Name, result.FailureType)
+	}
+}
+
+// changeState changes the circuit breaker state
+func (cb *EnterpriseCircuitBreaker) changeState(newState State) {
+	if cb.state == newState {
+		return
+	}
+
+	oldState := cb.state
+	cb.state = newState
+	cb.stateChangedAt = time.Now()
+
+	// Reset counters for specific state transitions
+	switch newState {
+	case StateHalfOpen:
+		atomic.StoreInt64(&cb.halfOpenCalls, 0)
+	case StateClosed:
+		atomic.StoreInt64(&cb.consecutiveFailures, 0)
+	case StateOpen:
+		atomic.StoreInt64(&cb.halfOpenCalls, 0)
+	}
+
+	atomic.AddInt64(&cb.metrics.StateChanges, 1)
+	cb.metrics.LastStateChange = time.Now()
+
+	cb.notifyStateChange(oldState, newState)
+}
+
+// notifyStateChange notifies about state changes
+func (cb *EnterpriseCircuitBreaker) notifyStateChange(from, to State) {
+	if cb.config.OnStateChange != nil {
+		go cb.config.OnStateChange(cb.config.Name, from, to)
+	}
+
+	if cb.logger != nil {
+		cb.logger.Info("Circuit breaker state changed",
+			zap.String("name", cb.config.Name),
+			zap.String("from", from.String()),
+			zap.String("to", to.String()))
+	}
+}
+
+// classifyFailure determines the type of failure
+func (cb *EnterpriseCircuitBreaker) classifyFailure(err error, duration time.Duration) FailureType {
+	if duration >= cb.config.Timeout {
+		return FailureTypeTimeout
+	}
+
+	if duration >= cb.config.LatencyThreshold {
+		return FailureTypeLatency
+	}
+
+	// Check error type
+	errStr := err.Error()
+	if contains(errStr, "timeout", "deadline") {
+		return FailureTypeTimeout
+	}
+	if contains(errStr, "resource", "limit", "quota") {
+		return FailureTypeResource
+	}
+
+	return FailureTypeError
+}
+
+// updateLatencyMetrics updates latency tracking
+func (cb *EnterpriseCircuitBreaker) updateLatencyMetrics(duration time.Duration) {
+	cb.metrics.mu.Lock()
+	defer cb.metrics.mu.Unlock()
+
+	// Update min/max
+	if cb.metrics.MinLatency == 0 || duration < cb.metrics.MinLatency {
+		cb.metrics.MinLatency = duration
+	}
+	if duration > cb.metrics.MaxLatency {
+		cb.metrics.MaxLatency = duration
+	}
+
+	// Add to history for percentile calculation
+	cb.latencyHistory = append(cb.latencyHistory, duration)
+	if len(cb.latencyHistory) > 1000 {
+		cb.latencyHistory = cb.latencyHistory[1:]
+	}
+
+	// Calculate average (simple moving average)
+	if len(cb.latencyHistory) > 0 {
+		var total time.Duration
+		for _, d := range cb.latencyHistory {
+			total += d
+		}
+		cb.metrics.AverageLatency = total / time.Duration(len(cb.latencyHistory))
+	}
+}
+
+// adaptTierSettings adapts settings based on tier configuration
+func (cb *EnterpriseCircuitBreaker) adaptTierSettings(tierConfig TierConfig) {
+	cb.config.MaxFailures = tierConfig.FailureThreshold
+	cb.config.ResetTimeout = tierConfig.ResetTimeout
+	cb.config.HalfOpenMaxCalls = tierConfig.HalfOpenMaxCalls
+}
+
+// startBackgroundWorkers starts background maintenance workers
+func (cb *EnterpriseCircuitBreaker) startBackgroundWorkers() {
+	// Metrics aggregation worker
+	cb.workerGroup.Add(1)
+	go cb.metricsWorker()
+
+	// Health monitoring worker
+	if cb.config.EnableHealthScoring {
+		cb.workerGroup.Add(1)
+		go cb.healthWorker()
+	}
+
+	// Adaptive threshold worker
+	if cb.config.EnableAdaptive {
+		cb.workerGroup.Add(1)
+		go cb.adaptiveWorker()
+	}
+}
+
+// metricsWorker handles periodic metrics aggregation
+func (cb *EnterpriseCircuitBreaker) metricsWorker() {
+	defer cb.workerGroup.Done()
+
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			cb.aggregateMetrics()
+		case <-cb.shutdownChan:
+			return
+		}
+	}
+}
+
+// healthWorker monitors circuit breaker health
+func (cb *EnterpriseCircuitBreaker) healthWorker() {
+	defer cb.workerGroup.Done()
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			cb.checkHealth()
+		case <-cb.shutdownChan:
+			return
+		}
+	}
+}
+
+// adaptiveWorker handles adaptive threshold adjustments
+func (cb *EnterpriseCircuitBreaker) adaptiveWorker() {
+	defer cb.workerGroup.Done()
+
+	ticker := time.NewTicker(2 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			cb.adjustAdaptiveThreshold()
+		case <-cb.shutdownChan:
+			return
+		}
+	}
+}
+
+// aggregateMetrics performs periodic metrics aggregation
+func (cb *EnterpriseCircuitBreaker) aggregateMetrics() {
+	// Calculate percentiles from latency history
+	if len(cb.latencyHistory) > 0 {
+		sorted := make([]time.Duration, len(cb.latencyHistory))
+		copy(sorted, cb.latencyHistory)
+		
+		// Simple sort for percentiles (could use more efficient algorithm)
+		for i := 0; i < len(sorted); i++ {
+			for j := i + 1; j < len(sorted); j++ {
+				if sorted[i] > sorted[j] {
+					sorted[i], sorted[j] = sorted[j], sorted[i]
+				}
+			}
+		}
+
+		cb.metrics.mu.Lock()
+		if len(sorted) > 0 {
+			cb.metrics.P50Latency = sorted[len(sorted)*50/100]
+			cb.metrics.P95Latency = sorted[len(sorted)*95/100]
+			cb.metrics.P99Latency = sorted[len(sorted)*99/100]
+		}
+		cb.metrics.mu.Unlock()
+	}
+}
+
+// checkHealth performs health assessment
+func (cb *EnterpriseCircuitBreaker) checkHealth() {
+	if cb.healthScorer != nil {
+		health := cb.healthScorer.CalculateHealth()
+		
+		cb.metrics.mu.Lock()
+		cb.metrics.HealthScore = health
+		cb.metrics.mu.Unlock()
+
+		// Take action based on health score
+		if health < cb.config.HealthThreshold {
+			cb.logger.Warn("Circuit breaker health score low",
+				zap.String("name", cb.config.Name),
+				zap.Float64("health_score", health),
+				zap.Float64("threshold", cb.config.HealthThreshold))
+		}
+	}
+}
+
+// adjustAdaptiveThreshold adjusts thresholds based on recent performance
+func (cb *EnterpriseCircuitBreaker) adjustAdaptiveThreshold() {
+	if cb.adaptiveThreshold != nil {
+		newThreshold := cb.adaptiveThreshold.Adjust()
+		
+		cb.mu.Lock()
+		cb.config.FailureThreshold = newThreshold
+		cb.mu.Unlock()
+
+		cb.logger.Debug("Adaptive threshold adjusted",
+			zap.String("name", cb.config.Name),
+			zap.Float64("new_threshold", newThreshold))
+	}
+}
+
+// Utility functions
+
+// validateConfig validates circuit breaker configuration
+func validateConfig(cfg *Config) error {
+	if cfg.Name == "" {
+		return fmt.Errorf("name is required")
+	}
+	if cfg.MaxFailures <= 0 {
+		return fmt.Errorf("max failures must be positive")
+	}
+	if cfg.ResetTimeout <= 0 {
+		return fmt.Errorf("reset timeout must be positive")
+	}
+	if cfg.HalfOpenMaxCalls <= 0 {
+		return fmt.Errorf("half open max calls must be positive")
+	}
+	if cfg.FailureThreshold < 0 || cfg.FailureThreshold > 1 {
+		return fmt.Errorf("failure threshold must be between 0 and 1")
+	}
+	return nil
+}
+
+// newCircuitBreakerMetrics creates new metrics instance
+func newCircuitBreakerMetrics() *CircuitBreakerMetrics {
+	return &CircuitBreakerMetrics{
+		TimeInState: make(map[State]time.Duration),
+	}
+}
+
+// contains checks if any of the target strings are contained in the source
+func contains(source string, targets ...string) bool {
+	source = strings.ToLower(source)
+	for _, target := range targets {
+		if strings.Contains(source, strings.ToLower(target)) {
+			return true
+		}
+	}
+	return false
 }

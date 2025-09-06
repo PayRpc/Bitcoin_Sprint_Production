@@ -25,6 +25,9 @@ import (
 
 	"github.com/PayRpc/Bitcoin-Sprint/internal/api"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks/bitcoin"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks/ethereum"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/blocks/solana"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/broadcaster"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/cache"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/circuitbreaker"
@@ -81,6 +84,7 @@ type ServiceManager struct {
 	// Core services
 	mempool         *mempool.Mempool
 	cache           *cache.Cache
+	blockProcessor  *blocks.BlockProcessor
 	broadcaster     *broadcaster.Broadcaster
 	throttleManager *throttle.EndpointThrottle
 	relayDispatcher *relay.RelayDispatcher
@@ -296,6 +300,13 @@ func (sm *ServiceManager) Shutdown(ctx context.Context) error {
 		}
 	}
 
+	// Stop block processor
+	if sm.blockProcessor != nil {
+		if err := sm.blockProcessor.Shutdown(ctx); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("block processor shutdown: %w", err))
+		}
+	}
+
 	// Cancel context and wait for goroutines
 	sm.cancel()
 
@@ -452,6 +463,20 @@ func (sm *ServiceManager) initializeCircuitBreakers() {
 			Logger:           sm.logger,
 		},
 	)
+
+	// Circuit breaker for block processing
+	sm.circuitBreakers["block_processing"] = circuitbreaker.NewCircuitBreaker(
+		circuitbreaker.Config{
+			Name:             "block_processing",
+			MaxFailures:      5,
+			ResetTimeout:     45 * time.Second,
+			FailureThreshold: 0.6,
+			SuccessThreshold: 3,
+			Timeout:          30 * time.Second,
+			OnStateChange:    sm.onCircuitBreakerStateChange,
+			Logger:           sm.logger,
+		},
+	)
 }
 
 // initializeDatabase connects to database with retry logic and runs migrations
@@ -557,6 +582,39 @@ func (sm *ServiceManager) initializeCoreServices() error {
 	if err != nil {
 		return fmt.Errorf("failed to create relay dispatcher: %w", err)
 	}
+
+	// Initialize BlockProcessor with configuration
+	processorConfig := blocks.ProcessorConfig{
+		MaxConcurrentBlocks: 64,
+		ProcessingTimeout:   30 * time.Second,
+		ValidationTimeout:   10 * time.Second,
+		RetryAttempts:       3,
+		RetryDelay:          100 * time.Millisecond,
+		CircuitBreaker:      sm.circuitBreakers["block_processing"],
+	}
+
+	sm.blockProcessor, err = blocks.NewBlockProcessor(processorConfig, sm.logger)
+	if err != nil {
+		return fmt.Errorf("failed to create block processor: %w", err)
+	}
+
+	// Register blockchain validators
+	bitcoinValidator := bitcoin.NewValidator(sm.logger)
+	ethereumValidator := ethereum.NewValidator(sm.logger)
+	solanaValidator := solana.NewValidator(sm.logger)
+
+	sm.blockProcessor.RegisterValidator("bitcoin", bitcoinValidator)
+	sm.blockProcessor.RegisterValidator("ethereum", ethereumValidator)
+	sm.blockProcessor.RegisterValidator("solana", solanaValidator)
+
+	// Register blockchain processors
+	bitcoinProcessor := bitcoin.NewProcessor(sm.logger)
+	ethereumProcessor := ethereum.NewProcessor(sm.logger)
+	solanaProcessor := solana.NewProcessor(sm.logger)
+
+	sm.blockProcessor.RegisterProcessor("bitcoin", bitcoinProcessor)
+	sm.blockProcessor.RegisterProcessor("ethereum", ethereumProcessor)
+	sm.blockProcessor.RegisterProcessor("solana", solanaProcessor)
 
 	return nil
 }
