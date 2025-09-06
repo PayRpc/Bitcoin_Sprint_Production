@@ -1011,11 +1011,11 @@
                 for (const backend of this.backends) {
                     try {
                         const url = `http://localhost:${backend.port}/health`;
-                        const response = await fetch(url, { 
+                        const response = await fetch(url, {
                             method: 'GET',
                             signal: AbortSignal.timeout(2000)
                         });
-                        
+
                         if (response.ok) {
                             this.activeBackend = {
                                 tier: backend.tier,
@@ -1106,7 +1106,7 @@
                 // Ensure we have the latest backend URL
                 const apiBase = await backendDetector.getApiBase();
                 const metricsUrl = await backendDetector.getMetricsUrl();
-                
+
                 // Fetch health from detected Bitcoin backend
                 const healthResponse = await fetch(`${apiBase}/health`);
                 if (!healthResponse.ok) throw new Error(`HTTP ${healthResponse.status}`);

@@ -35,6 +35,17 @@ __pycache__/
 *.so
 *.dylib
 *.dll
+
+# Go files - prevent loose files in root
+/benchmark*.go
+/test_*.go
+/standalone_test.go
+/runtime*.go
+!cmd/
+!internal/
+!examples/
+!src/
+
 # Node.js / Next.js
 /node_modules/
 /web/node_modules/
@@ -404,4 +415,64 @@ sprintd-test
 secure/rust/Cargo.lock
 # Go build cache and temp files
 # Python additional patterns
+# ────────── PROJECT STRUCTURE PROTECTION ──────────
+# CRITICAL: Prevent loose files from cluttering root directory!
+# These patterns maintain our clean enterprise folder structure
+
+# PowerShell scripts must go in scripts/powershell/
+/*.ps1
+/*-test.ps1
+/*-monitoring.ps1
+/*-cleanup.ps1
+/emergency-*.ps1
+/validate-*.ps1
+/analyze-*.ps1
+/tier-*.ps1
+/speed-*.ps1
+/handshake-*.ps1
+/test-*.ps1
+/start-*.ps1
+/stop-*.ps1
+/run-*.ps1
+
+# JavaScript files must go in proper web structure
+/*.js
+/test-*.js
+/demo-*.js
+/monitor-*.js
+/entropy-*.js
+/smart-*.js
+/simple-*.js
+/setup-*.js
+/examples.js
+/utils.js
+/bridge*.js
+fraction.js
+
+# Docker/YAML configs must go in docker/ or config/
+/*.yml
+/*.yaml
+/docker-compose*.yml
+/monitoring*.yml
+/prometheus*.yml
+/grafana*.yml
+/simple*.yml
+
+# Prevent legacy simple_api return
+/simple_api/
+/simple-api/
+/api-simple/
+
+# Prevent legacy backup directories
+Bitcoin_Sprint_*_Backup_*/
+Bitcoin_Sprint_Cleaned_*/
+
+# Empty file prevention (common corruption pattern)
+/*-empty.*
+
+# Backup and temporary cleanup artifacts
+/*-backup*/
+/*-cleaned*/
+/*-temp*/
+
 # ────────── End of .gitignore ──────────
