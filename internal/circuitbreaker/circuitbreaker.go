@@ -217,13 +217,23 @@ func NewEnterpriseCircuitBreaker(cfg Config) (*EnterpriseCircuitBreaker, error) 
 
 	// Create an EnterpriseConfig with defaults from base Config
 	enterpriseConfig := &EnterpriseConfig{
-		Name:             cfg.Name,
-		FailureThreshold: cfg.FailureThreshold,
+		Config: Config{
+			Name:                   cfg.Name,
+			FailureThreshold:       cfg.FailureThreshold,
+			SuccessThreshold:       cfg.SuccessThreshold,
+			Timeout:                cfg.Timeout,
+			HalfOpenMaxConcurrency: cfg.HalfOpenMaxConcurrency,
+			MinSamples:             cfg.MinSamples,
+			TripStrategy:           cfg.TripStrategy,
+			CooldownStrategy:       cfg.CooldownStrategy,
+			Logger:                 cfg.Logger,
+			Metrics:                cfg.Metrics,
+			TierSettings:           cfg.TierSettings,
+			EnableHealthScoring:    cfg.EnableHealthScoring,
+		},
 		MaxFailures:      int(cfg.FailureThreshold * 10), // Convert to count
 		ResetTimeout:     cfg.Timeout,
 		HalfOpenMaxCalls: cfg.HalfOpenMaxConcurrency,
-		Timeout:          cfg.Timeout,
-		MinSamples:       cfg.MinSamples,
 		TierSettings:     tierConfigs,
 	}
 
@@ -503,13 +513,11 @@ func (cb *EnterpriseCircuitBreaker) recordResult(result *ExecutionResult) {
 	if cb.healthScorer != nil {
 		// Create metrics from result and update health scorer
 		metrics := HealthMetrics{
-			SuccessRate:    1.0,
-			ErrorRate:      0.0,
-			AvgLatency:     result.Duration,
-			P50Latency:     result.Duration,
-			P95Latency:     result.Duration,
-			P99Latency:     result.Duration,
-			ThroughputRate: 1.0,
+			SuccessRate:         1.0,
+			ErrorRate:           0.0,
+			AverageLatency:      result.Duration,
+			ResourceUtilization: 0.1,
+			ThroughputRate:      1.0,
 		}
 		if !result.Success {
 			metrics.SuccessRate = 0.0
@@ -783,7 +791,7 @@ func (cb *EnterpriseCircuitBreaker) checkHealth() {
 // adjustAdaptiveThreshold adjusts thresholds based on recent performance
 func (cb *EnterpriseCircuitBreaker) adjustAdaptiveThreshold() {
 	if cb.adaptiveThreshold != nil {
-		newThreshold := cb.adaptiveThreshold.Adjust()
+		newThreshold := cb.adaptiveThreshold.AdjustThreshold(0.5) // Pass current performance
 		
 		cb.mu.Lock()
 		cb.config.FailureThreshold = newThreshold
@@ -799,6 +807,23 @@ func (cb *EnterpriseCircuitBreaker) adjustAdaptiveThreshold() {
 
 // validateConfig validates circuit breaker configuration
 func validateConfig(cfg *Config) error {
+	if cfg.Name == "" {
+		return fmt.Errorf("name is required")
+	}
+	if cfg.FailureThreshold < 0 || cfg.FailureThreshold > 1 {
+		return fmt.Errorf("failure threshold must be between 0 and 1")
+	}
+	if cfg.Timeout <= 0 {
+		return fmt.Errorf("timeout must be positive")
+	}
+	if cfg.HalfOpenMaxConcurrency <= 0 {
+		return fmt.Errorf("half open max concurrency must be positive")
+	}
+	return nil
+}
+
+// validateEnterpriseConfig validates enterprise circuit breaker configuration
+func validateEnterpriseConfig(cfg *EnterpriseConfig) error {
 	if cfg.Name == "" {
 		return fmt.Errorf("name is required")
 	}

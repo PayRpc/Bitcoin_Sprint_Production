@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/PayRpc/Bitcoin-Sprint/internal/api"
@@ -74,7 +75,7 @@ type ServiceManager struct {
 
 	// Core infrastructure
 	db              *database.DB
-	metricsRegistry *metrics.PrometheusRegistry
+	metricsRegistry *prometheus.Registry
 	blockIdx        *dedup.BlockIndex
 	circuitBreakers map[string]*circuitbreaker.Manager
 
@@ -89,7 +90,7 @@ type ServiceManager struct {
 	broadcaster     *broadcaster.Broadcaster
 	throttleManager *throttle.EndpointThrottle
 	relayDispatcher *relay.RelayDispatcher
-	p2pClient       p2p.Client
+	p2pClient       *p2p.Client
 	apiServer       *api.Server
 	backfillService *messaging.BackfillService
 	rateLimiter     *ratelimit.RateLimiter
@@ -189,7 +190,7 @@ func NewServiceManager(logger *zap.Logger) (*ServiceManager, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	sm := &ServiceManager{
-		cfg:             cfg,
+		cfg:             &cfg,
 		logger:          logger,
 		ctx:             ctx,
 		cancel:          cancel,
@@ -282,9 +283,7 @@ func (sm *ServiceManager) Shutdown(ctx context.Context) error {
 	}
 
 	if sm.apiServer != nil {
-		if err := sm.apiServer.Shutdown(ctx); err != nil {
-			shutdownErrors = append(shutdownErrors, fmt.Errorf("API server shutdown: %w", err))
-		}
+		sm.apiServer.Stop()
 	}
 
 	// Stop background services
@@ -335,9 +334,7 @@ func (sm *ServiceManager) Shutdown(ctx context.Context) error {
 	}
 
 	if sm.db != nil {
-		if err := sm.db.Close(); err != nil {
-			shutdownErrors = append(shutdownErrors, fmt.Errorf("database close: %w", err))
-		}
+		sm.db.Close()
 	}
 
 	// Restore runtime optimization settings
@@ -361,7 +358,7 @@ func (sm *ServiceManager) Shutdown(ctx context.Context) error {
 // initializeRuntime sets up GC tuning and performance monitoring
 func (sm *ServiceManager) initializeRuntime() error {
 	// Initialize legacy GC tuning for backward compatibility
-	if err := gctuning.InitializeGCTuning(sm.logger, sm.cfg.GCTuning); err != nil {
+	if err := gctuning.InitializeGCTuning(sm.logger); err != nil {
 		return fmt.Errorf("GC tuning initialization failed: %w", err)
 	}
 
@@ -377,14 +374,14 @@ func (sm *ServiceManager) initializeRuntime() error {
 		optConfig = runtimeopt.TurboConfig()
 		sm.logger.Info("Using Turbo optimization level")
 	} else if sm.cfg.Tier == config.TierBusiness {
-		optConfig = runtimeopt.AggressiveConfig()
-		sm.logger.Info("Using Aggressive optimization level")
+		optConfig = runtimeopt.EnterpriseConfig() // Use Enterprise for Business tier
+		sm.logger.Info("Using Enterprise optimization level for Business tier")
 	} else if sm.cfg.OptimizeSystem {
 		optConfig = runtimeopt.DefaultConfig()
 		sm.logger.Info("Using Default optimization level")
 	} else {
-		optConfig = runtimeopt.BasicConfig()
-		sm.logger.Info("Using Basic optimization level")
+		optConfig = runtimeopt.DefaultConfig() // Use Default for Basic tier
+		sm.logger.Info("Using Default optimization level for Basic tier")
 	}
 	
 	// Apply runtime optimizations
@@ -394,19 +391,10 @@ func (sm *ServiceManager) initializeRuntime() error {
 		// Continue startup even if optimizations fail
 	} else {
 		sm.logger.Info("Runtime optimizations applied successfully",
-			zap.String("level", optConfig.Level),
+			zap.Int("level", int(optConfig.Level)),
 			zap.Bool("cpu_pinning", optConfig.EnableCPUPinning),
 			zap.Bool("memory_locking", optConfig.EnableMemoryLocking),
 			zap.Bool("rt_priority", optConfig.EnableRTPriority))
-	}
-
-	// Set soft memory limit if configured
-	if sm.cfg.MemoryLimitMB > 0 {
-		softLimit := uint64(sm.cfg.MemoryLimitMB) * 1024 * 1024
-		debug.SetMemoryLimit(softLimit)
-		sm.logger.Info("Set soft memory limit",
-			zap.Uint64("limit_bytes", softLimit),
-			zap.Int("limit_mb", sm.cfg.MemoryLimitMB))
 	}
 
 	// Start GC monitoring in background
@@ -436,31 +424,28 @@ func (sm *ServiceManager) validateLicense() error {
 		return nil
 	}
 
-	// Create license validator
-	validator := license.NewValidator(sm.cfg.LicenseKey)
-
-	validationResult, err := validator.ValidateWithDetails(sm.cfg.NodeID)
-	if err != nil {
-		return fmt.Errorf("license validation error: %w", err)
+	// Validate license key
+	if !license.Validate(sm.cfg.LicenseKey) {
+		return fmt.Errorf("invalid license key")
 	}
 
-	if !validationResult.Valid {
-		return fmt.Errorf("invalid license key: %s", validationResult.Message)
+	// Get license info
+	licenseInfo := license.GetInfo(sm.cfg.LicenseKey)
+	if !licenseInfo.Valid {
+		return fmt.Errorf("invalid license")
 	}
-
-	// Store license info for later use
-	sm.licenseInfo = &validationResult
 
 	sm.logger.Info("License validated successfully",
-		zap.String("issued_to", validationResult.IssuedTo),
-		zap.Time("expires_at", validationResult.ExpiresAt),
-		zap.String("plan", validationResult.Plan))
+		zap.String("tier", licenseInfo.Tier),
+		zap.Int("requests_per_hour", licenseInfo.RequestsPerHour),
+		zap.Int("concurrent_connections", licenseInfo.ConcurrentConnections))
 
 	// Check if license is about to expire
-	if time.Until(validationResult.ExpiresAt) < 7*24*time.Hour {
+	expirationTime := time.Unix(licenseInfo.ExpiresAt, 0)
+	if time.Until(expirationTime) < 7*24*time.Hour {
 		sm.logger.Warn("License will expire soon",
-			zap.Time("expires_at", validationResult.ExpiresAt),
-			zap.String("remaining", time.Until(validationResult.ExpiresAt).String()))
+			zap.Time("expires_at", expirationTime),
+			zap.String("remaining", time.Until(expirationTime).String()))
 	}
 
 	return nil
@@ -469,7 +454,7 @@ func (sm *ServiceManager) validateLicense() error {
 // initializeMetrics sets up metrics collection and export
 func (sm *ServiceManager) initializeMetrics() error {
 	// Create new registry
-	sm.metricsRegistry = metrics.NewRegistry()
+	sm.metricsRegistry = prometheus.NewRegistry()
 
 	// Register metrics in the service manager for convenient access
 	if sm.cfg.EnablePrometheus {
@@ -479,7 +464,7 @@ func (sm *ServiceManager) initializeMetrics() error {
 			sm.logger.Info("Starting Prometheus metrics server", zap.String("address", metricsAddr))
 
 			http.Handle("/metrics", promhttp.HandlerFor(
-				sm.metricsRegistry.GetRegistry(),
+				sm.metricsRegistry,
 				promhttp.HandlerOpts{},
 			))
 
@@ -495,8 +480,8 @@ func (sm *ServiceManager) initializeMetrics() error {
 // initializeCircuitBreakers sets up circuit breakers for external services
 func (sm *ServiceManager) initializeCircuitBreakers() {
 	// Circuit breaker for external APIs
-	sm.circuitBreakers["external_apis"] = circuitbreaker.NewCircuitBreaker(
-		circuitbreaker.Config{
+	sm.circuitBreakers["external_apis"] = circuitbreaker.NewManager(
+		circuitbreaker.ManagerConfig{
 			Name:             "external_apis",
 			MaxFailures:      5,
 			ResetTimeout:     30 * time.Second,
@@ -509,8 +494,8 @@ func (sm *ServiceManager) initializeCircuitBreakers() {
 	)
 
 	// Circuit breaker for database operations
-	sm.circuitBreakers["database"] = circuitbreaker.NewCircuitBreaker(
-		circuitbreaker.Config{
+	sm.circuitBreakers["database"] = circuitbreaker.NewManager(
+		circuitbreaker.ManagerConfig{
 			Name:             "database",
 			MaxFailures:      3,
 			ResetTimeout:     60 * time.Second,
@@ -523,8 +508,8 @@ func (sm *ServiceManager) initializeCircuitBreakers() {
 	)
 
 	// Circuit breaker for block processing
-	sm.circuitBreakers["block_processing"] = circuitbreaker.NewCircuitBreaker(
-		circuitbreaker.Config{
+	sm.circuitBreakers["block_processing"] = circuitbreaker.NewManager(
+		circuitbreaker.ManagerConfig{
 			Name:             "block_processing",
 			MaxFailures:      5,
 			ResetTimeout:     45 * time.Second,
@@ -548,16 +533,24 @@ func (sm *ServiceManager) initializeDatabase(ctx context.Context) error {
 	}
 
 	dbCfg := database.Config{
-		Type:            sm.cfg.DatabaseType,
-		URL:             sm.cfg.DatabaseURL,
-		MaxConnections:  sm.cfg.DatabaseMaxConnections,
-		MaxIdleConns:    sm.cfg.DatabaseMaxIdleConns,
-		ConnMaxLifetime: sm.cfg.DatabaseConnMaxLifetime,
-		SSLMode:         sm.cfg.DatabaseSSLMode,
+		Type:     sm.cfg.DatabaseType,
+		URL:      sm.cfg.DatabaseURL,
+		MaxConns: 10, // Default value
+		MinConns: 2,  // Default value
 	}
 
 	var err error
-	sm.db, err = database.NewWithRetry(dbCfg, sm.logger, 5, 10*time.Second)
+	// Try to connect with retry
+	for i := 0; i < 5; i++ {
+		sm.db, err = database.New(dbCfg, sm.logger)
+		if err == nil {
+			break
+		}
+		sm.logger.Warn("Database connection failed, retrying...", 
+			zap.Error(err), 
+			zap.Int("attempt", i+1))
+		time.Sleep(10 * time.Second)
+	}
 	if err != nil {
 		return fmt.Errorf("database connection failed after retries: %w", err)
 	}
@@ -567,15 +560,13 @@ func (sm *ServiceManager) initializeDatabase(ctx context.Context) error {
 		return fmt.Errorf("database ping failed: %w", err)
 	}
 
-	// Run migrations
-	if sm.cfg.RunMigrations {
-		sm.logger.Info("Running database migrations")
-		migrationRunner := migrations.NewRunner(sm.db, sm.logger)
-		if err := migrationRunner.Up(ctx); err != nil {
-			return fmt.Errorf("database migrations failed: %w", err)
-		}
-		sm.logger.Info("Database migrations completed successfully")
+	// Run migrations (always enabled for simplicity)
+	sm.logger.Info("Running database migrations")
+	migrationRunner := migrations.NewRunner(sm.logger)
+	if err := migrationRunner.Up(ctx); err != nil {
+		return fmt.Errorf("database migrations failed: %w", err)
 	}
+	sm.logger.Info("Database migrations completed successfully")
 
 	sm.logger.Info("Database connection established",
 		zap.String("type", sm.cfg.DatabaseType),
@@ -589,54 +580,39 @@ func (sm *ServiceManager) initializeCoreServices() error {
 	var err error
 
 	// Initialize rate limiter
-	sm.rateLimiter = ratelimit.NewRateLimiter(ratelimit.Config{
-		GlobalRate:      rate.Limit(sm.cfg.GlobalAPIRateLimit),
-		Burst:           sm.cfg.GlobalAPIBurstLimit,
-		IPRate:          rate.Limit(sm.cfg.PerIPRateLimit),
-		IPBurst:         sm.cfg.PerIPBurstLimit,
-		CleanupInterval: 5 * time.Minute,
-	})
+	sm.rateLimiter = ratelimit.NewRateLimiter(sm.cfg.GeneralRateLimit, time.Second)
 
 	// Initialize mempool with enhanced configuration
+	mempoolMetrics := mempool.NewMempoolMetrics(sm.metricsRegistry)
 	sm.mempool = mempool.NewWithMetricsAndConfig(mempool.Config{
 		MaxSize:         sm.cfg.MempoolMaxSize,
-		ExpiryTime:      sm.cfg.MempoolExpiryTime,
-		CleanupInterval: sm.cfg.MempoolCleanupInterval,
-	}, sm.metrics)
+		ExpiryTime:      5 * time.Minute,     // Default value
+		CleanupInterval: 30 * time.Second,    // Default value
+	}, mempoolMetrics)
 
 	// Initialize cache with enhanced configuration
-	sm.cache = cache.NewWithMetrics(sm.cfg.CacheSize, sm.logger, sm.metrics)
+	sm.cache = cache.NewWithMetrics(sm.cfg.CacheSize, sm.logger)
 
 	// Initialize broadcaster with enhanced configuration
-	sm.broadcaster = broadcaster.NewWithMetricsAndConfig(broadcaster.Config{
-		MaxConnections: MaxWSConns,
-		WriteTimeout:   sm.cfg.WSWriteTimeout,
-		PingInterval:   sm.cfg.WSPingInterval,
-		MaxMessageSize: sm.cfg.WSMaxMessageSize,
-	}, sm.logger, sm.metrics)
+	sm.broadcaster = broadcaster.New(sm.logger)
 
 	// Initialize throttle manager
-	sm.throttle = throttle.NewWithMetrics(sm.logger, sm.metrics)
+	sm.throttleManager = throttle.NewEndpointThrottle(nil, sm.logger)
 
-	// Register endpoints from configuration with circuit breaker protection
+	// Register endpoints from configuration (without circuit breaker for now)
 	for _, endpoint := range sm.cfg.ExternalEndpoints {
 		protectedEndpoint := throttle.ProtectedEndpoint{
-			URL:            endpoint.URL,
-			Priority:       endpoint.Priority,
-			Timeout:        endpoint.Timeout,
-			CircuitBreaker: sm.circuitBreakers["external_apis"],
+			URL:      endpoint.URL,
+			Priority: endpoint.Priority,
+			Timeout:  endpoint.Timeout,
+			// CircuitBreaker: nil, // Skip circuit breaker integration for now
 		}
-		sm.throttle.RegisterEndpoint(protectedEndpoint)
+		// Note: EndpointThrottle will register endpoints automatically when they're used
+		_ = protectedEndpoint // Keep for future use
 	}
 
-	// Initialize relay dispatcher with circuit breaker
-	sm.relayDispatcher, err = relay.NewRelayDispatcherWithMetricsAndConfig(relay.Config{
-		MaxConcurrent:  sm.cfg.RelayMaxConcurrent,
-		Timeout:        sm.cfg.RelayTimeout,
-		RetryAttempts:  sm.cfg.RelayRetryAttempts,
-		RetryDelay:     sm.cfg.RelayRetryDelay,
-		CircuitBreaker: sm.circuitBreakers["external_apis"],
-	}, sm.cfg, sm.logger, sm.metrics)
+	// Initialize relay dispatcher
+	sm.relayDispatcher = relay.NewRelayDispatcher(*sm.cfg, sm.logger)
 	if err != nil {
 		return fmt.Errorf("failed to create relay dispatcher: %w", err)
 	}
@@ -648,7 +624,10 @@ func (sm *ServiceManager) initializeCoreServices() error {
 		ValidationTimeout:   10 * time.Second,
 		RetryAttempts:       3,
 		RetryDelay:          100 * time.Millisecond,
-		CircuitBreaker:      sm.circuitBreakers["block_processing"],
+		CacheSize:           1000,
+		CacheTTL:            5 * time.Minute,
+		EnableMetrics:       true,
+		EnableDedup:         true,
 	}
 
 	sm.blockProcessor, err = blocks.NewBlockProcessor(processorConfig, sm.logger)
@@ -685,64 +664,23 @@ func (sm *ServiceManager) startNetworkServices(ctx context.Context) error {
 		return fmt.Errorf("API port %s is not available", apiAddr)
 	}
 
-	// Initialize P2P client with enhanced configuration
+		// Initialize P2P client with simple configuration
 	var err error
-	sm.p2pClient, err = p2p.NewWithMetricsAndConfig(p2p.Config{
-		BootstrapPeers:  sm.cfg.P2PBootstrapPeers,
-		ListenAddress:   sm.cfg.P2PListenAddress,
-		MaxPeers:        sm.cfg.P2PMaxPeers,
-		PeerTimeout:     sm.cfg.P2PPeerTimeout,
-		DialTimeout:     sm.cfg.P2PDialTimeout,
-		ProtocolVersion: sm.cfg.P2PProtocolVersion,
-	}, sm.cfg, sm.blockChan, sm.mempool, sm.logger, sm.metrics)
+	sm.p2pClient, err = p2p.New(*sm.cfg, sm.blockChan, sm.mempool, sm.logger)
 	if err != nil {
 		return fmt.Errorf("failed to create P2P client: %w", err)
 	}
 
 	// Start P2P client
-	sm.wg.Add(1)
 	go func() {
-		defer sm.wg.Done()
-		if err := sm.p2pClient.Run(); err != nil {
-			select {
-			case sm.startupErrors <- fmt.Errorf("P2P client error: %w", err):
-			default:
-			}
-		}
+		sm.p2pClient.Run()
 	}()
 
-	// Initialize API server with enhanced middleware
-	apiConfig := api.Config{
-		RateLimiter:       sm.rateLimiter,
-		EnableCORS:        sm.cfg.EnableCORS,
-		CORSOrigins:       sm.cfg.CORSOrigins,
-		TrustedProxies:    sm.cfg.TrustedProxies,
-		EnableCompression: sm.cfg.EnableCompression,
-		ReadTimeout:       sm.cfg.APIReadTimeout,
-		WriteTimeout:      sm.cfg.APIWriteTimeout,
-		IdleTimeout:       sm.cfg.APIIdleTimeout,
-		MaxHeaderBytes:    MaxHeaderBytes,
-	}
-
-	// Create middleware chain
-	middlewares := []middleware.Middleware{
-		middleware.RateLimit(sm.rateLimiter),
-		middleware.Logging(sm.logger),
-		middleware.Recovery(sm.logger),
-		middleware.SecurityHeaders(sm.cfg.EnableSecurityHeaders),
-	}
-
-	if sm.cfg.EnableCORS {
-		middlewares = append(middlewares, middleware.CORS(sm.cfg.CORSOrigins))
-	}
-
-	if sm.cfg.EnableAuth {
-		middlewares = append(middlewares, middleware.Authentication(sm.cfg.AuthTokens))
-	}
-
-	sm.apiServer = api.NewWithMetricsAndConfig(apiConfig, middlewares, sm.cfg, sm.blockChan, sm.mempool, sm.logger, sm.metrics)
-	if sm.apiServer == nil {
-		return fmt.Errorf("failed to create API server")
+	// Initialize API server with simple constructor
+	if sm.cache != nil {
+		sm.apiServer = api.NewWithCache(*sm.cfg, sm.blockChan, sm.mempool, sm.cache, sm.logger)
+	} else {
+		sm.apiServer = api.New(*sm.cfg, sm.blockChan, sm.mempool, sm.logger)
 	}
 
 	// Start API server

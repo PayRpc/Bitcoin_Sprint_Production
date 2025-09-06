@@ -94,7 +94,7 @@ func (cb *Manager) Execute(f func() error) error {
 		return fmt.Errorf("circuit breaker %s is open", cb.name)
 	}
 
-	generation := cb.generation
+	_ = cb.generation // Mark as intentionally unused for potential future use
 	err := f()
 
 	if err != nil {

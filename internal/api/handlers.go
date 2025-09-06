@@ -279,14 +279,6 @@ func (s *Server) getTierCompetitiveAdvantage(tier config.Tier) map[string]interf
 
 	return base
 }
-				"cache_hit":     predictiveCache != nil, // Will be true when cache is warmed
-				"optimization":  "Real-time P99 adaptation enabled",
-			},
-		}
-	}
-
-	s.jsonResponse(w, http.StatusOK, response)
-}
 
 // handleEthereumRequest handles Ethereum-specific requests using the real relay
 func (s *Server) handleEthereumRequest(method string, start time.Time) map[string]interface{} {

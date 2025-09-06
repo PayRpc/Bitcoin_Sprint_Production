@@ -45,6 +45,9 @@ func (esm *EnterpriseSecurityManager) RegisterEnterpriseRoutes() {
 			"POST /api/v1/enterprise/security/policy",
 			"GET /api/v1/enterprise/security/compliance-report",
 		}))
+	
+	// Register bloom endpoints if CGO is enabled
+	esm.RegisterBloomEndpoints()
 }
 
 // === ENTROPY ENDPOINTS ===

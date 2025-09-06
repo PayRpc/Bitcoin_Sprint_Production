@@ -443,6 +443,31 @@ func (c *Config) GetStringSlice(key string) []string {
 	return []string{}
 }
 
+// GetInt retrieves a configuration value as an integer with a default fallback
+func (c *Config) GetInt(key string) int {
+	if v := os.Getenv(key); v != "" {
+		if i, err := strconv.Atoi(v); err == nil {
+			return i
+		}
+	}
+	return 0
+}
+
+// GetDuration retrieves a configuration value as a duration
+func (c *Config) GetDuration(key string) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		// Try parsing as seconds first
+		if i, err := strconv.Atoi(v); err == nil {
+			return time.Duration(i) * time.Second
+		}
+		// Try parsing as duration string
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	return 0
+}
+
 // parseAddr parses a host:port string and returns host, port, and error
 func parseAddr(addr string) (string, int, error) {
 	parts := strings.Split(addr, ":")
