@@ -59,7 +59,7 @@ func main() {
 	}
 
 	if retrievedBlock.Height != testBlock.Height {
-		fmt.Printf("❌ Block height mismatch: expected %d, got %d\n", 
+		fmt.Printf("❌ Block height mismatch: expected %d, got %d\n",
 			testBlock.Height, retrievedBlock.Height)
 		return
 	}

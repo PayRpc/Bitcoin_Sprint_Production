@@ -7,13 +7,13 @@ import (
 
 // DiagnosticEvent represents a diagnostic event
 type DiagnosticEvent struct {
-	Timestamp   time.Time              `json:"timestamp"`
-	EventType   string                 `json:"event_type"`
-	PeerID      string                 `json:"peer_id,omitempty"`
-	Message     string                 `json:"message"`
-	Severity    Severity               `json:"severity"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
-	Error       error                  `json:"error,omitempty"`
+	Timestamp time.Time              `json:"timestamp"`
+	EventType string                 `json:"event_type"`
+	PeerID    string                 `json:"peer_id,omitempty"`
+	Message   string                 `json:"message"`
+	Severity  Severity               `json:"severity"`
+	Metadata  map[string]interface{} `json:"metadata,omitempty"`
+	Error     error                  `json:"error,omitempty"`
 }
 
 // Severity represents the severity level of a diagnostic event
@@ -56,13 +56,13 @@ type DiagnosticRecorder interface {
 
 // DiagnosticStats represents diagnostic statistics
 type DiagnosticStats struct {
-	TotalEvents       int64            `json:"total_events"`
-	EventsByType      map[string]int64 `json:"events_by_type"`
-	EventsBySeverity  map[Severity]int64 `json:"events_by_severity"`
-	FirstEvent        *time.Time       `json:"first_event,omitempty"`
-	LastEvent         *time.Time       `json:"last_event,omitempty"`
-	ActivePeers       int              `json:"active_peers"`
-	ErrorRate         float64          `json:"error_rate"`
+	TotalEvents      int64              `json:"total_events"`
+	EventsByType     map[string]int64   `json:"events_by_type"`
+	EventsBySeverity map[Severity]int64 `json:"events_by_severity"`
+	FirstEvent       *time.Time         `json:"first_event,omitempty"`
+	LastEvent        *time.Time         `json:"last_event,omitempty"`
+	ActivePeers      int                `json:"active_peers"`
+	ErrorRate        float64            `json:"error_rate"`
 }
 
 // PeerDiagnostic represents diagnostic information for a peer
@@ -82,13 +82,13 @@ type PeerDiagnostic struct {
 
 // NetworkDiagnostic represents network-level diagnostic information
 type NetworkDiagnostic struct {
-	TotalPeers         int                `json:"total_peers"`
-	ActivePeers        int                `json:"active_peers"`
-	DisconnectedPeers  int                `json:"disconnected_peers"`
-	NetworkLatency     time.Duration      `json:"network_latency"`
-	BlockHeight        int64              `json:"block_height"`
-	NetworkHashrate    int64              `json:"network_hashrate"`
-	PeerDiagnostics    []*PeerDiagnostic  `json:"peer_diagnostics"`
+	TotalPeers        int               `json:"total_peers"`
+	ActivePeers       int               `json:"active_peers"`
+	DisconnectedPeers int               `json:"disconnected_peers"`
+	NetworkLatency    time.Duration     `json:"network_latency"`
+	BlockHeight       int64             `json:"block_height"`
+	NetworkHashrate   int64             `json:"network_hashrate"`
+	PeerDiagnostics   []*PeerDiagnostic `json:"peer_diagnostics"`
 }
 
 // RecorderConfig holds configuration for the diagnostic recorder

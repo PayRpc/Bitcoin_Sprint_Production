@@ -5,26 +5,26 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/metrics"
+	"go.uber.org/zap"
 )
 
 // BlockIndex provides enterprise-grade block deduplication with adaptive algorithms
 type BlockIndex struct {
 	// Legacy simple mode support
-	ttl   time.Duration
-	mu    sync.RWMutex
-	seen  map[string]time.Time
-	
+	ttl  time.Duration
+	mu   sync.RWMutex
+	seen map[string]time.Time
+
 	// Enterprise features
 	adaptive       *AdaptiveBlockDeduper
 	enterpriseMode bool
 	logger         *zap.Logger
-	
+
 	// Per-hash locks for concurrent processing
 	lockMu sync.Mutex
 	locks  map[string]*sync.Mutex
-	
+
 	// Cleanup management
 	stop chan struct{}
 }
@@ -44,7 +44,7 @@ func NewBlockIndexWithOptions(ttl time.Duration, logger *zap.Logger, enterpriseM
 		logger:         logger,
 		stop:           make(chan struct{}),
 	}
-	
+
 	// Initialize adaptive deduper for enterprise mode
 	if enterpriseMode {
 		bi.adaptive = NewAdaptiveBlockDeduper(DefaultMaxSize, ttl, logger)
@@ -61,12 +61,12 @@ func NewBlockIndexWithOptions(ttl time.Duration, logger *zap.Logger, enterpriseM
 				zap.Duration("ttl", ttl))
 		}
 	}
-	
+
 	return bi
 }
 
 // Close gracefully shuts down the block index
-func (bi *BlockIndex) Close() { 
+func (bi *BlockIndex) Close() {
 	close(bi.stop)
 	if bi.adaptive != nil {
 		bi.adaptive.Close()
@@ -85,11 +85,11 @@ func (bi *BlockIndex) TryBeginWithOptions(hash string, timestamp time.Time, netw
 	if hash == "" {
 		return func(bool) {}, false
 	}
-	
+
 	// Enterprise mode uses adaptive deduplication
 	if bi.enterpriseMode && bi.adaptive != nil {
 		isDuplicate := bi.adaptive.Seen(hash, timestamp, network, options...)
-		
+
 		// Return appropriate end function
 		return func(processed bool) {
 			if processed && bi.logger != nil {
@@ -100,17 +100,17 @@ func (bi *BlockIndex) TryBeginWithOptions(hash string, timestamp time.Time, netw
 			}
 		}, !isDuplicate
 	}
-	
+
 	// Legacy mode implementation
 	mu := bi.getLock(hash)
 	mu.Lock()
-	
+
 	// Check recent-seen while holding the lock to avoid races
 	if bi.isRecent(hash, timestamp) {
 		mu.Unlock()
 		return func(bool) {}, false
 	}
-	
+
 	// Hand back an end() that stamps seen only if actual processing happened
 	return func(processed bool) {
 		if processed {
@@ -135,16 +135,16 @@ func (bi *BlockIndex) Seen(hash string, network string, options ...DedupeOption)
 	if bi.enterpriseMode && bi.adaptive != nil {
 		return bi.adaptive.Seen(hash, time.Now(), network, options...)
 	}
-	
+
 	// Legacy mode
 	bi.mu.RLock()
 	defer bi.mu.RUnlock()
-	
+
 	ts, ok := bi.seen[hash]
 	if !ok {
 		return false
 	}
-	
+
 	return time.Now().Sub(ts) < bi.ttl
 }
 
@@ -153,11 +153,11 @@ func (bi *BlockIndex) GetStats() map[string]interface{} {
 	if bi.enterpriseMode && bi.adaptive != nil {
 		return bi.adaptive.GetStats()
 	}
-	
+
 	// Legacy stats
 	bi.mu.RLock()
 	defer bi.mu.RUnlock()
-	
+
 	return map[string]interface{}{
 		"mode":         "legacy",
 		"total_cached": len(bi.seen),

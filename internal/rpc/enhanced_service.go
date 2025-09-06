@@ -29,12 +29,12 @@ type EnhancedRPCService struct {
 
 // RPCServiceMetrics tracks RPC service performance
 type RPCServiceMetrics struct {
-	TasksSubmitted   int64
-	TasksCompleted   int64
+	TasksSubmitted    int64
+	TasksCompleted    int64
 	MessagesProcessed int64
-	Errors           int64
-	LastActivity     time.Time
-	mu               sync.RWMutex
+	Errors            int64
+	LastActivity      time.Time
+	mu                sync.RWMutex
 }
 
 // NewEnhancedRPCService creates a new enhanced RPC service
@@ -45,9 +45,9 @@ func NewEnhancedRPCService(cfg config.Config, logger *zap.Logger) (*EnhancedRPCS
 
 	// Create engine with optimized settings
 	eng, err := engine.NewEngine(
-		cfg.RPCBatchSize,     // workers
-		4096,                 // queue size
-		8192,                 // cache size
+		cfg.RPCBatchSize, // workers
+		4096,             // queue size
+		8192,             // cache size
 		state,
 		seen,
 	)

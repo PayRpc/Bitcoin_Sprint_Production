@@ -24,7 +24,7 @@ import (
 type Header struct {
 	Hash   [32]byte // big-endian
 	Height uint32
-	Raw    []byte   // serialized block header bytes (80B for BTC)
+	Raw    []byte // serialized block header bytes (80B for BTC)
 }
 
 type Node interface {
@@ -79,7 +79,10 @@ func (fr *FastRead) GetHeader(ctx context.Context, height int) (Header, error) {
 				return n.GetBlockHeader(c, height)
 			})
 			if err != nil {
-				select { case errCh <- err: default: }
+				select {
+				case errCh <- err:
+				default:
+				}
 				return nil
 			}
 			hdr := hdrAny.(Header)
@@ -152,7 +155,10 @@ func SetSnapshot(s Snapshot) {
 	// fan out to subscribers (non-blocking)
 	subMu.Lock()
 	for ch := range subs {
-		select { case ch <- s: default: }
+		select {
+		case ch <- s:
+		default:
+		}
 	}
 	subMu.Unlock()
 }

@@ -11,11 +11,11 @@ var migrationFiles embed.FS
 
 // Migration represents a single database migration
 type Migration struct {
-	Version     int
-	Name        string
-	SQL         string
-	Filepath    string
-	ExecutedAt  int64
+	Version    int
+	Name       string
+	SQL        string
+	Filepath   string
+	ExecutedAt int64
 }
 
 // Runner manages database migrations with full versioning support

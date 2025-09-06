@@ -15,10 +15,10 @@ import (
 
 // DB represents the database connection
 type DB struct {
-	Pool     *pgxpool.Pool // For PostgreSQL
-	SqlDB    *sql.DB       // For SQLite
-	Type     string        // "postgres" or "sqlite"
-	Logger   *zap.Logger
+	Pool   *pgxpool.Pool // For PostgreSQL
+	SqlDB  *sql.DB       // For SQLite
+	Type   string        // "postgres" or "sqlite"
+	Logger *zap.Logger
 }
 
 // Config holds database configuration

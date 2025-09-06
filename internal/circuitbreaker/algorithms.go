@@ -11,18 +11,21 @@ import (
 // ---- Infrastructure for testability (deterministic time & randomness) ----
 type Clock interface{ Now() time.Time }
 type realClock struct{}
+
 func (realClock) Now() time.Time { return time.Now() }
 
 type RNG interface{ Float64() float64 }
 type defaultRNG struct{}
+
 func (defaultRNG) Float64() float64 { return rand.Float64() }
 
 // JitterStrategy defines how randomized backoff delays are produced.
 type JitterStrategy int
+
 const (
-	JitterNone JitterStrategy = iota // exact delay
-	JitterFull                       // uniform in [0, d)
-	JitterEqual                      // uniform in [0.5d, 1.5d]
+	JitterNone  JitterStrategy = iota // exact delay
+	JitterFull                        // uniform in [0, d)
+	JitterEqual                       // uniform in [0.5d, 1.5d]
 )
 
 // ExponentialBackoff implements exponential backoff with configurable jitter
@@ -141,18 +144,18 @@ func NewSlidingWindow(windowSize, bucketSize time.Duration) *SlidingWindow {
 	if bucketCount < 1 {
 		bucketCount = 1
 	}
-	
+
 	clock := realClock{}
 	now := clock.Now()
 	buckets := make([]WindowBucket, bucketCount)
-	
+
 	for i := range buckets {
 		buckets[i] = WindowBucket{
 			timestamp:  now.Add(-time.Duration(i) * bucketSize),
 			minLatency: time.Hour, // High initial value
 		}
 	}
-	
+
 	return &SlidingWindow{
 		buckets:      buckets,
 		bucketSize:   bucketSize,
@@ -167,27 +170,27 @@ func NewSlidingWindow(windowSize, bucketSize time.Duration) *SlidingWindow {
 func (sw *SlidingWindow) AddRequest(success bool, latency time.Duration) {
 	sw.mu.Lock()
 	defer sw.mu.Unlock()
-	
+
 	now := sw.clock.Now()
 	sw.rotateIfNeeded(now)
-	
+
 	currentBucket := &sw.buckets[sw.currentIndex]
 	currentBucket.requests++
-	
+
 	if success {
 		currentBucket.successes++
 	} else {
 		currentBucket.failures++
 	}
-	
+
 	if latency > 0 {
 		currentBucket.latencySum += int64(latency)
 		currentBucket.latencyCount++
-		
+
 		if latency > currentBucket.maxLatency {
 			currentBucket.maxLatency = latency
 		}
-		
+
 		if latency < currentBucket.minLatency {
 			currentBucket.minLatency = latency
 		}
@@ -198,13 +201,13 @@ func (sw *SlidingWindow) AddRequest(success bool, latency time.Duration) {
 func (sw *SlidingWindow) GetStatistics() (requests, successes, failures int64, failureRate float64, avgLatency time.Duration) {
 	sw.mu.RLock()
 	defer sw.mu.RUnlock()
-	
+
 	now := sw.clock.Now()
 	cutoff := now.Add(-sw.windowSize)
-	
+
 	var totalLatency int64
 	var latencyCount int64
-	
+
 	for _, bucket := range sw.buckets {
 		if bucket.timestamp.After(cutoff) {
 			requests += bucket.requests
@@ -214,15 +217,15 @@ func (sw *SlidingWindow) GetStatistics() (requests, successes, failures int64, f
 			latencyCount += bucket.latencyCount
 		}
 	}
-	
+
 	if requests > 0 {
 		failureRate = float64(failures) / float64(requests)
 	}
-	
+
 	if latencyCount > 0 {
 		avgLatency = time.Duration(totalLatency / latencyCount)
 	}
-	
+
 	return
 }
 
@@ -272,15 +275,15 @@ type AdaptiveThreshold struct {
 // NewAdaptiveThreshold creates a new adaptive threshold with the specified base and multiplier
 func NewAdaptiveThreshold(baseThreshold, multiplier float64) *AdaptiveThreshold {
 	return &AdaptiveThreshold{
-		currentThreshold:    baseThreshold,
-		baseThreshold:       baseThreshold,
-		multiplier:          multiplier,
-		adjustEvery:         time.Minute,
-		minFactor:           0.5, // clamp to base × [0.5, 2.0] by default
-		maxFactor:           2.0,
-		adjustmentHistory:   make([]float64, 0, 100),
-		performanceHistory:  make([]float64, 0, 100),
-		clock:               realClock{},
+		currentThreshold:   baseThreshold,
+		baseThreshold:      baseThreshold,
+		multiplier:         multiplier,
+		adjustEvery:        time.Minute,
+		minFactor:          0.5, // clamp to base × [0.5, 2.0] by default
+		maxFactor:          2.0,
+		adjustmentHistory:  make([]float64, 0, 100),
+		performanceHistory: make([]float64, 0, 100),
+		clock:              realClock{},
 	}
 }
 
@@ -288,23 +291,23 @@ func NewAdaptiveThreshold(baseThreshold, multiplier float64) *AdaptiveThreshold 
 func (at *AdaptiveThreshold) AdjustThreshold(currentPerformance float64) float64 {
 	at.mu.Lock()
 	defer at.mu.Unlock()
-	
+
 	now := at.clock.Now()
-	
+
 	// Don't adjust too frequently
 	if now.Sub(at.lastAdjustment) < at.adjustEvery {
 		return at.currentThreshold
 	}
-	
+
 	// Record performance history
 	at.performanceHistory = append(at.performanceHistory, currentPerformance)
 	if len(at.performanceHistory) > 100 {
 		at.performanceHistory = at.performanceHistory[1:]
 	}
-	
+
 	// Calculate trend
 	trend := at.calculateTrend()
-	
+
 	// Adjust threshold based on trend and multiplier
 	switch {
 	case trend > 0.1: // Performance improving
@@ -312,7 +315,7 @@ func (at *AdaptiveThreshold) AdjustThreshold(currentPerformance float64) float64
 	case trend < -0.1: // Performance degrading
 		at.currentThreshold *= 1.0 - 0.1*at.multiplier
 	}
-	
+
 	// Clamp to safety bounds
 	lo := at.baseThreshold * at.minFactor
 	hi := at.baseThreshold * at.maxFactor
@@ -321,12 +324,12 @@ func (at *AdaptiveThreshold) AdjustThreshold(currentPerformance float64) float64
 	} else if at.currentThreshold > hi {
 		at.currentThreshold = hi
 	}
-	
+
 	at.adjustmentHistory = append(at.adjustmentHistory, at.currentThreshold)
 	if len(at.adjustmentHistory) > 100 {
 		at.adjustmentHistory = at.adjustmentHistory[1:]
 	}
-	
+
 	at.lastAdjustment = now
 	return at.currentThreshold
 }
@@ -358,22 +361,22 @@ func (at *AdaptiveThreshold) calculateTrend() float64 {
 	if len(at.performanceHistory) < 5 {
 		return 0
 	}
-	
+
 	n := len(at.performanceHistory)
 	recent := at.performanceHistory[n-5:]
-	older := at.performanceHistory[max(0, n-10):n-5]
-	
+	older := at.performanceHistory[max(0, n-10) : n-5]
+
 	if len(older) == 0 {
 		return 0
 	}
-	
+
 	recentAvg := average(recent)
 	olderAvg := average(older)
-	
+
 	if olderAvg == 0 {
 		return 0
 	}
-	
+
 	return (recentAvg - olderAvg) / olderAvg
 }
 
@@ -434,7 +437,7 @@ func NewHealthScorer() *HealthScorer {
 func (hs *HealthScorer) UpdateMetrics(metrics HealthMetrics) {
 	hs.mu.Lock()
 	defer hs.mu.Unlock()
-	
+
 	hs.metrics = metrics
 	hs.lastCalculation = time.Now()
 }
@@ -559,10 +562,10 @@ func (ld *LatencyDetector) checkLatencyTrend(threshold time.Duration) bool {
 
 // Recovery Probability Calculator
 type RecoveryCalculator struct {
-	mu                    sync.RWMutex
-	lastFailureTime       time.Time
-	consecutiveFailures   int
-	historicalRecoveryTime time.Duration
+	mu                      sync.RWMutex
+	lastFailureTime         time.Time
+	consecutiveFailures     int
+	historicalRecoveryTime  time.Duration
 	baseRecoveryProbability float64
 }
 
@@ -576,28 +579,28 @@ func newRecoveryCalculator() *RecoveryCalculator {
 func (rc *RecoveryCalculator) CalculateRecoveryProbability() float64 {
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
-	
+
 	if rc.lastFailureTime.IsZero() {
 		return 1.0
 	}
-	
+
 	timeSinceFailure := time.Since(rc.lastFailureTime)
-	
+
 	// Base probability increases with time
 	timeFactor := math.Min(1.0, float64(timeSinceFailure)/float64(rc.historicalRecoveryTime))
-	
+
 	// Consecutive failures reduce probability
 	failureFactor := math.Pow(0.8, float64(rc.consecutiveFailures))
-	
+
 	probability := rc.baseRecoveryProbability + (1.0-rc.baseRecoveryProbability)*timeFactor*failureFactor
-	
+
 	return math.Max(0.0, math.Min(1.0, probability))
 }
 
 func (rc *RecoveryCalculator) RecordFailure() {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
-	
+
 	rc.lastFailureTime = time.Now()
 	rc.consecutiveFailures++
 }
@@ -605,7 +608,7 @@ func (rc *RecoveryCalculator) RecordFailure() {
 func (rc *RecoveryCalculator) RecordSuccess() {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
-	
+
 	rc.consecutiveFailures = 0
 }
 
@@ -614,12 +617,12 @@ func average(values []float64) float64 {
 	if len(values) == 0 {
 		return 0
 	}
-	
+
 	sum := 0.0
 	for _, v := range values {
 		sum += v
 	}
-	
+
 	return sum / float64(len(values))
 }
 

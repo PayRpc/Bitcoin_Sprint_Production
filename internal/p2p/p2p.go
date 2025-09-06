@@ -26,12 +26,12 @@ import (
 
 // Service flag constants for peer validation
 const (
-	SvcNodeNetwork       = 1 << 0  // 1
-	SvcNodeGetUTXO       = 1 << 1  // 2 (unused)
-	SvcNodeBloom         = 1 << 2  // 4 (legacy)
-	SvcNodeWitness       = 1 << 3  // 8
-	SvcNodeNetworkLimited= 1 << 10 // 1024
-	SvcNodeP2Pv2         = 1 << 11 // 2048
+	SvcNodeNetwork        = 1 << 0  // 1
+	SvcNodeGetUTXO        = 1 << 1  // 2 (unused)
+	SvcNodeBloom          = 1 << 2  // 4 (legacy)
+	SvcNodeWitness        = 1 << 3  // 8
+	SvcNodeNetworkLimited = 1 << 10 // 1024
+	SvcNodeP2Pv2          = 1 << 11 // 2048
 )
 
 const minProtocol = 70016
@@ -39,7 +39,7 @@ const minProtocol = 70016
 // goodServices validates that peer has required service flags
 func goodServices(s uint64) bool {
 	hasNet := (s&SvcNodeNetwork) != 0 || (s&SvcNodeNetworkLimited) != 0
-	hasWit := (s&SvcNodeWitness) != 0
+	hasWit := (s & SvcNodeWitness) != 0
 	return hasNet && hasWit
 }
 
@@ -100,8 +100,8 @@ type BlockProcessor struct {
 	circuitBreaker *CircuitBreaker
 
 	// Peer tracking for deduplication
-	currentPeer   string
-	peerMutex     sync.RWMutex
+	currentPeer string
+	peerMutex   sync.RWMutex
 
 	// Metrics
 	processedBlocks    int64
@@ -209,7 +209,7 @@ func New(cfg config.Config, blockChan chan blocks.BlockEvent, mem *mempool.Mempo
 	case config.TierTurbo, config.TierEnterprise:
 		tierStr = "ENTERPRISE"
 	}
-	
+
 	deduper := NewEnterpriseP2PDeduper(tierStr, logger)
 
 	return &Client{
@@ -428,22 +428,22 @@ func (c *Client) parallelConnect(address string, connectionChan chan<- *PeerConn
 	if c.isSprintPeer(address) {
 		if err := c.auth.PerformHandshakeClient(conn, 5*time.Second); err != nil {
 			c.logger.Warn("Sprint handshake failed", zap.String("peer", address), zap.Error(err))
-			
+
 			// Update peer reputation for handshake failure
-			c.deduper.IsDuplicate("handshake_failure", "handshake", address, 
+			c.deduper.IsDuplicate("handshake_failure", "handshake", address,
 				dedup.WithSource("p2p_handshake"),
 				dedup.WithProperties(map[string]interface{}{
 					"handshake_result": "failure",
-					"error": err.Error(),
+					"error":            err.Error(),
 				}))
-			
+
 			conn.Close()
 			connectionChan <- nil
 			return
 		}
-		
+
 		c.logger.Debug("Sprint peer authenticated", zap.String("peer", address))
-		
+
 		// Update peer reputation for successful handshake
 		c.deduper.IsDuplicate("handshake_success", "handshake", address,
 			dedup.WithSource("p2p_handshake"),
@@ -508,23 +508,23 @@ func (c *Client) blockProcessingWorker() {
 		// Enterprise P2P deduplication with peer tracking
 		source := "p2p"
 		peerID := "unknown"
-		
+
 		// Extract peer ID if available from block context
 		if c.blockProcessor.currentPeer != "" {
 			peerID = c.blockProcessor.currentPeer
 		}
-		
+
 		// Check for duplicate using enterprise deduplication
-		if c.deduper.IsDuplicate(blockHash, "block", peerID, 
+		if c.deduper.IsDuplicate(blockHash, "block", peerID,
 			dedup.WithSource(source),
 			dedup.WithSize(int64(block.SerializeSize()))) {
-			
+
 			c.logger.Info("Duplicate block ignored by enterprise deduplication",
 				zap.String("hash", blockHash),
 				zap.String("source", source),
 				zap.String("peer_id", peerID),
 				zap.String("reason", "enterprise-dedup-detected"))
-			
+
 			metrics.BlockDuplicatesIgnored.WithLabelValues(source).Inc()
 			atomic.AddInt64(&c.blockProcessor.duplicateBlocks, 1)
 			continue
@@ -1096,16 +1096,16 @@ func (c *Client) handleHeaders(p *peer.Peer, msg *wire.MsgHeaders) {
 		return
 	}
 
-	c.logger.Debug("Received headers", 
+	c.logger.Debug("Received headers",
 		zap.String("peer", p.Addr()),
 		zap.Int("header_count", len(msg.Headers)))
 
 	for _, header := range msg.Headers {
 		blockHash := header.BlockHash()
-		
+
 		// Basic header validation
 		if header.Version < 1 {
-			c.logger.Warn("Invalid header version", 
+			c.logger.Warn("Invalid header version",
 				zap.String("hash", blockHash.String()),
 				zap.Int32("version", header.Version))
 			continue
@@ -1117,7 +1117,7 @@ func (c *Client) handleHeaders(p *peer.Peer, msg *wire.MsgHeaders) {
 			c.logger.Debug("Requesting block after header validation",
 				zap.String("hash", blockHash.String()),
 				zap.String("from_peer", bestPeer.Addr()))
-			
+
 			getData := wire.NewMsgGetData()
 			getData.AddInvVect(wire.NewInvVect(wire.InvTypeBlock, &blockHash))
 			bestPeer.QueueMessage(getData, nil)
@@ -1144,12 +1144,12 @@ func (c *Client) selectBestPeerForBlock() *peer.Peer {
 		// Simple scoring based on connection quality
 		// In production, this would use EWMA of response times
 		score := 1.0
-		
+
 		// Prefer peers with witness support
 		if (uint64(peer.Services()) & SvcNodeWitness) != 0 {
 			score += 0.5
 		}
-		
+
 		// Prefer newer protocol versions
 		if peer.ProtocolVersion() >= 70016 {
 			score += 0.3

@@ -1,9 +1,9 @@
 package relay
 
 import (
+	"math"
 	"sync"
 	"time"
-	"math"
 )
 
 type breakerState int
@@ -16,7 +16,7 @@ const (
 
 type endpointStats struct {
 	url       string
-	ewmaRTT   float64    // exponential moving average latency (ms)
+	ewmaRTT   float64 // exponential moving average latency (ms)
 	failures  int64
 	successes int64
 	lastErr   string
@@ -37,7 +37,7 @@ func (e *endpointStats) recordSuccess(latency time.Duration) {
 	if e.ewmaRTT == 0 {
 		e.ewmaRTT = lat
 	} else {
-		e.ewmaRTT = (1.0 - alpha)*e.ewmaRTT + alpha*lat
+		e.ewmaRTT = (1.0-alpha)*e.ewmaRTT + alpha*lat
 	}
 	// successful call helps close breaker if half-open
 	if e.state == breakerHalfOpen {

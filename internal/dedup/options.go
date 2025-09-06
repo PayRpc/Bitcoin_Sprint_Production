@@ -81,57 +81,57 @@ func WithForceUpdate() DedupeOption {
 
 // Performance modes for different use cases
 const (
-	PerformanceModeStandard       = "STANDARD"
-	PerformanceModeHighPerformance = "HIGH_PERFORMANCE"
-	PerformanceModeMemoryOptimized = "MEMORY_OPTIMIZED"
+	PerformanceModeStandard         = "STANDARD"
+	PerformanceModeHighPerformance  = "HIGH_PERFORMANCE"
+	PerformanceModeMemoryOptimized  = "MEMORY_OPTIMIZED"
 	PerformanceModeLatencyOptimized = "LATENCY_OPTIMIZED"
 )
 
 // Network priority constants
 const (
-	NetworkPriorityLow    = 1
-	NetworkPriorityMedium = 3
-	NetworkPriorityHigh   = 5
+	NetworkPriorityLow      = 1
+	NetworkPriorityMedium   = 3
+	NetworkPriorityHigh     = 5
 	NetworkPriorityCritical = 10
 )
 
 // Default configuration values
 const (
-	DefaultMaxSize          = 10000
-	DefaultBaseTTL          = 5 * 60 // 5 minutes in seconds
+	DefaultMaxSize             = 10000
+	DefaultBaseTTL             = 5 * 60 // 5 minutes in seconds
 	DefaultConfidenceThreshold = 0.85
-	DefaultAdaptationRate   = 0.1
-	DefaultCleanupInterval  = 30 // seconds
+	DefaultAdaptationRate      = 0.1
+	DefaultCleanupInterval     = 30 // seconds
 )
 
 // Enterprise tier configurations
 var (
 	FreeBaseTier = map[string]interface{}{
-		"max_size":            1000,
-		"base_ttl_seconds":    300, // 5 minutes
-		"adaptive_enabled":    false,
-		"ml_optimization":     false,
-		"cross_network":       false,
-		"priority_queuing":    false,
+		"max_size":         1000,
+		"base_ttl_seconds": 300, // 5 minutes
+		"adaptive_enabled": false,
+		"ml_optimization":  false,
+		"cross_network":    false,
+		"priority_queuing": false,
 	}
-	
+
 	BusinessTier = map[string]interface{}{
-		"max_size":            5000,
-		"base_ttl_seconds":    600, // 10 minutes
-		"adaptive_enabled":    true,
-		"ml_optimization":     false,
-		"cross_network":       true,
-		"priority_queuing":    true,
+		"max_size":         5000,
+		"base_ttl_seconds": 600, // 10 minutes
+		"adaptive_enabled": true,
+		"ml_optimization":  false,
+		"cross_network":    true,
+		"priority_queuing": true,
 	}
-	
+
 	EnterpriseTier = map[string]interface{}{
-		"max_size":            15000,
-		"base_ttl_seconds":    900, // 15 minutes
-		"adaptive_enabled":    true,
-		"ml_optimization":     true,
-		"cross_network":       true,
-		"priority_queuing":    true,
-		"learning_enabled":    true,
-		"advanced_analytics":  true,
+		"max_size":           15000,
+		"base_ttl_seconds":   900, // 15 minutes
+		"adaptive_enabled":   true,
+		"ml_optimization":    true,
+		"cross_network":      true,
+		"priority_queuing":   true,
+		"learning_enabled":   true,
+		"advanced_analytics": true,
 	}
 )

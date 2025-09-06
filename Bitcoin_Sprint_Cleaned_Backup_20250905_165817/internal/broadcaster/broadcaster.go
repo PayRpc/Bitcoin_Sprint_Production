@@ -13,9 +13,9 @@ import (
 
 // PreEncodedFrame holds pre-serialized message data for reuse
 type PreEncodedFrame struct {
-	data     []byte
-	size     int
-	created  time.Time
+	data    []byte
+	size    int
+	created time.Time
 }
 
 // BlockMessage represents the message structure sent to clients
@@ -35,13 +35,13 @@ type BatchedBroadcast struct {
 
 // Broadcaster manages tier-aware block event publishing to subscribers with fan-out batching
 type Broadcaster struct {
-	subs        map[chan blocks.BlockEvent]config.Tier
-	mu          sync.RWMutex
-	logger      *zap.Logger
-	batchChan   chan BatchedBroadcast
-	stopChan    chan struct{}
-	wg          sync.WaitGroup
-	framePool   sync.Pool // Pool for reusing byte buffers
+	subs      map[chan blocks.BlockEvent]config.Tier
+	mu        sync.RWMutex
+	logger    *zap.Logger
+	batchChan chan BatchedBroadcast
+	stopChan  chan struct{}
+	wg        sync.WaitGroup
+	framePool sync.Pool // Pool for reusing byte buffers
 }
 
 // New creates a new tier-aware broadcaster with fan-out batching and pre-encoded frames
@@ -57,11 +57,11 @@ func New(logger *zap.Logger) *Broadcaster {
 			},
 		},
 	}
-	
+
 	// Start the batching worker
 	b.wg.Add(1)
 	go b.fanOutBatcher()
-	
+
 	return b
 }
 
@@ -111,7 +111,7 @@ func (b *Broadcaster) Publish(event blocks.BlockEvent) {
 		b.mu.RUnlock()
 		return
 	}
-	
+
 	// Pre-encode the message once for all subscribers
 	frame, err := b.createPreEncodedFrame(event)
 	if err != nil {
@@ -119,17 +119,17 @@ func (b *Broadcaster) Publish(event blocks.BlockEvent) {
 		b.mu.RUnlock()
 		return
 	}
-	
+
 	// Collect all subscribers for batching
 	clients := make([]chan blocks.BlockEvent, 0, len(b.subs))
 	tiers := make([]config.Tier, 0, len(b.subs))
-	
+
 	for ch, tier := range b.subs {
 		clients = append(clients, ch)
 		tiers = append(tiers, tier)
 	}
 	b.mu.RUnlock()
-	
+
 	// Send to batch channel for aggregated writes
 	select {
 	case b.batchChan <- BatchedBroadcast{
@@ -150,20 +150,20 @@ func (b *Broadcaster) createPreEncodedFrame(event blocks.BlockEvent) (*PreEncode
 	buf := b.framePool.Get().(*bytes.Buffer)
 	buf.Reset()
 	defer b.framePool.Put(buf)
-	
+
 	// Create the message structure
 	message := BlockMessage{
 		Type:      "block_event",
 		Block:     event,
 		Timestamp: time.Now(),
 	}
-	
+
 	// Encode to JSON
 	encoder := json.NewEncoder(buf)
 	if err := encoder.Encode(message); err != nil {
 		return nil, err
 	}
-	
+
 	// Create frame with copy of the data
 	frame := &PreEncodedFrame{
 		data:    make([]byte, buf.Len()),
@@ -171,36 +171,36 @@ func (b *Broadcaster) createPreEncodedFrame(event blocks.BlockEvent) (*PreEncode
 		created: time.Now(),
 	}
 	copy(frame.data, buf.Bytes())
-	
+
 	return frame, nil
 }
 
 // fanOutBatcher implements the 5ms tick aggregation with up to 64 clients per batch
 func (b *Broadcaster) fanOutBatcher() {
 	defer b.wg.Done()
-	
+
 	ticker := time.NewTicker(5 * time.Millisecond)
 	defer ticker.Stop()
-	
+
 	var pendingBroadcasts []BatchedBroadcast
 	const maxBatchSize = 64
-	
+
 	for {
 		select {
 		case <-b.stopChan:
 			// Flush remaining broadcasts before stopping
 			b.flushBroadcasts(pendingBroadcasts)
 			return
-			
+
 		case broadcast := <-b.batchChan:
 			pendingBroadcasts = append(pendingBroadcasts, broadcast)
-			
+
 			// If we hit the max batch size, flush immediately
 			if len(pendingBroadcasts) >= maxBatchSize {
 				b.flushBroadcasts(pendingBroadcasts)
 				pendingBroadcasts = pendingBroadcasts[:0] // Clear slice while keeping capacity
 			}
-			
+
 		case <-ticker.C:
 			// 5ms tick - flush all pending broadcasts
 			if len(pendingBroadcasts) > 0 {
@@ -216,7 +216,7 @@ func (b *Broadcaster) flushBroadcasts(broadcasts []BatchedBroadcast) {
 	for _, broadcast := range broadcasts {
 		for i, ch := range broadcast.clients {
 			tier := broadcast.tiers[i]
-			
+
 			select {
 			case ch <- broadcast.event:
 				// Successfully sent
@@ -248,7 +248,7 @@ func (b *Broadcaster) Close() {
 	close(b.stopChan)
 	b.wg.Wait()
 	close(b.batchChan)
-}// getBufferSize returns the appropriate buffer size for a tier
+} // getBufferSize returns the appropriate buffer size for a tier
 func (b *Broadcaster) getBufferSize(tier config.Tier) int {
 	switch tier {
 	case config.TierEnterprise:

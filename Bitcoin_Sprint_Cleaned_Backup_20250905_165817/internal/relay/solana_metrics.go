@@ -10,9 +10,9 @@ type solanaProm struct {
 	endpointLatency *prometheus.GaugeVec
 	endpointState   *prometheus.GaugeVec // 0=closed,1=half-open,2=open
 
-	wsReconnects    prometheus.Counter
-	dupDropped      prometheus.Counter
-	ttlSeconds      prometheus.Gauge
+	wsReconnects prometheus.Counter
+	dupDropped   prometheus.Counter
+	ttlSeconds   prometheus.Gauge
 }
 
 func newSolanaProm(namespace string) *solanaProm {

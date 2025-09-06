@@ -6,9 +6,9 @@ import "time"
 type State int
 
 const (
-	StateClosed State = iota // Normal operation
-	StateOpen                // Circuit is open (rejecting requests)
-	StateHalfOpen           // Testing if circuit can be closed
+	StateClosed   State = iota // Normal operation
+	StateOpen                  // Circuit is open (rejecting requests)
+	StateHalfOpen              // Testing if circuit can be closed
 )
 
 // Note: String() method is implemented in circuitbreaker.go
@@ -26,6 +26,6 @@ type Config struct {
 	Logger                 interface{}
 	Metrics                interface{}
 	// Enterprise features
-	TierSettings           interface{}
-	EnableHealthScoring    bool
+	TierSettings        interface{}
+	EnableHealthScoring bool
 }

@@ -96,19 +96,19 @@ type Config struct {
 	SprintRelayPeers []string // List of Sprint relay peers requiring authentication
 
 	// RPC Configuration (for backfill and batch operations)
-	RPCEnabled         bool          `json:"rpc_enabled"`
-	RPCURL             string        `json:"rpc_url"`
-	RPCUsername        string        `json:"rpc_username"`
-	RPCPassword        string        `json:"rpc_password"`
-	RPCTimeout         time.Duration `json:"rpc_timeout"`
-	RPCBatchSize       int           `json:"rpc_batch_size"`
-	RPCRetryAttempts   int           `json:"rpc_retry_attempts"`
-	RPCRetryMaxWait    time.Duration `json:"rpc_retry_max_wait"`
-	RPCSkipMempool     bool          `json:"rpc_skip_mempool"`
-	RPCFailedTxFile    string        `json:"rpc_failed_tx_file"`
-	RPCLastIDFile      string        `json:"rpc_last_id_file"`
-	RPCWorkers         int           `json:"rpc_workers"`
-	RPCMessageTopic    string        `json:"rpc_message_topic"`
+	RPCEnabled       bool          `json:"rpc_enabled"`
+	RPCURL           string        `json:"rpc_url"`
+	RPCUsername      string        `json:"rpc_username"`
+	RPCPassword      string        `json:"rpc_password"`
+	RPCTimeout       time.Duration `json:"rpc_timeout"`
+	RPCBatchSize     int           `json:"rpc_batch_size"`
+	RPCRetryAttempts int           `json:"rpc_retry_attempts"`
+	RPCRetryMaxWait  time.Duration `json:"rpc_retry_max_wait"`
+	RPCSkipMempool   bool          `json:"rpc_skip_mempool"`
+	RPCFailedTxFile  string        `json:"rpc_failed_tx_file"`
+	RPCLastIDFile    string        `json:"rpc_last_id_file"`
+	RPCWorkers       int           `json:"rpc_workers"`
+	RPCMessageTopic  string        `json:"rpc_message_topic"`
 }
 
 // Load reads config from env

@@ -24,30 +24,30 @@ type Middleware func(http.Handler) http.Handler
 type contextKey string
 
 const (
-	RequestIDKey  contextKey = "request_id"
-	StartTimeKey  contextKey = "start_time"
-	ClientIPKey   contextKey = "client_ip"
-	UserAgentKey  contextKey = "user_agent"
+	RequestIDKey contextKey = "request_id"
+	StartTimeKey contextKey = "start_time"
+	ClientIPKey  contextKey = "client_ip"
+	UserAgentKey contextKey = "user_agent"
 )
 
 // Config holds middleware configuration
 type Config struct {
-	EnableProfiling     bool
-	EnableMetrics       bool
-	EnableSecurity      bool
-	EnableRecovery      bool
-	EnableLogging       bool
-	EnableCORS          bool
-	TrustedProxies      []string
-	SecurityHeaders     map[string]string
-	AllowedOrigins      []string
-	AllowedMethods      []string
-	AllowedHeaders      []string
-	MaxRequestSize      int64
-	RequestTimeout      time.Duration
-	EnableCompression   bool
-	EnableRateLimiting  bool
-	Logger              *zap.Logger
+	EnableProfiling    bool
+	EnableMetrics      bool
+	EnableSecurity     bool
+	EnableRecovery     bool
+	EnableLogging      bool
+	EnableCORS         bool
+	TrustedProxies     []string
+	SecurityHeaders    map[string]string
+	AllowedOrigins     []string
+	AllowedMethods     []string
+	AllowedHeaders     []string
+	MaxRequestSize     int64
+	RequestTimeout     time.Duration
+	EnableCompression  bool
+	EnableRateLimiting bool
+	Logger             *zap.Logger
 }
 
 // DefaultConfig returns production-ready middleware configuration
@@ -65,23 +65,23 @@ func DefaultConfig() *Config {
 		EnableCompression:  true,
 		EnableRateLimiting: true,
 		SecurityHeaders: map[string]string{
-			"X-Content-Type-Options":   "nosniff",
-			"X-Frame-Options":          "DENY",
-			"X-XSS-Protection":         "1; mode=block",
+			"X-Content-Type-Options":    "nosniff",
+			"X-Frame-Options":           "DENY",
+			"X-XSS-Protection":          "1; mode=block",
 			"Strict-Transport-Security": "max-age=31536000; includeSubDomains",
 			"Content-Security-Policy":   "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
-			"Referrer-Policy":          "strict-origin-when-cross-origin",
-			"Permissions-Policy":       "geolocation=(), microphone=(), camera=()",
+			"Referrer-Policy":           "strict-origin-when-cross-origin",
+			"Permissions-Policy":        "geolocation=(), microphone=(), camera=()",
 		},
 		AllowedOrigins: []string{
 			"http://localhost:3000",
-			"http://localhost:3002", 
+			"http://localhost:3002",
 			"https://*.bitcoin-sprint.com",
 		},
 		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"},
 		AllowedHeaders: []string{
 			"Accept",
-			"Authorization", 
+			"Authorization",
 			"Content-Type",
 			"X-API-Key",
 			"X-Request-ID",
@@ -108,7 +108,7 @@ func RequestID() Middleware {
 			if requestID == "" {
 				requestID = generateRequestID()
 			}
-			
+
 			w.Header().Set("X-Request-ID", requestID)
 			ctx := context.WithValue(r.Context(), RequestIDKey, requestID)
 			next.ServeHTTP(w, r.WithContext(ctx))
@@ -124,7 +124,7 @@ func Recovery(logger *zap.Logger) Middleware {
 				if rec := recover(); rec != nil {
 					stack := debug.Stack()
 					requestID := getRequestID(r.Context())
-					
+
 					if logger != nil {
 						logger.Error("Panic recovered",
 							zap.String("request_id", requestID),
@@ -136,7 +136,7 @@ func Recovery(logger *zap.Logger) Middleware {
 							zap.String("remote_addr", r.RemoteAddr),
 						)
 					}
-					
+
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusInternalServerError)
 					fmt.Fprintf(w, `{"error":"Internal Server Error","request_id":"%s"}`, requestID)
@@ -155,7 +155,7 @@ func Security(config *Config) Middleware {
 			for key, value := range config.SecurityHeaders {
 				w.Header().Set(key, value)
 			}
-			
+
 			// Block common attack paths
 			path := strings.ToLower(r.URL.Path)
 			suspiciousPaths := []string{
@@ -163,14 +163,14 @@ func Security(config *Config) Middleware {
 				"/admin", "/phpmyadmin", "/.well-known/",
 				"/vendor/", "/config/", "/backup/",
 			}
-			
+
 			for _, suspicious := range suspiciousPaths {
 				if strings.Contains(path, suspicious) {
 					http.Error(w, "Not Found", http.StatusNotFound)
 					return
 				}
 			}
-			
+
 			// Block suspicious user agents
 			userAgent := strings.ToLower(r.UserAgent())
 			suspiciousAgents := []string{"sqlmap", "nikto", "nmap", "dirb", "gobuster"}
@@ -180,7 +180,7 @@ func Security(config *Config) Middleware {
 					return
 				}
 			}
-			
+
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -191,7 +191,7 @@ func CORS(config *Config) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
-			
+
 			// Check if origin is allowed
 			allowed := false
 			for _, allowedOrigin := range config.AllowedOrigins {
@@ -208,22 +208,22 @@ func CORS(config *Config) Middleware {
 					}
 				}
 			}
-			
+
 			if allowed {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 			}
-			
+
 			w.Header().Set("Access-Control-Allow-Methods", strings.Join(config.AllowedMethods, ", "))
 			w.Header().Set("Access-Control-Allow-Headers", strings.Join(config.AllowedHeaders, ", "))
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Access-Control-Max-Age", "86400") // 24 hours
-			
+
 			// Handle preflight requests
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
-			
+
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -236,7 +236,7 @@ func Profiling(enabled bool) http.Handler {
 			http.Error(w, "Profiling disabled", http.StatusNotFound)
 		})
 	}
-	
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
@@ -249,7 +249,7 @@ func Profiling(enabled bool) http.Handler {
 	mux.Handle("/debug/pprof/block", pprof.Handler("block"))
 	mux.Handle("/debug/pprof/mutex", pprof.Handler("mutex"))
 	mux.Handle("/debug/pprof/allocs", pprof.Handler("allocs"))
-	
+
 	return mux
 }
 
@@ -260,11 +260,11 @@ func Metrics(enabled bool) http.HandlerFunc {
 			http.Error(w, "Metrics disabled", http.StatusNotFound)
 		}
 	}
-	
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		var m runtime.MemStats
 		runtime.ReadMemStats(&m)
-		
+
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{
   "runtime": {
@@ -304,20 +304,20 @@ func Logger(logger *zap.Logger) Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			ctx := context.WithValue(r.Context(), StartTimeKey, start)
-			
+
 			// Capture client IP
 			clientIP := getClientIP(r)
 			ctx = context.WithValue(ctx, ClientIPKey, clientIP)
 			ctx = context.WithValue(ctx, UserAgentKey, r.UserAgent())
-			
+
 			// Wrap response writer to capture status code
 			wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-			
+
 			next.ServeHTTP(wrapped, r.WithContext(ctx))
-			
+
 			duration := time.Since(start)
 			requestID := getRequestID(r.Context())
-			
+
 			if logger != nil {
 				logger.Info("Request completed",
 					zap.String("request_id", requestID),
@@ -365,17 +365,17 @@ func getClientIP(r *http.Request) string {
 			return strings.TrimSpace(parts[0])
 		}
 	}
-	
+
 	// Check X-Real-IP header
 	if xri := r.Header.Get("X-Real-IP"); xri != "" {
 		return xri
 	}
-	
+
 	// Fall back to remote address
 	if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
 		return ip
 	}
-	
+
 	return r.RemoteAddr
 }
 

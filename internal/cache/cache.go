@@ -51,125 +51,125 @@ const (
 
 // CacheEntry represents a cached item with full metadata
 type CacheEntry struct {
-	Key           string                 `json:"key"`
-	Value         interface{}            `json:"value"`
-	CompressedData []byte                `json:"compressed_data,omitempty"`
-	Size          int64                  `json:"size"`
-	CreatedAt     time.Time              `json:"created_at"`
-	LastAccessed  time.Time              `json:"last_accessed"`
-	ExpiresAt     time.Time              `json:"expires_at"`
-	AccessCount   int64                  `json:"access_count"`
-	Level         CacheLevel             `json:"level"`
-	Compressed    bool                   `json:"compressed"`
-	Metadata      map[string]interface{} `json:"metadata"`
-	Version       int64                  `json:"version"`
+	Key            string                 `json:"key"`
+	Value          interface{}            `json:"value"`
+	CompressedData []byte                 `json:"compressed_data,omitempty"`
+	Size           int64                  `json:"size"`
+	CreatedAt      time.Time              `json:"created_at"`
+	LastAccessed   time.Time              `json:"last_accessed"`
+	ExpiresAt      time.Time              `json:"expires_at"`
+	AccessCount    int64                  `json:"access_count"`
+	Level          CacheLevel             `json:"level"`
+	Compressed     bool                   `json:"compressed"`
+	Metadata       map[string]interface{} `json:"metadata"`
+	Version        int64                  `json:"version"`
 }
 
 // BlockCache represents a cached block with enhanced metadata
 type BlockCache struct {
-	Block           blocks.BlockEvent      `json:"block"`
-	CachedAt        time.Time              `json:"cached_at"`
-	ExpiresAt       time.Time              `json:"expires_at"`
-	LastAccessed    time.Time              `json:"last_accessed"`
-	AccessCount     int64                  `json:"access_count"`
-	Size            int64                  `json:"size"`
-	Level           CacheLevel             `json:"level"`
-	Compressed      bool                   `json:"compressed"`
-	CompressedData  []byte                 `json:"compressed_data,omitempty"`
-	ValidationHash  string                 `json:"validation_hash"`
-	Metadata        map[string]interface{} `json:"metadata"`
+	Block          blocks.BlockEvent      `json:"block"`
+	CachedAt       time.Time              `json:"cached_at"`
+	ExpiresAt      time.Time              `json:"expires_at"`
+	LastAccessed   time.Time              `json:"last_accessed"`
+	AccessCount    int64                  `json:"access_count"`
+	Size           int64                  `json:"size"`
+	Level          CacheLevel             `json:"level"`
+	Compressed     bool                   `json:"compressed"`
+	CompressedData []byte                 `json:"compressed_data,omitempty"`
+	ValidationHash string                 `json:"validation_hash"`
+	Metadata       map[string]interface{} `json:"metadata"`
 }
 
 // EnterpriseCache manages multi-tiered, high-performance caching
 type EnterpriseCache struct {
 	// Core cache storage
-	mu              sync.RWMutex
-	latestBlock     BlockCache
-	blockCache      map[int64]*CacheEntry  // height -> entry
-	hashCache       map[string]*CacheEntry // hash -> entry
-	
+	mu          sync.RWMutex
+	latestBlock BlockCache
+	blockCache  map[int64]*CacheEntry  // height -> entry
+	hashCache   map[string]*CacheEntry // hash -> entry
+
 	// Configuration
-	config          *CacheConfig
-	logger          *zap.Logger
-	metrics         *CacheMetrics
-	
+	config  *CacheConfig
+	logger  *zap.Logger
+	metrics *CacheMetrics
+
 	// Advanced features
 	strategy        CacheStrategy
 	compressionType CompressionType
 	levels          map[CacheLevel]CacheBackend
-	
+
 	// Performance optimization
-	entropySeed     []byte
-	bloomFilter     *BloomFilter
-	adaptiveThresh  *AdaptiveThreshold
-	
+	entropySeed    []byte
+	bloomFilter    *BloomFilter
+	adaptiveThresh *AdaptiveThreshold
+
 	// Monitoring and health
-	healthChecker   *CacheHealthChecker
-	circuitBreaker  *CacheCircuitBreaker
-	warmupManager   *CacheWarmupManager
-	
+	healthChecker  *CacheHealthChecker
+	circuitBreaker *CacheCircuitBreaker
+	warmupManager  *CacheWarmupManager
+
 	// Statistics (atomic counters for thread safety)
-	totalRequests   int64
-	cacheHits       int64
-	cacheMisses     int64
-	evictions       int64
-	compressions    int64
-	decompressions  int64
-	
+	totalRequests  int64
+	cacheHits      int64
+	cacheMisses    int64
+	evictions      int64
+	compressions   int64
+	decompressions int64
+
 	// Lifecycle management
-	ctx             context.Context
-	cancel          context.CancelFunc
-	shutdownChan    chan struct{}
-	workerGroup     sync.WaitGroup
+	ctx          context.Context
+	cancel       context.CancelFunc
+	shutdownChan chan struct{}
+	workerGroup  sync.WaitGroup
 }
 
 // CacheConfig holds comprehensive cache configuration
 type CacheConfig struct {
 	// Basic settings
-	MaxSize              int64             `json:"max_size"`
-	MaxEntries           int               `json:"max_entries"`
-	DefaultTTL           time.Duration     `json:"default_ttl"`
-	CleanupInterval      time.Duration     `json:"cleanup_interval"`
-	
+	MaxSize         int64         `json:"max_size"`
+	MaxEntries      int           `json:"max_entries"`
+	DefaultTTL      time.Duration `json:"default_ttl"`
+	CleanupInterval time.Duration `json:"cleanup_interval"`
+
 	// Strategy settings
-	Strategy             CacheStrategy     `json:"strategy"`
-	CompressionType      CompressionType   `json:"compression_type"`
-	CompressionThreshold int64             `json:"compression_threshold"`
-	
+	Strategy             CacheStrategy   `json:"strategy"`
+	CompressionType      CompressionType `json:"compression_type"`
+	CompressionThreshold int64           `json:"compression_threshold"`
+
 	// Performance settings
-	PreallocateEntries   int               `json:"preallocate_entries"`
-	ShardCount           int               `json:"shard_count"`
-	EnableBloomFilter    bool              `json:"enable_bloom_filter"`
-	BloomFilterSize      uint              `json:"bloom_filter_size"`
-	BloomFilterHashes    uint              `json:"bloom_filter_hashes"`
-	
+	PreallocateEntries int  `json:"preallocate_entries"`
+	ShardCount         int  `json:"shard_count"`
+	EnableBloomFilter  bool `json:"enable_bloom_filter"`
+	BloomFilterSize    uint `json:"bloom_filter_size"`
+	BloomFilterHashes  uint `json:"bloom_filter_hashes"`
+
 	// Memory management
-	MemoryLimit          int64             `json:"memory_limit"`
-	MemoryThreshold      float64           `json:"memory_threshold"`
-	GCInterval           time.Duration     `json:"gc_interval"`
-	
+	MemoryLimit     int64         `json:"memory_limit"`
+	MemoryThreshold float64       `json:"memory_threshold"`
+	GCInterval      time.Duration `json:"gc_interval"`
+
 	// Tiered caching
-	EnableL2Disk         bool              `json:"enable_l2_disk"`
-	EnableL3Distributed  bool              `json:"enable_l3_distributed"`
-	DiskCachePath        string            `json:"disk_cache_path"`
-	DistributedEndpoints []string          `json:"distributed_endpoints"`
-	
+	EnableL2Disk         bool     `json:"enable_l2_disk"`
+	EnableL3Distributed  bool     `json:"enable_l3_distributed"`
+	DiskCachePath        string   `json:"disk_cache_path"`
+	DistributedEndpoints []string `json:"distributed_endpoints"`
+
 	// Monitoring
-	EnableMetrics        bool              `json:"enable_metrics"`
-	MetricsInterval      time.Duration     `json:"metrics_interval"`
-	EnableHealthChecks   bool              `json:"enable_health_checks"`
-	HealthCheckInterval  time.Duration     `json:"health_check_interval"`
-	
+	EnableMetrics       bool          `json:"enable_metrics"`
+	MetricsInterval     time.Duration `json:"metrics_interval"`
+	EnableHealthChecks  bool          `json:"enable_health_checks"`
+	HealthCheckInterval time.Duration `json:"health_check_interval"`
+
 	// Circuit breaker
-	EnableCircuitBreaker bool              `json:"enable_circuit_breaker"`
-	FailureThreshold     int               `json:"failure_threshold"`
-	SuccessThreshold     int               `json:"success_threshold"`
-	Timeout              time.Duration     `json:"timeout"`
-	
+	EnableCircuitBreaker bool          `json:"enable_circuit_breaker"`
+	FailureThreshold     int           `json:"failure_threshold"`
+	SuccessThreshold     int           `json:"success_threshold"`
+	Timeout              time.Duration `json:"timeout"`
+
 	// Cache warming
-	EnableWarmup         bool              `json:"enable_warmup"`
-	WarmupPrefetch       int               `json:"warmup_prefetch"`
-	WarmupChains         []string          `json:"warmup_chains"`
+	EnableWarmup   bool     `json:"enable_warmup"`
+	WarmupPrefetch int      `json:"warmup_prefetch"`
+	WarmupChains   []string `json:"warmup_chains"`
 }
 
 // CacheBackend interface for different cache storage backends
@@ -185,57 +185,57 @@ type CacheBackend interface {
 
 // BackendStats provides backend-specific statistics
 type BackendStats struct {
-	Entries     int64 `json:"entries"`
-	Size        int64 `json:"size"`
-	Hits        int64 `json:"hits"`
-	Misses      int64 `json:"misses"`
-	Operations  int64 `json:"operations"`
-	Errors      int64 `json:"errors"`
+	Entries    int64 `json:"entries"`
+	Size       int64 `json:"size"`
+	Hits       int64 `json:"hits"`
+	Misses     int64 `json:"misses"`
+	Operations int64 `json:"operations"`
+	Errors     int64 `json:"errors"`
 }
 
 // CacheMetrics tracks comprehensive cache performance
 type CacheMetrics struct {
-	mu                    sync.RWMutex
-	
+	mu sync.RWMutex
+
 	// Request metrics
-	TotalRequests         int64             `json:"total_requests"`
-	CacheHits             int64             `json:"cache_hits"`
-	CacheMisses           int64             `json:"cache_misses"`
-	HitRate               float64           `json:"hit_rate"`
-	
+	TotalRequests int64   `json:"total_requests"`
+	CacheHits     int64   `json:"cache_hits"`
+	CacheMisses   int64   `json:"cache_misses"`
+	HitRate       float64 `json:"hit_rate"`
+
 	// Performance metrics
-	AverageLatency        time.Duration     `json:"average_latency"`
-	P50Latency            time.Duration     `json:"p50_latency"`
-	P95Latency            time.Duration     `json:"p95_latency"`
-	P99Latency            time.Duration     `json:"p99_latency"`
-	
+	AverageLatency time.Duration `json:"average_latency"`
+	P50Latency     time.Duration `json:"p50_latency"`
+	P95Latency     time.Duration `json:"p95_latency"`
+	P99Latency     time.Duration `json:"p99_latency"`
+
 	// Storage metrics
-	CurrentSize           int64             `json:"current_size"`
-	MaxSize               int64             `json:"max_size"`
-	EntryCount            int64             `json:"entry_count"`
-	MaxEntries            int64             `json:"max_entries"`
-	MemoryUsage           int64             `json:"memory_usage"`
-	
+	CurrentSize int64 `json:"current_size"`
+	MaxSize     int64 `json:"max_size"`
+	EntryCount  int64 `json:"entry_count"`
+	MaxEntries  int64 `json:"max_entries"`
+	MemoryUsage int64 `json:"memory_usage"`
+
 	// Operation metrics
-	Evictions             int64             `json:"evictions"`
-	Compressions          int64             `json:"compressions"`
-	Decompressions        int64             `json:"decompressions"`
-	Invalidations         int64             `json:"invalidations"`
-	
+	Evictions      int64 `json:"evictions"`
+	Compressions   int64 `json:"compressions"`
+	Decompressions int64 `json:"decompressions"`
+	Invalidations  int64 `json:"invalidations"`
+
 	// Tiered metrics
-	L1Hits                int64             `json:"l1_hits"`
-	L2Hits                int64             `json:"l2_hits"`
-	L3Hits                int64             `json:"l3_hits"`
-	L1Misses              int64             `json:"l1_misses"`
-	
+	L1Hits   int64 `json:"l1_hits"`
+	L2Hits   int64 `json:"l2_hits"`
+	L3Hits   int64 `json:"l3_hits"`
+	L1Misses int64 `json:"l1_misses"`
+
 	// Health metrics
-	HealthScore           float64           `json:"health_score"`
-	ErrorRate             float64           `json:"error_rate"`
-	LastError             *time.Time        `json:"last_error,omitempty"`
-	Uptime                time.Duration     `json:"uptime"`
-	
+	HealthScore float64       `json:"health_score"`
+	ErrorRate   float64       `json:"error_rate"`
+	LastError   *time.Time    `json:"last_error,omitempty"`
+	Uptime      time.Duration `json:"uptime"`
+
 	// Strategy-specific metrics
-	StrategyMetrics       map[string]interface{} `json:"strategy_metrics"`
+	StrategyMetrics map[string]interface{} `json:"strategy_metrics"`
 }
 
 // BloomFilter provides probabilistic cache key existence checking
@@ -248,23 +248,23 @@ type BloomFilter struct {
 
 // AdaptiveThreshold dynamically adjusts cache thresholds based on performance
 type AdaptiveThreshold struct {
-	mu                sync.RWMutex
-	memoryThreshold   float64
-	evictionThreshold float64
-	compressionThresh int64
-	lastAdjustment    time.Time
+	mu                 sync.RWMutex
+	memoryThreshold    float64
+	evictionThreshold  float64
+	compressionThresh  int64
+	lastAdjustment     time.Time
 	performanceHistory []float64
 }
 
 // CacheHealthChecker monitors cache health and performance
 type CacheHealthChecker struct {
-	cache         *EnterpriseCache
-	logger        *zap.Logger
-	interval      time.Duration
-	lastCheck     time.Time
-	healthScore   float64
-	alertThresh   float64
-	mu            sync.RWMutex
+	cache       *EnterpriseCache
+	logger      *zap.Logger
+	interval    time.Duration
+	lastCheck   time.Time
+	healthScore float64
+	alertThresh float64
+	mu          sync.RWMutex
 }
 
 // CacheCircuitBreaker prevents cascade failures in cache operations
@@ -289,12 +289,12 @@ const (
 
 // CacheWarmupManager handles intelligent cache preloading
 type CacheWarmupManager struct {
-	cache       *EnterpriseCache
-	logger      *zap.Logger
-	strategies  []WarmupStrategy
-	isWarming   int32
-	progress    WarmupProgress
-	mu          sync.RWMutex
+	cache      *EnterpriseCache
+	logger     *zap.Logger
+	strategies []WarmupStrategy
+	isWarming  int32
+	progress   WarmupProgress
+	mu         sync.RWMutex
 }
 
 // WarmupStrategy defines different cache warming approaches
@@ -306,13 +306,13 @@ type WarmupStrategy interface {
 
 // WarmupProgress tracks cache warming progress
 type WarmupProgress struct {
-	Started      time.Time `json:"started"`
-	Completed    time.Time `json:"completed,omitempty"`
-	EntriesLoaded int64    `json:"entries_loaded"`
-	TotalEntries int64     `json:"total_entries"`
-	Percentage   float64   `json:"percentage"`
-	CurrentPhase string    `json:"current_phase"`
-	Errors       []string  `json:"errors,omitempty"`
+	Started       time.Time `json:"started"`
+	Completed     time.Time `json:"completed,omitempty"`
+	EntriesLoaded int64     `json:"entries_loaded"`
+	TotalEntries  int64     `json:"total_entries"`
+	Percentage    float64   `json:"percentage"`
+	CurrentPhase  string    `json:"current_phase"`
+	Errors        []string  `json:"errors,omitempty"`
 }
 
 // Memory backend implementation
@@ -328,9 +328,9 @@ func NewEnterpriseCache(config *CacheConfig, logger *zap.Logger) (*EnterpriseCac
 	if config == nil {
 		config = DefaultCacheConfig()
 	}
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	cache := &EnterpriseCache{
 		blockCache:      make(map[int64]*CacheEntry),
 		hashCache:       make(map[string]*CacheEntry),
@@ -344,30 +344,30 @@ func NewEnterpriseCache(config *CacheConfig, logger *zap.Logger) (*EnterpriseCac
 		shutdownChan:    make(chan struct{}),
 		metrics:         &CacheMetrics{},
 	}
-	
+
 	// Initialize entropy seed
 	if err := cache.initializeEntropy(); err != nil {
 		logger.Warn("Failed to initialize entropy", zap.Error(err))
 	}
-	
+
 	// Initialize bloom filter if enabled
 	if config.EnableBloomFilter {
 		cache.bloomFilter = NewBloomFilter(config.BloomFilterSize, config.BloomFilterHashes)
 	}
-	
+
 	// Initialize adaptive threshold
 	cache.adaptiveThresh = NewAdaptiveThreshold(config.MemoryThreshold)
-	
+
 	// Initialize backends
 	if err := cache.initializeBackends(); err != nil {
 		return nil, fmt.Errorf("failed to initialize cache backends: %w", err)
 	}
-	
+
 	// Initialize health checker
 	if config.EnableHealthChecks {
 		cache.healthChecker = NewCacheHealthChecker(cache, config.HealthCheckInterval, logger)
 	}
-	
+
 	// Initialize circuit breaker
 	if config.EnableCircuitBreaker {
 		cache.circuitBreaker = NewCacheCircuitBreaker(
@@ -376,15 +376,15 @@ func NewEnterpriseCache(config *CacheConfig, logger *zap.Logger) (*EnterpriseCac
 			config.Timeout,
 		)
 	}
-	
+
 	// Initialize warmup manager
 	if config.EnableWarmup {
 		cache.warmupManager = NewCacheWarmupManager(cache, logger)
 	}
-	
+
 	// Start background workers
 	cache.startBackgroundWorkers()
-	
+
 	logger.Info("Enterprise cache initialized",
 		zap.String("strategy", cache.strategyName()),
 		zap.Int64("max_size", config.MaxSize),
@@ -392,7 +392,7 @@ func NewEnterpriseCache(config *CacheConfig, logger *zap.Logger) (*EnterpriseCac
 		zap.Bool("compression", config.CompressionType != CompressionNone),
 		zap.Bool("bloom_filter", config.EnableBloomFilter),
 		zap.Bool("circuit_breaker", config.EnableCircuitBreaker))
-	
+
 	return cache, nil
 }
 
@@ -437,35 +437,35 @@ func (ec *EnterpriseCache) Get(key string) (interface{}, bool) {
 		latency := time.Since(startTime)
 		ec.recordLatency(latency)
 	}()
-	
+
 	// Increment total requests
 	atomic.AddInt64(&ec.totalRequests, 1)
-	
+
 	// Check circuit breaker
 	if ec.circuitBreaker != nil && !ec.circuitBreaker.AllowRequest() {
 		atomic.AddInt64(&ec.cacheMisses, 1)
 		return nil, false
 	}
-	
+
 	// Check bloom filter first (if enabled)
 	if ec.bloomFilter != nil && !ec.bloomFilter.MightContain(key) {
 		atomic.AddInt64(&ec.cacheMisses, 1)
 		return nil, false
 	}
-	
+
 	// Try L1 cache first
 	if entry := ec.getFromL1(key); entry != nil {
 		atomic.AddInt64(&ec.cacheHits, 1)
 		ec.recordCacheHit(L1Memory)
 		return ec.deserializeEntry(entry)
 	}
-	
+
 	// Cache miss
 	atomic.AddInt64(&ec.cacheMisses, 1)
 	if ec.circuitBreaker != nil {
 		ec.circuitBreaker.RecordFailure()
 	}
-	
+
 	return nil, false
 }
 
@@ -474,7 +474,7 @@ func (ec *EnterpriseCache) Set(key string, value interface{}, ttl time.Duration)
 	if ec.circuitBreaker != nil && !ec.circuitBreaker.AllowRequest() {
 		return fmt.Errorf("cache circuit breaker open")
 	}
-	
+
 	// Create cache entry
 	entry, err := ec.createCacheEntry(key, value, ttl)
 	if err != nil {
@@ -483,12 +483,12 @@ func (ec *EnterpriseCache) Set(key string, value interface{}, ttl time.Duration)
 		}
 		return fmt.Errorf("failed to create cache entry: %w", err)
 	}
-	
+
 	// Check memory pressure
 	if ec.isMemoryPressureHigh() {
 		ec.triggerEviction()
 	}
-	
+
 	// Store in L1
 	if err := ec.setToL1(key, entry); err != nil {
 		if ec.circuitBreaker != nil {
@@ -496,23 +496,23 @@ func (ec *EnterpriseCache) Set(key string, value interface{}, ttl time.Duration)
 		}
 		return err
 	}
-	
+
 	// Add to bloom filter
 	if ec.bloomFilter != nil {
 		ec.bloomFilter.Add(key)
 	}
-	
+
 	if ec.circuitBreaker != nil {
 		ec.circuitBreaker.RecordSuccess()
 	}
-	
+
 	return nil
 }
 
 // SetLatestBlock updates the latest block with enterprise features
 func (ec *EnterpriseCache) SetLatestBlock(block blocks.BlockEvent) error {
 	key := fmt.Sprintf("latest_block_%s", block.Chain)
-	
+
 	// Create enhanced block cache entry
 	blockCache := BlockCache{
 		Block:          block,
@@ -523,24 +523,24 @@ func (ec *EnterpriseCache) SetLatestBlock(block blocks.BlockEvent) error {
 		Level:          L1Memory,
 		ValidationHash: ec.calculateBlockHash(block),
 		Metadata: map[string]interface{}{
-			"source":       block.Source,
-			"tier":         block.Tier,
-			"relay_time":   block.RelayTimeMs,
-			"chain":        block.Chain,
+			"source":     block.Source,
+			"tier":       block.Tier,
+			"relay_time": block.RelayTimeMs,
+			"chain":      block.Chain,
 		},
 	}
-	
+
 	// Compress if enabled and large enough
 	if ec.shouldCompress(blockCache) {
 		if err := ec.compressBlockCache(&blockCache); err != nil {
 			ec.logger.Warn("Failed to compress block cache", zap.Error(err))
 		}
 	}
-	
+
 	ec.mu.Lock()
 	ec.latestBlock = blockCache
 	ec.mu.Unlock()
-	
+
 	// Store in regular cache as well
 	return ec.Set(key, blockCache, ec.config.DefaultTTL)
 }
@@ -550,16 +550,16 @@ func (ec *EnterpriseCache) GetLatestBlock() (blocks.BlockEvent, bool) {
 	ec.mu.RLock()
 	cached := ec.latestBlock
 	ec.mu.RUnlock()
-	
+
 	// Check expiration
 	if time.Now().After(cached.ExpiresAt) {
 		return blocks.BlockEvent{}, false
 	}
-	
+
 	// Update access statistics
 	atomic.AddInt64(&cached.AccessCount, 1)
 	cached.LastAccessed = time.Now()
-	
+
 	// Decompress if needed
 	if cached.Compressed && cached.CompressedData != nil {
 		if err := ec.decompressBlockCache(&cached); err != nil {
@@ -567,7 +567,7 @@ func (ec *EnterpriseCache) GetLatestBlock() (blocks.BlockEvent, bool) {
 			return blocks.BlockEvent{}, false
 		}
 	}
-	
+
 	return cached.Block, true
 }
 
@@ -575,15 +575,15 @@ func (ec *EnterpriseCache) GetLatestBlock() (blocks.BlockEvent, bool) {
 func (ec *EnterpriseCache) GetMetrics() *CacheMetrics {
 	totalReq := atomic.LoadInt64(&ec.totalRequests)
 	hits := atomic.LoadInt64(&ec.cacheHits)
-	
+
 	hitRate := float64(0)
 	if totalReq > 0 {
 		hitRate = float64(hits) / float64(totalReq)
 	}
-	
+
 	ec.metrics.mu.Lock()
 	defer ec.metrics.mu.Unlock()
-	
+
 	ec.metrics.TotalRequests = totalReq
 	ec.metrics.CacheHits = hits
 	ec.metrics.CacheMisses = atomic.LoadInt64(&ec.cacheMisses)
@@ -594,28 +594,28 @@ func (ec *EnterpriseCache) GetMetrics() *CacheMetrics {
 	ec.metrics.CurrentSize = ec.getCurrentSize()
 	ec.metrics.EntryCount = ec.getEntryCount()
 	ec.metrics.MemoryUsage = ec.getMemoryUsage()
-	
+
 	if ec.healthChecker != nil {
 		ec.metrics.HealthScore = ec.healthChecker.GetHealthScore()
 	}
-	
+
 	return ec.metrics
 }
 
 // Shutdown gracefully shuts down the cache system
 func (ec *EnterpriseCache) Shutdown(ctx context.Context) error {
 	ec.logger.Info("Shutting down enterprise cache")
-	
+
 	// Signal shutdown
 	close(ec.shutdownChan)
-	
+
 	// Wait for workers with timeout
 	done := make(chan struct{})
 	go func() {
 		ec.workerGroup.Wait()
 		close(done)
 	}()
-	
+
 	select {
 	case <-done:
 		// Close backends
@@ -626,7 +626,7 @@ func (ec *EnterpriseCache) Shutdown(ctx context.Context) error {
 					zap.Error(err))
 			}
 		}
-		
+
 		ec.cancel()
 		ec.logger.Info("Enterprise cache shutdown complete")
 		return nil
@@ -660,13 +660,13 @@ func (ec *EnterpriseCache) startBackgroundWorkers() {
 	// Cleanup worker
 	ec.workerGroup.Add(1)
 	go ec.cleanupWorker()
-	
+
 	// Metrics worker
 	if ec.config.EnableMetrics {
 		ec.workerGroup.Add(1)
 		go ec.metricsWorker()
 	}
-	
+
 	// GC worker
 	ec.workerGroup.Add(1)
 	go ec.gcWorker()
@@ -689,13 +689,13 @@ func (ec *EnterpriseCache) getFromL1(key string) *CacheEntry {
 	if backend == nil {
 		return nil
 	}
-	
+
 	entry, err := backend.Get(key)
 	if err != nil {
 		ec.logger.Debug("L1 cache get failed", zap.String("key", key), zap.Error(err))
 		return nil
 	}
-	
+
 	return entry
 }
 
@@ -704,20 +704,20 @@ func (ec *EnterpriseCache) setToL1(key string, entry *CacheEntry) error {
 	if backend == nil {
 		return fmt.Errorf("L1 backend not available")
 	}
-	
+
 	entry.Level = L1Memory
 	return backend.Set(key, entry)
 }
 
 func (ec *EnterpriseCache) createCacheEntry(key string, value interface{}, ttl time.Duration) (*CacheEntry, error) {
 	now := time.Now()
-	
+
 	// Serialize value
 	data, err := json.Marshal(value)
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize value: %w", err)
 	}
-	
+
 	entry := &CacheEntry{
 		Key:          key,
 		Value:        value,
@@ -730,7 +730,7 @@ func (ec *EnterpriseCache) createCacheEntry(key string, value interface{}, ttl t
 		Metadata:     make(map[string]interface{}),
 		Version:      1,
 	}
-	
+
 	return entry, nil
 }
 
@@ -738,13 +738,13 @@ func (ec *EnterpriseCache) shouldCompress(blockCache BlockCache) bool {
 	if ec.compressionType == CompressionNone {
 		return false
 	}
-	
+
 	// Estimate size
 	data, err := json.Marshal(blockCache.Block)
 	if err != nil {
 		return false
 	}
-	
+
 	return int64(len(data)) > ec.config.CompressionThreshold
 }
 
@@ -753,7 +753,7 @@ func (ec *EnterpriseCache) compressBlockCache(blockCache *BlockCache) error {
 	if err != nil {
 		return err
 	}
-	
+
 	switch ec.compressionType {
 	case CompressionGzip:
 		var buf bytes.Buffer
@@ -778,7 +778,7 @@ func (ec *EnterpriseCache) decompressBlockCache(blockCache *BlockCache) error {
 	if !blockCache.Compressed || blockCache.CompressedData == nil {
 		return nil
 	}
-	
+
 	switch ec.compressionType {
 	case CompressionGzip:
 		r, err := gzip.NewReader(bytes.NewReader(blockCache.CompressedData))
@@ -786,16 +786,16 @@ func (ec *EnterpriseCache) decompressBlockCache(blockCache *BlockCache) error {
 			return err
 		}
 		defer r.Close()
-		
+
 		data, err := io.ReadAll(r)
 		if err != nil {
 			return err
 		}
-		
+
 		if err := json.Unmarshal(data, &blockCache.Block); err != nil {
 			return err
 		}
-		
+
 		blockCache.Compressed = false
 		blockCache.CompressedData = nil
 		atomic.AddInt64(&ec.decompressions, 1)
@@ -809,7 +809,7 @@ func (ec *EnterpriseCache) deserializeEntry(entry *CacheEntry) (interface{}, boo
 	// Update access statistics
 	atomic.AddInt64(&entry.AccessCount, 1)
 	entry.LastAccessed = time.Now()
-	
+
 	return entry.Value, true
 }
 
@@ -822,16 +822,16 @@ func (ec *EnterpriseCache) isMemoryPressureHigh() bool {
 	if ec.config.MemoryLimit == 0 {
 		return false
 	}
-	
+
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
-	
+
 	return float64(memStats.Alloc) > float64(ec.config.MemoryLimit)*ec.config.MemoryThreshold
 }
 
 func (ec *EnterpriseCache) triggerEviction() {
 	atomic.AddInt64(&ec.evictions, 1)
-	
+
 	switch ec.strategy {
 	case StrategyLRU:
 		ec.evictLRU()
@@ -850,7 +850,7 @@ func (ec *EnterpriseCache) evictLRU() {
 	if backend == nil {
 		return
 	}
-	
+
 	// Implementation would iterate through entries and evict least recently used
 	ec.logger.Debug("Performing LRU eviction")
 }
@@ -908,10 +908,10 @@ func (ec *EnterpriseCache) getMemoryUsage() int64 {
 
 func (ec *EnterpriseCache) cleanupWorker() {
 	defer ec.workerGroup.Done()
-	
+
 	ticker := time.NewTicker(ec.config.CleanupInterval)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ec.shutdownChan:
@@ -924,10 +924,10 @@ func (ec *EnterpriseCache) cleanupWorker() {
 
 func (ec *EnterpriseCache) metricsWorker() {
 	defer ec.workerGroup.Done()
-	
+
 	ticker := time.NewTicker(ec.config.MetricsInterval)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ec.shutdownChan:
@@ -940,10 +940,10 @@ func (ec *EnterpriseCache) metricsWorker() {
 
 func (ec *EnterpriseCache) gcWorker() {
 	defer ec.workerGroup.Done()
-	
+
 	ticker := time.NewTicker(ec.config.GCInterval)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ec.shutdownChan:
@@ -970,7 +970,7 @@ func (ec *EnterpriseCache) cleanup() {
 
 func (ec *EnterpriseCache) updateMetrics() {
 	metrics := ec.GetMetrics()
-	
+
 	ec.logger.Debug("Cache metrics update",
 		zap.Int64("total_requests", metrics.TotalRequests),
 		zap.Float64("hit_rate", metrics.HitRate),
@@ -991,7 +991,7 @@ func NewBloomFilter(size uint, hashFns uint) *BloomFilter {
 func (bf *BloomFilter) Add(key string) {
 	bf.mu.Lock()
 	defer bf.mu.Unlock()
-	
+
 	for i := uint(0); i < bf.hashFns; i++ {
 		hash := bf.hash(key, i)
 		bf.bitArray[hash/64] |= 1 << (hash % 64)
@@ -1001,7 +1001,7 @@ func (bf *BloomFilter) Add(key string) {
 func (bf *BloomFilter) MightContain(key string) bool {
 	bf.mu.RLock()
 	defer bf.mu.RUnlock()
-	
+
 	for i := uint(0); i < bf.hashFns; i++ {
 		hash := bf.hash(key, i)
 		if bf.bitArray[hash/64]&(1<<(hash%64)) == 0 {
@@ -1021,10 +1021,10 @@ func (bf *BloomFilter) hash(key string, seed uint) uint {
 
 func NewAdaptiveThreshold(initialThreshold float64) *AdaptiveThreshold {
 	return &AdaptiveThreshold{
-		memoryThreshold:   initialThreshold,
-		evictionThreshold: 0.8,
-		compressionThresh: 1024,
-		lastAdjustment:    time.Now(),
+		memoryThreshold:    initialThreshold,
+		evictionThreshold:  0.8,
+		compressionThresh:  1024,
+		lastAdjustment:     time.Now(),
 		performanceHistory: make([]float64, 0, 100),
 	}
 }
@@ -1056,7 +1056,7 @@ func NewCacheCircuitBreaker(failureThreshold, successThreshold int, timeout time
 func (cb *CacheCircuitBreaker) AllowRequest() bool {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
-	
+
 	switch cb.state {
 	case CircuitClosed:
 		return true
@@ -1072,9 +1072,9 @@ func (cb *CacheCircuitBreaker) AllowRequest() bool {
 func (cb *CacheCircuitBreaker) RecordSuccess() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	
+
 	atomic.AddInt64(&cb.successes, 1)
-	
+
 	if cb.state == CircuitHalfOpen {
 		cb.state = CircuitClosed
 		atomic.StoreInt64(&cb.failures, 0)
@@ -1084,10 +1084,10 @@ func (cb *CacheCircuitBreaker) RecordSuccess() {
 func (cb *CacheCircuitBreaker) RecordFailure() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	
+
 	failures := atomic.AddInt64(&cb.failures, 1)
 	cb.lastFailure = time.Now()
-	
+
 	if cb.state == CircuitClosed && int(failures) >= cb.threshold {
 		cb.state = CircuitOpen
 	} else if cb.state == CircuitHalfOpen {
@@ -1115,29 +1115,29 @@ func NewMemoryBackend(maxEntries int) *MemoryBackend {
 func (mb *MemoryBackend) Get(key string) (*CacheEntry, error) {
 	mb.mu.RLock()
 	defer mb.mu.RUnlock()
-	
+
 	entry, exists := mb.entries[key]
 	if !exists {
 		atomic.AddInt64(&mb.stats.Misses, 1)
 		return nil, fmt.Errorf("key not found")
 	}
-	
+
 	// Check expiration
 	if time.Now().After(entry.ExpiresAt) {
 		atomic.AddInt64(&mb.stats.Misses, 1)
 		return nil, fmt.Errorf("entry expired")
 	}
-	
+
 	atomic.AddInt64(&mb.stats.Hits, 1)
 	atomic.AddInt64(&mb.stats.Operations, 1)
-	
+
 	return entry, nil
 }
 
 func (mb *MemoryBackend) Set(key string, entry *CacheEntry) error {
 	mb.mu.Lock()
 	defer mb.mu.Unlock()
-	
+
 	// Check if we need to evict
 	if len(mb.entries) >= mb.maxSize {
 		// Simple FIFO eviction
@@ -1146,53 +1146,53 @@ func (mb *MemoryBackend) Set(key string, entry *CacheEntry) error {
 			break
 		}
 	}
-	
+
 	mb.entries[key] = entry
 	atomic.AddInt64(&mb.stats.Operations, 1)
-	
+
 	return nil
 }
 
 func (mb *MemoryBackend) Delete(key string) error {
 	mb.mu.Lock()
 	defer mb.mu.Unlock()
-	
+
 	delete(mb.entries, key)
 	atomic.AddInt64(&mb.stats.Operations, 1)
-	
+
 	return nil
 }
 
 func (mb *MemoryBackend) Clear() error {
 	mb.mu.Lock()
 	defer mb.mu.Unlock()
-	
+
 	mb.entries = make(map[string]*CacheEntry)
 	atomic.AddInt64(&mb.stats.Operations, 1)
-	
+
 	return nil
 }
 
 func (mb *MemoryBackend) Size() int64 {
 	mb.mu.RLock()
 	defer mb.mu.RUnlock()
-	
+
 	var total int64
 	for _, entry := range mb.entries {
 		total += entry.Size
 	}
-	
+
 	return total
 }
 
 func (mb *MemoryBackend) Stats() BackendStats {
 	mb.mu.RLock()
 	defer mb.mu.RUnlock()
-	
+
 	stats := mb.stats
 	stats.Entries = int64(len(mb.entries))
 	stats.Size = mb.Size()
-	
+
 	return stats
 }
 
@@ -1209,7 +1209,7 @@ type Cache = EnterpriseCache
 func New(maxBlocks int, logger *zap.Logger) *Cache {
 	config := DefaultCacheConfig()
 	config.MaxEntries = maxBlocks
-	
+
 	cache, err := NewEnterpriseCache(config, logger)
 	if err != nil {
 		logger.Error("Failed to create enterprise cache, falling back to basic implementation", zap.Error(err))
@@ -1220,7 +1220,7 @@ func New(maxBlocks int, logger *zap.Logger) *Cache {
 			logger:     logger,
 		}
 	}
-	
+
 	return cache
 }
 
@@ -1229,12 +1229,12 @@ func NewWithMetrics(maxBlocks int, logger *zap.Logger) *Cache {
 	config := DefaultCacheConfig()
 	config.MaxEntries = maxBlocks
 	config.EnableMetrics = true
-	
+
 	cache, err := NewEnterpriseCache(config, logger)
 	if err != nil {
 		logger.Error("Failed to create enterprise cache with metrics", zap.Error(err))
 		return New(maxBlocks, logger)
 	}
-	
+
 	return cache
 }

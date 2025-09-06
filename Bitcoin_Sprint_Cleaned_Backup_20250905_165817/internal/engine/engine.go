@@ -16,8 +16,8 @@ import (
 	"syscall"
 	"time"
 
-	lru "github.com/decred/dcrd/lru"
 	"github.com/cenkalti/backoff/v4"
+	lru "github.com/decred/dcrd/lru"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -47,11 +47,11 @@ type Task interface {
 
 // EngineHelpers exposes services available to tasks (cache, state, metrics).
 type EngineHelpers struct {
-	Cache     *ResultCache
-	State     StateStore
-	Seen      SeenStore
+	Cache      *ResultCache
+	State      StateStore
+	Seen       SeenStore
 	HTTPClient *http.Client
-	Metrics   *engineMetrics
+	Metrics    *engineMetrics
 }
 
 // ----------------------------- Engine Implementation -----------------------------
@@ -164,11 +164,11 @@ func (e *Engine) worker(id int) {
 			}
 			start := time.Now()
 			helpers := EngineHelpers{
-				Cache:     e.cache,
-				State:     e.state,
-				Seen:      e.seen,
+				Cache:      e.cache,
+				State:      e.state,
+				Seen:       e.seen,
 				HTTPClient: e.httpClient,
-				Metrics:   e.metrics,
+				Metrics:    e.metrics,
 			}
 			results, err := task.Execute(e.stopCtx, helpers)
 			// update metrics
@@ -305,7 +305,7 @@ func (f *FileStateStore) LoadFailedIDs(ctx context.Context) ([]string, error) {
 	var ids []string
 	sc := bufio.NewScanner(file)
 	buf := make([]byte, 64*1024) // 64KB buffer
-	sc.Buffer(buf, 1024*1024)   // Max 1MB per line
+	sc.Buffer(buf, 1024*1024)    // Max 1MB per line
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line != "" {
@@ -386,7 +386,7 @@ func (s *FileSeenStore) load() error {
 	defer f.Close()
 	sc := bufio.NewScanner(f)
 	buf := make([]byte, 64*1024) // 64KB buffer
-	sc.Buffer(buf, 1024*1024)   // Max 1MB per line
+	sc.Buffer(buf, 1024*1024)    // Max 1MB per line
 	for sc.Scan() {
 		id := strings.TrimSpace(sc.Text())
 		if id == "" {
@@ -536,14 +536,14 @@ func (s *FileSeenStore) Compact(ctx context.Context, keep int) error {
 // ----------------------------- Metrics & HTTP -----------------------------
 
 type engineMetrics struct {
-	tasksQueued         prometheus.Counter
-	tasksProcessed      prometheus.Counter
-	taskErrors          prometheus.Counter
-	taskProcessingTime  prometheus.Histogram
-	messagesProduced    prometheus.Counter
-	tasksDropped        prometheus.Counter
-	queueDrops          prometheus.Counter
-	tasksTotal          prometheus.Counter
+	tasksQueued        prometheus.Counter
+	tasksProcessed     prometheus.Counter
+	taskErrors         prometheus.Counter
+	taskProcessingTime prometheus.Histogram
+	messagesProduced   prometheus.Counter
+	tasksDropped       prometheus.Counter
+	queueDrops         prometheus.Counter
+	tasksTotal         prometheus.Counter
 }
 
 func newEngineMetrics() *engineMetrics {

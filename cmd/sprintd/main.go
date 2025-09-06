@@ -20,7 +20,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	
+
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/PayRpc/Bitcoin-Sprint/internal/api"
@@ -69,36 +69,36 @@ type ServiceManager struct {
 	logger *zap.Logger
 
 	// Core infrastructure
-	db               *database.DB
-	metricsRegistry  *metrics.PrometheusRegistry
-	blockIdx         *dedup.BlockIndex
-	circuitBreakers  map[string]*circuitbreaker.Manager
+	db              *database.DB
+	metricsRegistry *metrics.PrometheusRegistry
+	blockIdx        *dedup.BlockIndex
+	circuitBreakers map[string]*circuitbreaker.Manager
 
 	// Communication channels
-	blockChan        chan blocks.BlockEvent
-	shutdownChan     chan struct{}
+	blockChan    chan blocks.BlockEvent
+	shutdownChan chan struct{}
 
 	// Core services
-	mempool          *mempool.Mempool
-	cache            *cache.Cache
-	broadcaster      *broadcaster.Broadcaster
-	throttleManager  *throttle.EndpointThrottle
-	relayDispatcher  *relay.RelayDispatcher
-	p2pClient        p2p.Client
-	apiServer        *api.Server
-	backfillService  *messaging.BackfillService
-	rateLimiter      *ratelimit.RateLimiter
+	mempool         *mempool.Mempool
+	cache           *cache.Cache
+	broadcaster     *broadcaster.Broadcaster
+	throttleManager *throttle.EndpointThrottle
+	relayDispatcher *relay.RelayDispatcher
+	p2pClient       p2p.Client
+	apiServer       *api.Server
+	backfillService *messaging.BackfillService
+	rateLimiter     *ratelimit.RateLimiter
 
 	// Lifecycle management
-	ctx              context.Context
-	cancel           context.CancelFunc
-	wg               sync.WaitGroup
-	startupErrors    chan error
-	healthServer     *http.Server
-	startTime        time.Time
+	ctx           context.Context
+	cancel        context.CancelFunc
+	wg            sync.WaitGroup
+	startupErrors chan error
+	healthServer  *http.Server
+	startTime     time.Time
 	// Security
-	licenseKey       string
-	licenseInfo      *license.LicenseInfo
+	licenseKey  string
+	licenseInfo *license.LicenseInfo
 }
 
 func main() {
@@ -112,7 +112,7 @@ func main() {
 	// Set up panic recovery
 	defer func() {
 		if r := recover(); r != nil {
-			logger.Fatal("Application panic", 
+			logger.Fatal("Application panic",
 				zap.Any("panic", r),
 				zap.String("stack", string(getStacktrace())))
 		}
@@ -181,17 +181,17 @@ func NewServiceManager(logger *zap.Logger) (*ServiceManager, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	sm := &ServiceManager{
-		cfg:              cfg,
-		logger:           logger,
-		ctx:              ctx,
-		cancel:           cancel,
-		blockChan:        make(chan blocks.BlockEvent, cfg.BlockChannelBuffer),
-		shutdownChan:     make(chan struct{}),
-		startupErrors:    make(chan error, 20), // Increased buffer for startup errors
-		blockIdx:         dedup.NewBlockIndex(cfg.BlockDeduplicationWindow),
-		startTime:        time.Now(),
-		circuitBreakers:  make(map[string]*circuitbreaker.Manager),
-		licenseInfo:      &license.LicenseInfo{},
+		cfg:             cfg,
+		logger:          logger,
+		ctx:             ctx,
+		cancel:          cancel,
+		blockChan:       make(chan blocks.BlockEvent, cfg.BlockChannelBuffer),
+		shutdownChan:    make(chan struct{}),
+		startupErrors:   make(chan error, 20), // Increased buffer for startup errors
+		blockIdx:        dedup.NewBlockIndex(cfg.BlockDeduplicationWindow),
+		startTime:       time.Now(),
+		circuitBreakers: make(map[string]*circuitbreaker.Manager),
+		licenseInfo:     &license.LicenseInfo{},
 	}
 
 	return sm, nil
@@ -342,7 +342,7 @@ func (sm *ServiceManager) initializeRuntime() error {
 	if sm.cfg.MemoryLimitMB > 0 {
 		softLimit := uint64(sm.cfg.MemoryLimitMB) * 1024 * 1024
 		debug.SetMemoryLimit(softLimit)
-		sm.logger.Info("Set soft memory limit", 
+		sm.logger.Info("Set soft memory limit",
 			zap.Uint64("limit_bytes", softLimit),
 			zap.Int("limit_mb", sm.cfg.MemoryLimitMB))
 	}
@@ -366,7 +366,7 @@ func (sm *ServiceManager) validateLicense() error {
 		sm.logger.Info("No license key provided, running in open source mode")
 		return nil
 	}
-	
+
 	// Create license validator
 	validator := license.NewValidator(sm.cfg.LicenseKey)
 
@@ -378,7 +378,7 @@ func (sm *ServiceManager) validateLicense() error {
 	if !validationResult.Valid {
 		return fmt.Errorf("invalid license key: %s", validationResult.Message)
 	}
-	
+
 	// Store license info for later use
 	sm.licenseInfo = &validationResult
 
@@ -401,25 +401,25 @@ func (sm *ServiceManager) validateLicense() error {
 func (sm *ServiceManager) initializeMetrics() error {
 	// Create new registry
 	sm.metricsRegistry = metrics.NewRegistry()
-	
+
 	// Register metrics in the service manager for convenient access
 	if sm.cfg.EnablePrometheus {
 		// Set up HTTP server for metrics export if configured
 		go func() {
 			metricsAddr := fmt.Sprintf(":%d", sm.cfg.PrometheusPort)
 			sm.logger.Info("Starting Prometheus metrics server", zap.String("address", metricsAddr))
-			
+
 			http.Handle("/metrics", promhttp.HandlerFor(
 				sm.metricsRegistry.GetRegistry(),
 				promhttp.HandlerOpts{},
 			))
-			
+
 			if err := http.ListenAndServe(metricsAddr, nil); err != nil {
 				sm.logger.Error("Prometheus server error", zap.Error(err))
 			}
 		}()
 	}
-	
+
 	return nil
 }
 
@@ -428,28 +428,28 @@ func (sm *ServiceManager) initializeCircuitBreakers() {
 	// Circuit breaker for external APIs
 	sm.circuitBreakers["external_apis"] = circuitbreaker.NewCircuitBreaker(
 		circuitbreaker.Config{
-			Name:              "external_apis",
-			MaxFailures:       5,
-			ResetTimeout:      30 * time.Second,
-			FailureThreshold:  0.5,
-			SuccessThreshold:  3,
-			Timeout:           10 * time.Second,
-			OnStateChange:     sm.onCircuitBreakerStateChange,
-			Logger:            sm.logger,
+			Name:             "external_apis",
+			MaxFailures:      5,
+			ResetTimeout:     30 * time.Second,
+			FailureThreshold: 0.5,
+			SuccessThreshold: 3,
+			Timeout:          10 * time.Second,
+			OnStateChange:    sm.onCircuitBreakerStateChange,
+			Logger:           sm.logger,
 		},
 	)
 
 	// Circuit breaker for database operations
 	sm.circuitBreakers["database"] = circuitbreaker.NewCircuitBreaker(
 		circuitbreaker.Config{
-			Name:              "database",
-			MaxFailures:       3,
-			ResetTimeout:      60 * time.Second,
-			FailureThreshold:  0.5,
-			SuccessThreshold:  2,
-			Timeout:           15 * time.Second,
-			OnStateChange:     sm.onCircuitBreakerStateChange,
-			Logger:            sm.logger,
+			Name:             "database",
+			MaxFailures:      3,
+			ResetTimeout:     60 * time.Second,
+			FailureThreshold: 0.5,
+			SuccessThreshold: 2,
+			Timeout:          15 * time.Second,
+			OnStateChange:    sm.onCircuitBreakerStateChange,
+			Logger:           sm.logger,
 		},
 	)
 }
@@ -466,11 +466,11 @@ func (sm *ServiceManager) initializeDatabase(ctx context.Context) error {
 
 	dbCfg := database.Config{
 		Type:            sm.cfg.DatabaseType,
-		URL:            sm.cfg.DatabaseURL,
-		MaxConnections: sm.cfg.DatabaseMaxConnections,
-		MaxIdleConns:   sm.cfg.DatabaseMaxIdleConns,
+		URL:             sm.cfg.DatabaseURL,
+		MaxConnections:  sm.cfg.DatabaseMaxConnections,
+		MaxIdleConns:    sm.cfg.DatabaseMaxIdleConns,
 		ConnMaxLifetime: sm.cfg.DatabaseConnMaxLifetime,
-		SSLMode:        sm.cfg.DatabaseSSLMode,
+		SSLMode:         sm.cfg.DatabaseSSLMode,
 	}
 
 	var err error
@@ -494,7 +494,7 @@ func (sm *ServiceManager) initializeDatabase(ctx context.Context) error {
 		sm.logger.Info("Database migrations completed successfully")
 	}
 
-	sm.logger.Info("Database connection established", 
+	sm.logger.Info("Database connection established",
 		zap.String("type", sm.cfg.DatabaseType),
 		zap.String("url", obfuscateDBURL(sm.cfg.DatabaseURL)))
 
@@ -507,10 +507,10 @@ func (sm *ServiceManager) initializeCoreServices() error {
 
 	// Initialize rate limiter
 	sm.rateLimiter = ratelimit.NewRateLimiter(ratelimit.Config{
-		GlobalRate:   rate.Limit(sm.cfg.GlobalAPIRateLimit),
-		Burst:        sm.cfg.GlobalAPIBurstLimit,
-		IPRate:       rate.Limit(sm.cfg.PerIPRateLimit),
-		IPBurst:      sm.cfg.PerIPBurstLimit,
+		GlobalRate:      rate.Limit(sm.cfg.GlobalAPIRateLimit),
+		Burst:           sm.cfg.GlobalAPIBurstLimit,
+		IPRate:          rate.Limit(sm.cfg.PerIPRateLimit),
+		IPBurst:         sm.cfg.PerIPBurstLimit,
 		CleanupInterval: 5 * time.Minute,
 	})
 
@@ -526,10 +526,10 @@ func (sm *ServiceManager) initializeCoreServices() error {
 
 	// Initialize broadcaster with enhanced configuration
 	sm.broadcaster = broadcaster.NewWithMetricsAndConfig(broadcaster.Config{
-		MaxConnections:   MaxWSConns,
-		WriteTimeout:     sm.cfg.WSWriteTimeout,
-		PingInterval:     sm.cfg.WSPingInterval,
-		MaxMessageSize:   sm.cfg.WSMaxMessageSize,
+		MaxConnections: MaxWSConns,
+		WriteTimeout:   sm.cfg.WSWriteTimeout,
+		PingInterval:   sm.cfg.WSPingInterval,
+		MaxMessageSize: sm.cfg.WSMaxMessageSize,
 	}, sm.logger, sm.metrics)
 
 	// Initialize throttle manager
@@ -538,9 +538,9 @@ func (sm *ServiceManager) initializeCoreServices() error {
 	// Register endpoints from configuration with circuit breaker protection
 	for _, endpoint := range sm.cfg.ExternalEndpoints {
 		protectedEndpoint := throttle.ProtectedEndpoint{
-			URL:           endpoint.URL,
-			Priority:      endpoint.Priority,
-			Timeout:       endpoint.Timeout,
+			URL:            endpoint.URL,
+			Priority:       endpoint.Priority,
+			Timeout:        endpoint.Timeout,
 			CircuitBreaker: sm.circuitBreakers["external_apis"],
 		}
 		sm.throttle.RegisterEndpoint(protectedEndpoint)
@@ -548,11 +548,11 @@ func (sm *ServiceManager) initializeCoreServices() error {
 
 	// Initialize relay dispatcher with circuit breaker
 	sm.relayDispatcher, err = relay.NewRelayDispatcherWithMetricsAndConfig(relay.Config{
-		MaxConcurrent:    sm.cfg.RelayMaxConcurrent,
-		Timeout:          sm.cfg.RelayTimeout,
-		RetryAttempts:    sm.cfg.RelayRetryAttempts,
-		RetryDelay:       sm.cfg.RelayRetryDelay,
-		CircuitBreaker:   sm.circuitBreakers["external_apis"],
+		MaxConcurrent:  sm.cfg.RelayMaxConcurrent,
+		Timeout:        sm.cfg.RelayTimeout,
+		RetryAttempts:  sm.cfg.RelayRetryAttempts,
+		RetryDelay:     sm.cfg.RelayRetryDelay,
+		CircuitBreaker: sm.circuitBreakers["external_apis"],
 	}, sm.cfg, sm.logger, sm.metrics)
 	if err != nil {
 		return fmt.Errorf("failed to create relay dispatcher: %w", err)
@@ -597,15 +597,15 @@ func (sm *ServiceManager) startNetworkServices(ctx context.Context) error {
 
 	// Initialize API server with enhanced middleware
 	apiConfig := api.Config{
-		RateLimiter:      sm.rateLimiter,
-		EnableCORS:       sm.cfg.EnableCORS,
-		CORSOrigins:      sm.cfg.CORSOrigins,
-		TrustedProxies:   sm.cfg.TrustedProxies,
+		RateLimiter:       sm.rateLimiter,
+		EnableCORS:        sm.cfg.EnableCORS,
+		CORSOrigins:       sm.cfg.CORSOrigins,
+		TrustedProxies:    sm.cfg.TrustedProxies,
 		EnableCompression: sm.cfg.EnableCompression,
-		ReadTimeout:      sm.cfg.APIReadTimeout,
-		WriteTimeout:     sm.cfg.APIWriteTimeout,
-		IdleTimeout:      sm.cfg.APIIdleTimeout,
-		MaxHeaderBytes:   MaxHeaderBytes,
+		ReadTimeout:       sm.cfg.APIReadTimeout,
+		WriteTimeout:      sm.cfg.APIWriteTimeout,
+		IdleTimeout:       sm.cfg.APIIdleTimeout,
+		MaxHeaderBytes:    MaxHeaderBytes,
 	}
 
 	// Create middleware chain
@@ -649,12 +649,12 @@ func (sm *ServiceManager) startBackgroundServices(ctx context.Context) error {
 	var err error
 	// Initialize backfill service with circuit breaker protection
 	backfillConfig := messaging.BackfillConfig{
-		BatchSize:          sm.cfg.BackfillBatchSize,
-		Parallelism:        sm.cfg.BackfillParallelism,
-		Timeout:            sm.cfg.BackfillTimeout,
-		RetryAttempts:      sm.cfg.BackfillRetryAttempts,
-		CircuitBreaker:     sm.circuitBreakers["database"],
-		MaxBlockRange:      sm.cfg.BackfillMaxBlockRange,
+		BatchSize:      sm.cfg.BackfillBatchSize,
+		Parallelism:    sm.cfg.BackfillParallelism,
+		Timeout:        sm.cfg.BackfillTimeout,
+		RetryAttempts:  sm.cfg.BackfillRetryAttempts,
+		CircuitBreaker: sm.circuitBreakers["database"],
+		MaxBlockRange:  sm.cfg.BackfillMaxBlockRange,
 	}
 	sm.backfillService, err = messaging.NewBackfillServiceWithMetricsAndConfig(
 		backfillConfig, sm.cfg, sm.blockChan, sm.mempool, sm.logger, sm.metrics)
@@ -791,7 +791,7 @@ func (sm *ServiceManager) handleBlockEvent(event blocks.BlockEvent) error {
 	// Update cache
 	if sm.cache != nil {
 		if err := sm.cache.SetBlock(event.Block); err != nil {
-			sm.logger.Warn("Failed to cache block", 
+			sm.logger.Warn("Failed to cache block",
 				zap.String("hash", event.Block.Hash()),
 				zap.Error(err))
 		}
@@ -809,7 +809,7 @@ func (sm *ServiceManager) handleBlockEvent(event blocks.BlockEvent) error {
 			return nil, sm.db.StoreBlock(sm.ctx, event.Block)
 		})
 		if err != nil {
-			sm.logger.Error("Failed to store block in database", 
+			sm.logger.Error("Failed to store block in database",
 				zap.String("hash", event.Block.Hash()),
 				zap.Error(err))
 			// Don't return error - continue processing
@@ -819,7 +819,7 @@ func (sm *ServiceManager) handleBlockEvent(event blocks.BlockEvent) error {
 	// Measure processing time
 	processingTime := time.Since(startTime)
 	sm.metrics.ObserveHistogram("block_processing_time_ms", float64(processingTime.Milliseconds()))
-	sm.logger.Debug("Block processed successfully", 
+	sm.logger.Debug("Block processed successfully",
 		zap.String("hash", event.Block.Hash()),
 		zap.Int64("height", event.Block.Height()),
 		zap.Duration("processing_time", processingTime))
@@ -871,7 +871,7 @@ func (sm *ServiceManager) handleBlockBatch(batch []blocks.BlockEvent) error {
 			return nil, sm.db.StoreBlocks(sm.ctx, uniqueBlocks)
 		})
 		if err != nil {
-			sm.logger.Error("Failed to store blocks in database", 
+			sm.logger.Error("Failed to store blocks in database",
 				zap.Int("batch_size", len(uniqueBlocks)),
 				zap.Error(err))
 		}
@@ -883,7 +883,7 @@ func (sm *ServiceManager) handleBlockBatch(batch []blocks.BlockEvent) error {
 	sm.metrics.ObserveHistogram("block_batch_processing_time_ms", float64(processingTime.Milliseconds()))
 	sm.metrics.ObserveHistogram("block_batch_size", float64(len(uniqueBlocks)))
 
-	sm.logger.Debug("Block batch processed successfully", 
+	sm.logger.Debug("Block batch processed successfully",
 		zap.Int("original_size", len(batch)),
 		zap.Int("processed_size", len(uniqueBlocks)),
 		zap.Duration("processing_time", processingTime))
@@ -906,7 +906,7 @@ func (sm *ServiceManager) pruneCache() {
 			startTime := time.Now()
 			pruned := sm.cache.Prune()
 			sm.metrics.IncrementCounterBy("cache_pruned_items", int64(pruned))
-			sm.logger.Debug("Cache pruned", 
+			sm.logger.Debug("Cache pruned",
 				zap.Int("items_pruned", pruned),
 				zap.Duration("prune_time", time.Since(startTime)))
 		case <-sm.shutdownChan:
@@ -1018,7 +1018,7 @@ func (sm *ServiceManager) checkServiceHealth() {
 
 // healthCheckHandler returns service health status
 func (sm *ServiceManager) healthCheckHandler(w http.ResponseWriter, r *http.Request) {
-	health := map[string]interface{}{ 
+	health := map[string]interface{}{
 		"status":      "healthy",
 		"timestamp":   time.Now().UTC(),
 		"version":     AppVersion,
@@ -1070,11 +1070,11 @@ func (sm *ServiceManager) healthCheckHandler(w http.ResponseWriter, r *http.Requ
 // readinessHandler returns readiness status
 func (sm *ServiceManager) readinessHandler(w http.ResponseWriter, r *http.Request) {
 	ready := map[string]bool{
-		"api":    sm.apiServer != nil,
-		"p2p":    sm.p2pClient != nil && sm.p2pClient.PeerCount() > 0,
-		"cache":  sm.cache != nil && sm.cache.HealthCheck(),
-		"relay":  sm.relayDispatcher != nil,
-		"db":     sm.db == nil || sm.db.Ping(r.Context()) == nil,
+		"api":   sm.apiServer != nil,
+		"p2p":   sm.p2pClient != nil && sm.p2pClient.PeerCount() > 0,
+		"cache": sm.cache != nil && sm.cache.HealthCheck(),
+		"relay": sm.relayDispatcher != nil,
+		"db":    sm.db == nil || sm.db.Ping(r.Context()) == nil,
 	}
 
 	allReady := true
@@ -1110,7 +1110,7 @@ func (sm *ServiceManager) onCircuitBreakerStateChange(name string, from, to circ
 		zap.String("name", name),
 		zap.String("from", from.String()),
 		zap.String("to", to.String()))
-	sm.metrics.IncrementCounter("circuit_breaker_state_changes", 
+	sm.metrics.IncrementCounter("circuit_breaker_state_changes",
 		map[string]string{"breaker": name, "from": from.String(), "to": to.String()})
 }
 

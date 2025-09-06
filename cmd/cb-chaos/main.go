@@ -16,20 +16,20 @@ import (
 
 // FailureInjectionTool provides chaos engineering capabilities for circuit breakers
 type FailureInjectionTool struct {
-	breakers map[string]*circuitbreaker.EnterpriseCircuitBreaker
+	breakers  map[string]*circuitbreaker.EnterpriseCircuitBreaker
 	scenarios map[string]FailureScenario
 }
 
 // FailureScenario defines a specific failure injection scenario
 type FailureScenario struct {
-	Name            string                    `json:"name"`
-	Description     string                    `json:"description"`
-	Duration        time.Duration             `json:"duration"`
-	FailureTypes    []FailureType             `json:"failure_types"`
-	Targets         []string                  `json:"targets"`
-	Intensity       float64                   `json:"intensity"` // 0.0 - 1.0
-	Schedule        ScheduleType              `json:"schedule"`
-	Parameters      map[string]interface{}    `json:"parameters"`
+	Name         string                 `json:"name"`
+	Description  string                 `json:"description"`
+	Duration     time.Duration          `json:"duration"`
+	FailureTypes []FailureType          `json:"failure_types"`
+	Targets      []string               `json:"targets"`
+	Intensity    float64                `json:"intensity"` // 0.0 - 1.0
+	Schedule     ScheduleType           `json:"schedule"`
+	Parameters   map[string]interface{} `json:"parameters"`
 }
 
 // FailureType defines different types of failures to inject
@@ -50,23 +50,23 @@ type ScheduleType struct {
 
 // InjectionResult tracks the results of failure injection
 type InjectionResult struct {
-	ScenarioName    string                 `json:"scenario_name"`
-	StartTime       time.Time              `json:"start_time"`
-	EndTime         time.Time              `json:"end_time"`
-	Duration        time.Duration          `json:"duration"`
+	ScenarioName     string                `json:"scenario_name"`
+	StartTime        time.Time             `json:"start_time"`
+	EndTime          time.Time             `json:"end_time"`
+	Duration         time.Duration         `json:"duration"`
 	FailuresInjected int64                 `json:"failures_injected"`
-	CircuitBreakers []CircuitBreakerState  `json:"circuit_breakers"`
-	Events          []InjectionEvent       `json:"events"`
-	Summary         InjectionSummary       `json:"summary"`
+	CircuitBreakers  []CircuitBreakerState `json:"circuit_breakers"`
+	Events           []InjectionEvent      `json:"events"`
+	Summary          InjectionSummary      `json:"summary"`
 }
 
 // CircuitBreakerState captures the state of a circuit breaker during injection
 type CircuitBreakerState struct {
-	Name           string                                      `json:"name"`
-	InitialState   string                                      `json:"initial_state"`
-	FinalState     string                                      `json:"final_state"`
-	StateChanges   int                                         `json:"state_changes"`
-	Metrics        *circuitbreaker.CircuitBreakerMetrics      `json:"metrics"`
+	Name         string                                `json:"name"`
+	InitialState string                                `json:"initial_state"`
+	FinalState   string                                `json:"final_state"`
+	StateChanges int                                   `json:"state_changes"`
+	Metrics      *circuitbreaker.CircuitBreakerMetrics `json:"metrics"`
 }
 
 // InjectionEvent records a specific failure injection event
@@ -82,23 +82,23 @@ type InjectionEvent struct {
 
 // InjectionSummary provides overall summary of injection results
 type InjectionSummary struct {
-	TotalFailures    int64   `json:"total_failures"`
-	SuccessfulInjections int64 `json:"successful_injections"`
-	FailedInjections     int64 `json:"failed_injections"`
-	EffectivenessScore   float64 `json:"effectiveness_score"`
+	TotalFailures        int64    `json:"total_failures"`
+	SuccessfulInjections int64    `json:"successful_injections"`
+	FailedInjections     int64    `json:"failed_injections"`
+	EffectivenessScore   float64  `json:"effectiveness_score"`
 	Recommendations      []string `json:"recommendations"`
 }
 
 func main() {
 	var (
-		scenarioFile  = flag.String("scenario", "", "Failure scenario configuration file")
-		duration      = flag.Duration("duration", time.Minute*10, "Default injection duration")
-		intensity     = flag.Float64("intensity", 0.3, "Failure intensity (0.0-1.0)")
-		targets       = flag.String("targets", "", "Comma-separated list of circuit breaker targets")
-		outputFile    = flag.String("output", "", "Output file for results")
-		serverMode    = flag.Bool("server", false, "Run in server mode for remote control")
-		serverPort    = flag.String("port", "8091", "Server mode port")
-		dryRun        = flag.Bool("dry-run", false, "Perform dry run without actual injection")
+		scenarioFile = flag.String("scenario", "", "Failure scenario configuration file")
+		duration     = flag.Duration("duration", time.Minute*10, "Default injection duration")
+		intensity    = flag.Float64("intensity", 0.3, "Failure intensity (0.0-1.0)")
+		targets      = flag.String("targets", "", "Comma-separated list of circuit breaker targets")
+		outputFile   = flag.String("output", "", "Output file for results")
+		serverMode   = flag.Bool("server", false, "Run in server mode for remote control")
+		serverPort   = flag.String("port", "8091", "Server mode port")
+		dryRun       = flag.Bool("dry-run", false, "Perform dry run without actual injection")
 	)
 	flag.Parse()
 
@@ -263,10 +263,10 @@ func (fit *FailureInjectionTool) executeImmediateFailures(ctx context.Context, s
 
 	for _, target := range scenario.Targets {
 		for _, failureType := range scenario.FailureTypes {
-			if rand.Float64() < failureType.Probability * scenario.Intensity {
+			if rand.Float64() < failureType.Probability*scenario.Intensity {
 				event := fit.injectFailure(target, failureType)
 				result.Events = append(result.Events, event)
-				
+
 				if event.Success {
 					result.FailuresInjected++
 				}
@@ -294,10 +294,10 @@ func (fit *FailureInjectionTool) executePeriodicFailures(ctx context.Context, sc
 		case <-ticker.C:
 			for _, target := range scenario.Targets {
 				for _, failureType := range scenario.FailureTypes {
-					if rand.Float64() < failureType.Probability * scenario.Intensity {
+					if rand.Float64() < failureType.Probability*scenario.Intensity {
 						event := fit.injectFailure(target, failureType)
 						result.Events = append(result.Events, event)
-						
+
 						if event.Success {
 							result.FailuresInjected++
 						}
@@ -336,10 +336,10 @@ func (fit *FailureInjectionTool) executeRandomFailures(ctx context.Context, scen
 			}
 			failureType := scenario.FailureTypes[rand.Intn(len(scenario.FailureTypes))]
 
-			if rand.Float64() < failureType.Probability * scenario.Intensity {
+			if rand.Float64() < failureType.Probability*scenario.Intensity {
 				event := fit.injectFailure(target, failureType)
 				result.Events = append(result.Events, event)
-				
+
 				if event.Success {
 					result.FailuresInjected++
 				}
@@ -351,10 +351,10 @@ func (fit *FailureInjectionTool) executeRandomFailures(ctx context.Context, scen
 // injectFailure injects a specific type of failure into a target
 func (fit *FailureInjectionTool) injectFailure(target string, failureType FailureType) InjectionEvent {
 	event := InjectionEvent{
-		Timestamp:   time.Now(),
-		Type:        failureType.Type,
-		Target:      target,
-		Parameters:  failureType.Parameters,
+		Timestamp:  time.Now(),
+		Type:       failureType.Type,
+		Target:     target,
+		Parameters: failureType.Parameters,
 	}
 
 	cb, exists := fit.breakers[target]
@@ -405,7 +405,7 @@ func (fit *FailureInjectionTool) injectFailure(target string, failureType Failur
 // calculateSummary calculates the overall summary of injection results
 func (fit *FailureInjectionTool) calculateSummary(result *InjectionResult) InjectionSummary {
 	summary := InjectionSummary{
-		TotalFailures: result.FailuresInjected,
+		TotalFailures:   result.FailuresInjected,
 		Recommendations: make([]string, 0),
 	}
 
@@ -442,17 +442,17 @@ func (fit *FailureInjectionTool) generateRecommendations(result *InjectionResult
 	// Analyze circuit breaker behavior
 	for _, cb := range result.CircuitBreakers {
 		if cb.StateChanges == 0 {
-			recommendations = append(recommendations, 
+			recommendations = append(recommendations,
 				fmt.Sprintf("Circuit breaker %s did not change state - consider reviewing thresholds", cb.Name))
 		}
 
 		if cb.Metrics.FailureRate < 0.1 {
-			recommendations = append(recommendations, 
+			recommendations = append(recommendations,
 				fmt.Sprintf("Circuit breaker %s has low failure rate - injection may not be effective", cb.Name))
 		}
 
 		if cb.FinalState == "open" && cb.InitialState != "open" {
-			recommendations = append(recommendations, 
+			recommendations = append(recommendations,
 				fmt.Sprintf("Circuit breaker %s successfully opened due to failures", cb.Name))
 		}
 	}
@@ -564,7 +564,7 @@ func printResults(result *InjectionResult) {
 
 	fmt.Println("\n=== Circuit Breaker States ===")
 	for _, cb := range result.CircuitBreakers {
-		fmt.Printf("%s: %s -> %s (%d state changes)\n", 
+		fmt.Printf("%s: %s -> %s (%d state changes)\n",
 			cb.Name, cb.InitialState, cb.FinalState, cb.StateChanges)
 	}
 

@@ -39,7 +39,7 @@ func (v *Validator) ValidateWithDetails(nodeID string) (LicenseInfo, error) {
 
 	// In a real implementation, this would verify the license with a server
 	// or perform cryptographic validation
-	
+
 	// For now, just validate that the key follows a basic format
 	if len(v.licenseKey) < 16 {
 		return LicenseInfo{

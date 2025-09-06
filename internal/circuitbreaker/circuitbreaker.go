@@ -62,135 +62,135 @@ type EnterpriseConfig struct {
 	Config
 
 	// Enterprise-specific settings
-	MaxFailures          int               `json:"max_failures"`
-	ResetTimeout         time.Duration     `json:"reset_timeout"`
-	HalfOpenMaxCalls     int               `json:"half_open_max_calls"`
-	
+	MaxFailures      int           `json:"max_failures"`
+	ResetTimeout     time.Duration `json:"reset_timeout"`
+	HalfOpenMaxCalls int           `json:"half_open_max_calls"`
+
 	// Advanced algorithm settings
-	Policy               Policy            `json:"policy"`
-	FailureThreshold     float64           `json:"failure_threshold"`
-	LatencyThreshold     time.Duration     `json:"latency_threshold"`
-	WindowSize           time.Duration     `json:"window_size"`
-	MinRequestsThreshold int               `json:"min_requests_threshold"`
-	
+	Policy               Policy        `json:"policy"`
+	FailureThreshold     float64       `json:"failure_threshold"`
+	LatencyThreshold     time.Duration `json:"latency_threshold"`
+	WindowSize           time.Duration `json:"window_size"`
+	MinRequestsThreshold int           `json:"min_requests_threshold"`
+
 	// Adaptive features
-	EnableAdaptive       bool              `json:"enable_adaptive"`
-	AdaptiveMultiplier   float64           `json:"adaptive_multiplier"`
-	MaxAdaptiveTimeout   time.Duration     `json:"max_adaptive_timeout"`
-	
+	EnableAdaptive     bool          `json:"enable_adaptive"`
+	AdaptiveMultiplier float64       `json:"adaptive_multiplier"`
+	MaxAdaptiveTimeout time.Duration `json:"max_adaptive_timeout"`
+
 	// Health scoring
-	EnableHealthScoring  bool              `json:"enable_health_scoring"`
-	HealthThreshold      float64           `json:"health_threshold"`
-	
+	EnableHealthScoring bool    `json:"enable_health_scoring"`
+	HealthThreshold     float64 `json:"health_threshold"`
+
 	// Monitoring and callbacks
-	EnableMetrics        bool              `json:"enable_metrics"`
-	OnStateChange        func(name string, from, to State) `json:"-"`
-	OnFailure           func(name string, failureType FailureType) `json:"-"`
-	OnRecovery          func(name string, recoveryTime time.Duration) `json:"-"`
-	
+	EnableMetrics bool                                          `json:"enable_metrics"`
+	OnStateChange func(name string, from, to State)             `json:"-"`
+	OnFailure     func(name string, failureType FailureType)    `json:"-"`
+	OnRecovery    func(name string, recoveryTime time.Duration) `json:"-"`
+
 	// Tier-based settings
-	TierSettings         map[string]TierConfig `json:"tier_settings"`
+	TierSettings map[string]TierConfig `json:"tier_settings"`
 }
 
 // TierConfig defines tier-specific circuit breaker behavior
 type TierConfig struct {
-	FailureThreshold     int               `json:"failure_threshold"`
-	ResetTimeout         time.Duration     `json:"reset_timeout"`
-	HalfOpenMaxCalls     int               `json:"half_open_max_calls"`
-	Priority             int               `json:"priority"`
-	QueueEnabled         bool              `json:"queue_enabled"`
-	RetryEnabled         bool              `json:"retry_enabled"`
+	FailureThreshold int           `json:"failure_threshold"`
+	ResetTimeout     time.Duration `json:"reset_timeout"`
+	HalfOpenMaxCalls int           `json:"half_open_max_calls"`
+	Priority         int           `json:"priority"`
+	QueueEnabled     bool          `json:"queue_enabled"`
+	RetryEnabled     bool          `json:"retry_enabled"`
 }
 
 // ExecutionResult contains detailed execution information
 type ExecutionResult struct {
-	Success      bool              `json:"success"`
-	Duration     time.Duration     `json:"duration"`
-	Error        error             `json:"error,omitempty"`
-	FailureType  FailureType       `json:"failure_type,omitempty"`
-	State        State             `json:"state"`
-	Attempt      int               `json:"attempt"`
-	Metadata     map[string]interface{} `json:"metadata,omitempty"`
+	Success     bool                   `json:"success"`
+	Duration    time.Duration          `json:"duration"`
+	Error       error                  `json:"error,omitempty"`
+	FailureType FailureType            `json:"failure_type,omitempty"`
+	State       State                  `json:"state"`
+	Attempt     int                    `json:"attempt"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // All algorithm-related types have been moved to algorithms.go
 
 // CircuitBreakerMetrics tracks comprehensive performance metrics
 type CircuitBreakerMetrics struct {
-	mu                    sync.RWMutex
-	
+	mu sync.RWMutex
+
 	// Basic counters (atomic for performance)
-	TotalRequests         int64     `json:"total_requests"`
-	SuccessfulRequests    int64     `json:"successful_requests"`
-	FailedRequests        int64     `json:"failed_requests"`
-	TimeoutRequests       int64     `json:"timeout_requests"`
-	CircuitOpenRequests   int64     `json:"circuit_open_requests"`
-	
+	TotalRequests       int64 `json:"total_requests"`
+	SuccessfulRequests  int64 `json:"successful_requests"`
+	FailedRequests      int64 `json:"failed_requests"`
+	TimeoutRequests     int64 `json:"timeout_requests"`
+	CircuitOpenRequests int64 `json:"circuit_open_requests"`
+
 	// State tracking
-	StateChanges          int64     `json:"state_changes"`
-	LastStateChange       time.Time `json:"last_state_change"`
-	TimeInState           map[State]time.Duration `json:"time_in_state"`
-	
+	StateChanges    int64                   `json:"state_changes"`
+	LastStateChange time.Time               `json:"last_state_change"`
+	TimeInState     map[State]time.Duration `json:"time_in_state"`
+
 	// Performance metrics
-	AverageLatency        time.Duration `json:"average_latency"`
-	P50Latency            time.Duration `json:"p50_latency"`
-	P95Latency            time.Duration `json:"p95_latency"`
-	P99Latency            time.Duration `json:"p99_latency"`
-	MaxLatency            time.Duration `json:"max_latency"`
-	MinLatency            time.Duration `json:"min_latency"`
-	
+	AverageLatency time.Duration `json:"average_latency"`
+	P50Latency     time.Duration `json:"p50_latency"`
+	P95Latency     time.Duration `json:"p95_latency"`
+	P99Latency     time.Duration `json:"p99_latency"`
+	MaxLatency     time.Duration `json:"max_latency"`
+	MinLatency     time.Duration `json:"min_latency"`
+
 	// Health scoring
-	HealthScore           float64   `json:"health_score"`
-	FailureRate           float64   `json:"failure_rate"`
-	RecoveryTime          time.Duration `json:"recovery_time"`
-	
+	HealthScore  float64       `json:"health_score"`
+	FailureRate  float64       `json:"failure_rate"`
+	RecoveryTime time.Duration `json:"recovery_time"`
+
 	// Advanced metrics
-	ConsecutiveFailures   int64     `json:"consecutive_failures"`
-	ConsecutiveSuccesses  int64     `json:"consecutive_successes"`
-	LastFailureTime       time.Time `json:"last_failure_time"`
-	LastSuccessTime       time.Time `json:"last_success_time"`
+	ConsecutiveFailures  int64     `json:"consecutive_failures"`
+	ConsecutiveSuccesses int64     `json:"consecutive_successes"`
+	LastFailureTime      time.Time `json:"last_failure_time"`
+	LastSuccessTime      time.Time `json:"last_success_time"`
 }
 
 // EnterpriseCircuitBreaker implements comprehensive circuit breaker functionality
 type EnterpriseCircuitBreaker struct {
 	// Core configuration
-	config               *Config
-	logger               *zap.Logger
-	
+	config *Config
+	logger *zap.Logger
+
 	// State management
-	mu                   sync.RWMutex
-	state                State
-	stateChangedAt       time.Time
-	
+	mu             sync.RWMutex
+	state          State
+	stateChangedAt time.Time
+
 	// Failure tracking
 	consecutiveFailures  int64
 	consecutiveSuccesses int64
 	halfOpenCalls        int64
 	lastFailureTime      time.Time
 	lastSuccessTime      time.Time
-	
+
 	// Advanced algorithms
-	slidingWindow        *SlidingWindow
-	adaptiveThreshold    *AdaptiveThreshold
-	healthScorer         *HealthScorer
-	
+	slidingWindow     *SlidingWindow
+	adaptiveThreshold *AdaptiveThreshold
+	healthScorer      *HealthScorer
+
 	// Performance tracking
-	metrics              *CircuitBreakerMetrics
-	latencyHistory       []time.Duration
-	
+	metrics        *CircuitBreakerMetrics
+	latencyHistory []time.Duration
+
 	// Tier management
-	currentTier          string
-	tierConfigs          map[string]TierConfig
-	
+	currentTier string
+	tierConfigs map[string]TierConfig
+
 	// Control mechanisms
-	forceState           *State
-	maintenanceMode      bool
-	
+	forceState      *State
+	maintenanceMode bool
+
 	// Background management
-	ctx                  context.Context
-	cancel               context.CancelFunc
-	workerGroup          sync.WaitGroup
-	shutdownChan         chan struct{}
+	ctx          context.Context
+	cancel       context.CancelFunc
+	workerGroup  sync.WaitGroup
+	shutdownChan chan struct{}
 }
 
 // NewCircuitBreaker creates an enterprise-grade circuit breaker
@@ -198,30 +198,30 @@ func NewCircuitBreaker(cfg Config) (*EnterpriseCircuitBreaker, error) {
 	if err := validateConfig(&cfg); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	cb := &EnterpriseCircuitBreaker{
-		config:           &cfg,
-		logger:           zap.NewNop(), // Default logger
-		state:            StateClosed,
-		stateChangedAt:   time.Now(),
-		tierConfigs:      cfg.TierSettings,
-		ctx:              ctx,
-		cancel:           cancel,
-		shutdownChan:     make(chan struct{}),
-		metrics:          newCircuitBreakerMetrics(),
-		latencyHistory:   make([]time.Duration, 0, 1000),
+		config:         &cfg,
+		logger:         zap.NewNop(), // Default logger
+		state:          StateClosed,
+		stateChangedAt: time.Now(),
+		tierConfigs:    cfg.TierSettings,
+		ctx:            ctx,
+		cancel:         cancel,
+		shutdownChan:   make(chan struct{}),
+		metrics:        newCircuitBreakerMetrics(),
+		latencyHistory: make([]time.Duration, 0, 1000),
 	}
-	
+
 	// Initialize advanced components
 	cb.slidingWindow = NewSlidingWindow(10*time.Second, time.Second)
 	cb.adaptiveThreshold = NewAdaptiveThreshold(cfg.FailureThreshold, 0.1)
 	cb.healthScorer = NewHealthScorer()
-	
+
 	// Start background workers
 	cb.startBackgroundWorkers()
-	
+
 	return cb, nil
 }
 
@@ -233,7 +233,7 @@ func (cb *EnterpriseCircuitBreaker) Execute(fn func() (interface{}, error)) (*Ex
 // ExecuteWithContext runs a function with context and full protection
 func (cb *EnterpriseCircuitBreaker) ExecuteWithContext(ctx context.Context, fn func() (interface{}, error)) (*ExecutionResult, error) {
 	startTime := time.Now()
-	
+
 	// Check if execution is allowed
 	if !cb.allowRequest() {
 		atomic.AddInt64(&cb.metrics.CircuitOpenRequests, 1)
@@ -245,13 +245,13 @@ func (cb *EnterpriseCircuitBreaker) ExecuteWithContext(ctx context.Context, fn f
 			FailureType: FailureTypeCircuit,
 		}, nil
 	}
-	
+
 	// Execute with timeout and monitoring
 	result := cb.executeWithMonitoring(ctx, fn, startTime)
-	
+
 	// Record result and update state
 	cb.recordResult(result)
-	
+
 	return result, nil
 }
 
@@ -271,12 +271,12 @@ func (cb *EnterpriseCircuitBreaker) State() State {
 func (cb *EnterpriseCircuitBreaker) ForceOpen() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	
+
 	oldState := cb.state
 	cb.state = StateForceOpen
 	cb.stateChangedAt = time.Now()
 	cb.forceState = &cb.state
-	
+
 	cb.notifyStateChange(oldState, cb.state)
 }
 
@@ -284,12 +284,12 @@ func (cb *EnterpriseCircuitBreaker) ForceOpen() {
 func (cb *EnterpriseCircuitBreaker) ForceClose() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	
+
 	oldState := cb.state
 	cb.state = StateForceClose
 	cb.stateChangedAt = time.Now()
 	cb.forceState = &cb.state
-	
+
 	cb.notifyStateChange(oldState, cb.state)
 }
 
@@ -297,7 +297,7 @@ func (cb *EnterpriseCircuitBreaker) ForceClose() {
 func (cb *EnterpriseCircuitBreaker) Reset() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	
+
 	oldState := cb.state
 	cb.forceState = nil
 	cb.state = StateClosed
@@ -305,7 +305,7 @@ func (cb *EnterpriseCircuitBreaker) Reset() {
 	cb.consecutiveSuccesses = 0
 	cb.halfOpenCalls = 0
 	cb.stateChangedAt = time.Now()
-	
+
 	cb.notifyStateChange(oldState, cb.state)
 }
 
@@ -313,23 +313,23 @@ func (cb *EnterpriseCircuitBreaker) Reset() {
 func (cb *EnterpriseCircuitBreaker) GetMetrics() *CircuitBreakerMetrics {
 	cb.metrics.mu.RLock()
 	defer cb.metrics.mu.RUnlock()
-	
+
 	// Create a copy to avoid race conditions
 	metrics := *cb.metrics
-	
+
 	// Calculate dynamic metrics
 	totalRequests := atomic.LoadInt64(&cb.metrics.TotalRequests)
 	successfulRequests := atomic.LoadInt64(&cb.metrics.SuccessfulRequests)
-	
+
 	if totalRequests > 0 {
 		metrics.FailureRate = float64(totalRequests-successfulRequests) / float64(totalRequests)
 	}
-	
+
 	// Update health score
 	if cb.config.EnableHealthScoring {
 		metrics.HealthScore = cb.healthScorer.CalculateHealth()
 	}
-	
+
 	return &metrics
 }
 
@@ -337,27 +337,27 @@ func (cb *EnterpriseCircuitBreaker) GetMetrics() *CircuitBreakerMetrics {
 func (cb *EnterpriseCircuitBreaker) SetTier(tier string) error {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	
+
 	if tierConfig, exists := cb.tierConfigs[tier]; exists {
 		cb.currentTier = tier
 		cb.adaptTierSettings(tierConfig)
 		return nil
 	}
-	
+
 	return fmt.Errorf("tier %s not found", tier)
 }
 
 // Shutdown gracefully shuts down the circuit breaker
 func (cb *EnterpriseCircuitBreaker) Shutdown(ctx context.Context) error {
 	close(cb.shutdownChan)
-	
+
 	// Wait for workers with timeout
 	done := make(chan struct{})
 	go func() {
 		cb.workerGroup.Wait()
 		close(done)
 	}()
-	
+
 	select {
 	case <-done:
 		cb.cancel()

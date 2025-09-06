@@ -14,15 +14,15 @@ import (
 
 // ConnectionConfig holds configuration for enhanced connections
 type ConnectionConfig struct {
-	Timeout         time.Duration
-	KeepAlive       time.Duration
-	KeepAliveIdle   time.Duration
-	KeepAliveCount  int
-	KeepAliveIntvl  time.Duration
-	UserTimeout     time.Duration
-	NoDelay         bool
-	HappyEyeballs   bool
-	MaxConcurrency  int
+	Timeout        time.Duration
+	KeepAlive      time.Duration
+	KeepAliveIdle  time.Duration
+	KeepAliveCount int
+	KeepAliveIntvl time.Duration
+	UserTimeout    time.Duration
+	NoDelay        bool
+	HappyEyeballs  bool
+	MaxConcurrency int
 }
 
 // DefaultConfig returns a production-ready connection configuration

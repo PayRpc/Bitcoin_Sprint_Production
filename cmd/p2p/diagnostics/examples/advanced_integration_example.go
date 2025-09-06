@@ -334,7 +334,7 @@ func (c *AdvancedP2PClient) simulateGracefulShutdown(ctx context.Context) {
 		Message:   "P2P client shutting down gracefully",
 		Severity:  diagnostics.SeverityInfo,
 		Metadata: map[string]interface{}{
-			"shutdown_type": "graceful",
+			"shutdown_type":      "graceful",
 			"peers_disconnected": len(peers),
 		},
 	})
@@ -376,26 +376,26 @@ func (c *AdvancedP2PClient) GenerateComprehensiveReport(ctx context.Context) err
 
 // AdvancedDiagnosticReport represents a comprehensive diagnostic report
 type AdvancedDiagnosticReport struct {
-	Timestamp           time.Time                    `json:"timestamp"`
-	Statistics          diagnostics.DiagnosticStats `json:"statistics"`
+	Timestamp           time.Time                      `json:"timestamp"`
+	Statistics          diagnostics.DiagnosticStats    `json:"statistics"`
 	RecentEvents        []*diagnostics.DiagnosticEvent `json:"recent_events"`
-	HealthStatus        diagnostics.HealthStatus    `json:"health_status"`
-	PerformanceAnalysis PerformanceAnalysis         `json:"performance_analysis"`
+	HealthStatus        diagnostics.HealthStatus       `json:"health_status"`
+	PerformanceAnalysis PerformanceAnalysis            `json:"performance_analysis"`
 }
 
 // PerformanceAnalysis contains performance metrics and analysis
 type PerformanceAnalysis struct {
-	AverageEventRate float64           `json:"average_event_rate"`
-	ErrorRate        float64           `json:"error_rate"`
-	TopErrorTypes    map[string]int    `json:"top_error_types"`
-	PeakEventPeriods []EventPeriod     `json:"peak_event_periods"`
+	AverageEventRate float64        `json:"average_event_rate"`
+	ErrorRate        float64        `json:"error_rate"`
+	TopErrorTypes    map[string]int `json:"top_error_types"`
+	PeakEventPeriods []EventPeriod  `json:"peak_event_periods"`
 }
 
 // EventPeriod represents a period of high event activity
 type EventPeriod struct {
-	StartTime time.Time `json:"start_time"`
-	EndTime   time.Time `json:"end_time"`
-	EventCount int      `json:"event_count"`
+	StartTime  time.Time `json:"start_time"`
+	EndTime    time.Time `json:"end_time"`
+	EventCount int       `json:"event_count"`
 }
 
 func (c *AdvancedP2PClient) analyzePerformance(ctx context.Context, events []*diagnostics.DiagnosticEvent) PerformanceAnalysis {
@@ -434,8 +434,8 @@ func (c *AdvancedP2PClient) analyzePerformance(ctx context.Context, events []*di
 	if len(events) > 10 {
 		analysis.PeakEventPeriods = []EventPeriod{
 			{
-				StartTime: events[0].Timestamp,
-				EndTime:   events[len(events)-1].Timestamp,
+				StartTime:  events[0].Timestamp,
+				EndTime:    events[len(events)-1].Timestamp,
 				EventCount: len(events),
 			},
 		}

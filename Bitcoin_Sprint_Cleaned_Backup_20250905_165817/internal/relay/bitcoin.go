@@ -334,8 +334,8 @@ func (br *BitcoinRelay) connectToPeer(ctx context.Context, endpoint string) {
 		NewestBlock: func() (*chainhash.Hash, int32, error) {
 			return &chainhash.Hash{}, 850000, nil // placeholder
 		},
-		ChainParams: &chaincfg.MainNetParams,
-		Services:    wire.SFNodeNetwork | wire.SFNodeWitness,
+		ChainParams:      &chaincfg.MainNetParams,
+		Services:         wire.SFNodeNetwork | wire.SFNodeWitness,
 		UserAgentName:    "Bitcoin-Sprint",
 		UserAgentVersion: "2.1.0",
 	}, endpoint)

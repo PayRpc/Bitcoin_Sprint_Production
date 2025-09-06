@@ -53,15 +53,15 @@ func (pm *P2PMonitor) RecordAttempt(protocol string, rec AttemptRecord) {
 	pm.mu.RLock()
 	buf, ok := pm.diagnostics[protocol]
 	pm.mu.RUnlock()
-	
+
 	if !ok {
 		pm.logger.Warn("Unknown protocol", zap.String("protocol", protocol))
 		return
 	}
-	
+
 	buf.mu.Lock()
 	defer buf.mu.Unlock()
-	
+
 	// Maintain circular buffer
 	if len(buf.Attempts) >= 50 {
 		buf.Attempts = buf.Attempts[1:]
@@ -74,7 +74,7 @@ func (pm *P2PMonitor) GetStatusSnapshot(protocol string) map[string]interface{} 
 	pm.mu.RLock()
 	buf, ok := pm.diagnostics[protocol]
 	pm.mu.RUnlock()
-	
+
 	if !ok {
 		return map[string]interface{}{
 			"connection_attempts": []AttemptRecord{},
@@ -82,16 +82,16 @@ func (pm *P2PMonitor) GetStatusSnapshot(protocol string) map[string]interface{} 
 			"dialed_peers":        []string{},
 		}
 	}
-	
+
 	buf.mu.RLock()
 	defer buf.mu.RUnlock()
-	
+
 	attempts := make([]AttemptRecord, len(buf.Attempts))
 	copy(attempts, buf.Attempts)
-	
+
 	peers := make([]string, len(buf.DialedPeers))
 	copy(peers, buf.DialedPeers)
-	
+
 	var lastErr string
 	for i := len(attempts) - 1; i >= 0; i-- {
 		if attempts[i].TcpError != "" || attempts[i].HandshakeError != "" {
@@ -103,7 +103,7 @@ func (pm *P2PMonitor) GetStatusSnapshot(protocol string) map[string]interface{} 
 			break
 		}
 	}
-	
+
 	return map[string]interface{}{
 		"connection_attempts": attempts,
 		"last_error":          lastErr,
@@ -115,25 +115,25 @@ func (pm *P2PMonitor) GetStatusSnapshot(protocol string) map[string]interface{} 
 func (pm *P2PMonitor) P2PDiagnosticsHandler(w http.ResponseWriter, r *http.Request) {
 	protocols := []string{"bitcoin", "ethereum", "solana"}
 	clients := make(map[string]interface{})
-	
+
 	for _, protocol := range protocols {
 		snap := pm.GetStatusSnapshot(protocol)
 		clients[protocol] = map[string]interface{}{
 			"peer_count":          0, // Will be populated by actual P2P clients
-			"peer_ids":           []string{},
-			"backend_status":     "fallback_rpc",
+			"peer_ids":            []string{},
+			"backend_status":      "fallback_rpc",
 			"connection_attempts": snap["connection_attempts"],
-			"last_error":         snap["last_error"],
-			"dialed_peers":       snap["dialed_peers"],
+			"last_error":          snap["last_error"],
+			"dialed_peers":        snap["dialed_peers"],
 		}
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	response := map[string]interface{}{
 		"p2p_clients": clients,
 		"timestamp":   time.Now().UTC().Format(time.RFC3339),
 	}
-	
+
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		pm.logger.Error("Failed to encode P2P diagnostics", zap.Error(err))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)

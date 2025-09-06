@@ -173,9 +173,9 @@ func (nh *NetworkHealthWithDiagnostics) periodicHealthCheck(ctx context.Context)
 		case <-ticker.C:
 			// Record network health check
 			event := &diagnostics.DiagnosticEvent{
-				EventType:   "network_health_check",
-				Message:     "Periodic network health assessment",
-				Severity:    diagnostics.SeverityInfo,
+				EventType: "network_health_check",
+				Message:   "Periodic network health assessment",
+				Severity:  diagnostics.SeverityInfo,
 				Metadata: map[string]interface{}{
 					"check_type": "connectivity",
 					"peer_count": 8,
@@ -195,14 +195,14 @@ func (nh *NetworkHealthWithDiagnostics) simulateBlockReception(ctx context.Conte
 
 	// Record block reception
 	event := &diagnostics.DiagnosticEvent{
-		EventType:   "block_received",
-		Message:     "New block received from network",
-		Severity:    diagnostics.SeverityInfo,
+		EventType: "block_received",
+		Message:   "New block received from network",
+		Severity:  diagnostics.SeverityInfo,
 		Metadata: map[string]interface{}{
-			"block_hash": "0000000000000000000123456789abcdef",
+			"block_hash":   "0000000000000000000123456789abcdef",
 			"block_height": 850000,
-			"tx_count": 2500,
-			"block_size": 1250000,
+			"tx_count":     2500,
+			"block_size":   1250000,
 		},
 	}
 
@@ -258,13 +258,13 @@ func (pm *PerformanceMonitor) recordPerformanceMetric(ctx context.Context, opera
 	}
 
 	event := &diagnostics.DiagnosticEvent{
-		EventType:   "performance_metric",
-		Message:     message,
-		Severity:    severity,
+		EventType: "performance_metric",
+		Message:   message,
+		Severity:  severity,
 		Metadata: map[string]interface{}{
-			"operation": operation,
+			"operation":   operation,
 			"duration_ms": duration.Milliseconds(),
-			"success": success,
+			"success":     success,
 		},
 	}
 

@@ -48,7 +48,7 @@ func (d *BlockDeduper) Seen(hash string, now time.Time, network string) bool {
 	if d == nil {
 		return false // If no deduper, never consider it a duplicate
 	}
-	
+
 	if hash == "" {
 		return false // Empty hashes are never considered duplicates
 	}

@@ -25,12 +25,12 @@ import (
 
 // Service flag constants for peer validation
 const (
-	SvcNodeNetwork       = 1 << 0  // 1
-	SvcNodeGetUTXO       = 1 << 1  // 2 (unused)
-	SvcNodeBloom         = 1 << 2  // 4 (legacy)
-	SvcNodeWitness       = 1 << 3  // 8
-	SvcNodeNetworkLimited= 1 << 10 // 1024
-	SvcNodeP2Pv2         = 1 << 11 // 2048
+	SvcNodeNetwork        = 1 << 0  // 1
+	SvcNodeGetUTXO        = 1 << 1  // 2 (unused)
+	SvcNodeBloom          = 1 << 2  // 4 (legacy)
+	SvcNodeWitness        = 1 << 3  // 8
+	SvcNodeNetworkLimited = 1 << 10 // 1024
+	SvcNodeP2Pv2          = 1 << 11 // 2048
 )
 
 const minProtocol = 70016
@@ -38,7 +38,7 @@ const minProtocol = 70016
 // goodServices validates that peer has required service flags
 func goodServices(s uint64) bool {
 	hasNet := (s&SvcNodeNetwork) != 0 || (s&SvcNodeNetworkLimited) != 0
-	hasWit := (s&SvcNodeWitness) != 0
+	hasWit := (s & SvcNodeWitness) != 0
 	return hasNet && hasWit
 }
 
@@ -1016,16 +1016,16 @@ func (c *Client) handleHeaders(p *peer.Peer, msg *wire.MsgHeaders) {
 		return
 	}
 
-	c.logger.Debug("Received headers", 
+	c.logger.Debug("Received headers",
 		zap.String("peer", p.Addr()),
 		zap.Int("header_count", len(msg.Headers)))
 
 	for _, header := range msg.Headers {
 		blockHash := header.BlockHash()
-		
+
 		// Basic header validation
 		if header.Version < 1 {
-			c.logger.Warn("Invalid header version", 
+			c.logger.Warn("Invalid header version",
 				zap.String("hash", blockHash.String()),
 				zap.Int32("version", header.Version))
 			continue
@@ -1037,7 +1037,7 @@ func (c *Client) handleHeaders(p *peer.Peer, msg *wire.MsgHeaders) {
 			c.logger.Debug("Requesting block after header validation",
 				zap.String("hash", blockHash.String()),
 				zap.String("from_peer", bestPeer.Addr()))
-			
+
 			getData := wire.NewMsgGetData()
 			getData.AddInvVect(wire.NewInvVect(wire.InvTypeBlock, &blockHash))
 			bestPeer.QueueMessage(getData, nil)
@@ -1064,12 +1064,12 @@ func (c *Client) selectBestPeerForBlock() *peer.Peer {
 		// Simple scoring based on connection quality
 		// In production, this would use EWMA of response times
 		score := 1.0
-		
+
 		// Prefer peers with witness support
 		if (uint64(peer.Services()) & SvcNodeWitness) != 0 {
 			score += 0.5
 		}
-		
+
 		// Prefer newer protocol versions
 		if peer.ProtocolVersion() >= 70016 {
 			score += 0.3

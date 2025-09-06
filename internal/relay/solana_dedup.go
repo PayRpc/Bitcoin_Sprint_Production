@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/dedup"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/PayRpc/Bitcoin-Sprint/internal/dedup"
+	"go.uber.org/zap"
 )
 
 // Solana-specific deduplication metrics
@@ -18,17 +18,17 @@ var (
 		Name: "solana_relay_duplicates_suppressed_total",
 		Help: "Number of duplicate Solana blocks/slots suppressed",
 	}, []string{"type", "tier"})
-	
+
 	solanaTTLAdjustments = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "solana_relay_ttl_adjustments_total",
 		Help: "Number of TTL adjustments made for Solana deduplication",
 	}, []string{"direction", "tier"})
-	
+
 	solanaAdaptiveTTL = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "solana_relay_adaptive_ttl_seconds",
 		Help: "Current adaptive TTL for Solana deduplication",
 	}, []string{"tier"})
-	
+
 	solanaDuplicateRate = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "solana_relay_duplicate_rate",
 		Help: "Current duplicate rate for Solana blocks/slots",
@@ -38,9 +38,9 @@ var (
 // SolanaDeduper provides enterprise-grade Solana-specific deduplication
 type SolanaDeduper struct {
 	// Core deduplication
-	mu          sync.RWMutex
-	seen        map[string]*SolanaEntry
-	
+	mu   sync.RWMutex
+	seen map[string]*SolanaEntry
+
 	// Adaptive TTL management
 	ttl         time.Duration
 	minTTL      time.Duration
@@ -49,70 +49,70 @@ type SolanaDeduper struct {
 	totalCount  int64
 	lastAdjust  time.Time
 	adjustEvery time.Duration
-	
+
 	// Enterprise features
-	logger            *zap.Logger
-	tier              string
-	capacity          int
-	order             []string
-	
+	logger   *zap.Logger
+	tier     string
+	capacity int
+	order    []string
+
 	// Solana-specific optimizations
-	slotDedup         bool
-	blockDedup        bool
-	txDedup           bool
-	crossSlotDedup    bool
-	velocityTracking  bool
-	
+	slotDedup        bool
+	blockDedup       bool
+	txDedup          bool
+	crossSlotDedup   bool
+	velocityTracking bool
+
 	// Performance tracking
-	slotVelocity      float64 // slots per second
-	blockVelocity     float64 // blocks per second
-	avgSlotTime       time.Duration
-	lastSlotTime      time.Time
-	
+	slotVelocity  float64 // slots per second
+	blockVelocity float64 // blocks per second
+	avgSlotTime   time.Duration
+	lastSlotTime  time.Time
+
 	// Advanced algorithms
 	adaptiveLearning  bool
 	confidenceScoring bool
 	priorityQueuing   bool
-	
+
 	// ML-based optimization
-	learningRate      float64
+	learningRate        float64
 	confidenceThreshold float64
-	velocityPredictor float64
-	
+	velocityPredictor   float64
+
 	// Statistics tracking
-	typeStats         map[string]*SolanaTypeStats
+	typeStats map[string]*SolanaTypeStats
 }
 
 // SolanaEntry represents a deduplicated Solana entry with metadata
 type SolanaEntry struct {
-	Hash         string                 `json:"hash"`
-	Type         string                 `json:"type"` // "slot", "block", "transaction"
-	FirstSeen    time.Time              `json:"first_seen"`
-	LastSeen     time.Time              `json:"last_seen"`
-	SeenCount    int                    `json:"seen_count"`
-	Confidence   float64                `json:"confidence"`
-	Priority     int                    `json:"priority"`
-	SlotNumber   uint64                 `json:"slot_number,omitempty"`
-	BlockHeight  uint64                 `json:"block_height,omitempty"`
-	Source       string                 `json:"source"`
-	Properties   map[string]interface{} `json:"properties"`
+	Hash        string                 `json:"hash"`
+	Type        string                 `json:"type"` // "slot", "block", "transaction"
+	FirstSeen   time.Time              `json:"first_seen"`
+	LastSeen    time.Time              `json:"last_seen"`
+	SeenCount   int                    `json:"seen_count"`
+	Confidence  float64                `json:"confidence"`
+	Priority    int                    `json:"priority"`
+	SlotNumber  uint64                 `json:"slot_number,omitempty"`
+	BlockHeight uint64                 `json:"block_height,omitempty"`
+	Source      string                 `json:"source"`
+	Properties  map[string]interface{} `json:"properties"`
 }
 
 // SolanaTypeStats tracks statistics for different Solana data types
 type SolanaTypeStats struct {
-	TotalSeen     int64         `json:"total_seen"`
-	Duplicates    int64         `json:"duplicates"`
-	DuplicateRate float64       `json:"duplicate_rate"`
-	AdaptiveTTL   time.Duration `json:"adaptive_ttl"`
+	TotalSeen      int64         `json:"total_seen"`
+	Duplicates     int64         `json:"duplicates"`
+	DuplicateRate  float64       `json:"duplicate_rate"`
+	AdaptiveTTL    time.Duration `json:"adaptive_ttl"`
 	AvgTimeBetween time.Duration `json:"avg_time_between"`
-	LastSeen      time.Time     `json:"last_seen"`
-	Velocity      float64       `json:"velocity"`
+	LastSeen       time.Time     `json:"last_seen"`
+	Velocity       float64       `json:"velocity"`
 }
 
 // NewSolanaDeduper creates a new enterprise-grade Solana deduplicator
 func NewSolanaDeduper(tier string, logger *zap.Logger) *SolanaDeduper {
 	capacity := getSolanaCapacityForTier(tier)
-	
+
 	sd := &SolanaDeduper{
 		seen:        make(map[string]*SolanaEntry, capacity),
 		order:       make([]string, 0, capacity),
@@ -124,7 +124,7 @@ func NewSolanaDeduper(tier string, logger *zap.Logger) *SolanaDeduper {
 		lastAdjust:  time.Now(),
 		logger:      logger,
 		tier:        tier,
-		
+
 		// Enable features based on tier
 		slotDedup:         true,
 		blockDedup:        true,
@@ -134,15 +134,15 @@ func NewSolanaDeduper(tier string, logger *zap.Logger) *SolanaDeduper {
 		adaptiveLearning:  tier == "ENTERPRISE",
 		confidenceScoring: tier == "ENTERPRISE" || tier == "BUSINESS",
 		priorityQueuing:   tier == "ENTERPRISE",
-		
+
 		// ML parameters
 		learningRate:        0.1,
 		confidenceThreshold: 0.8,
-		
+
 		// Statistics
 		typeStats: make(map[string]*SolanaTypeStats),
 	}
-	
+
 	// Initialize type statistics
 	types := []string{"slot", "block", "transaction"}
 	for _, t := range types {
@@ -150,7 +150,7 @@ func NewSolanaDeduper(tier string, logger *zap.Logger) *SolanaDeduper {
 			AdaptiveTTL: sd.ttl,
 		}
 	}
-	
+
 	if logger != nil {
 		logger.Info("Enterprise Solana Deduper initialized",
 			zap.String("tier", tier),
@@ -159,7 +159,7 @@ func NewSolanaDeduper(tier string, logger *zap.Logger) *SolanaDeduper {
 			zap.Bool("adaptive_learning", sd.adaptiveLearning),
 			zap.Bool("velocity_tracking", sd.velocityTracking))
 	}
-	
+
 	return sd
 }
 
@@ -196,19 +196,19 @@ func (sd *SolanaDeduper) IsDuplicate(hash, itemType string, options ...dedup.Ded
 	if hash == "" || itemType == "" {
 		return false
 	}
-	
+
 	// Apply options
 	opts := &dedup.DedupeOptions{}
 	for _, opt := range options {
 		opt(opts)
 	}
-	
+
 	now := time.Now()
 	sd.mu.Lock()
 	defer sd.mu.Unlock()
-	
+
 	sd.totalCount++
-	
+
 	// Update type statistics
 	if sd.typeStats[itemType] == nil {
 		sd.typeStats[itemType] = &SolanaTypeStats{
@@ -217,37 +217,37 @@ func (sd *SolanaDeduper) IsDuplicate(hash, itemType string, options ...dedup.Ded
 	}
 	typeStats := sd.typeStats[itemType]
 	typeStats.TotalSeen++
-	
+
 	// Generate composite key for cross-slot deduplication
 	key := sd.generateKey(hash, itemType, opts)
-	
+
 	if entry, exists := sd.seen[key]; exists {
 		// Calculate type-specific TTL
 		currentTTL := sd.getAdaptiveTTL(itemType, typeStats)
-		
+
 		if now.Sub(entry.LastSeen) <= currentTTL {
 			// It's a duplicate
 			sd.dupCount++
 			typeStats.Duplicates++
 			entry.LastSeen = now
 			entry.SeenCount++
-			
+
 			// Update confidence if enabled
 			if sd.confidenceScoring {
 				entry.Confidence = sd.updateConfidence(entry, now)
 			}
-			
+
 			// Update metrics
 			solanaDuplicatesSuppressed.WithLabelValues(itemType, sd.tier).Inc()
-			
+
 			// Track velocity for active items
 			if sd.velocityTracking {
 				sd.updateVelocityTracking(itemType, now, typeStats)
 			}
-			
+
 			return true
 		}
-		
+
 		// Entry expired, update it
 		entry.LastSeen = now
 		entry.SeenCount = 1 // Reset count for expired entry
@@ -259,22 +259,22 @@ func (sd *SolanaDeduper) IsDuplicate(hash, itemType string, options ...dedup.Ded
 		if len(sd.seen) >= sd.capacity {
 			sd.evictOldest()
 		}
-		
+
 		entry := &SolanaEntry{
-			Hash:      hash,
-			Type:      itemType,
-			FirstSeen: now,
-			LastSeen:  now,
-			SeenCount: 1,
-			Source:    opts.Source,
-			Priority:  sd.calculatePriority(itemType, opts),
+			Hash:       hash,
+			Type:       itemType,
+			FirstSeen:  now,
+			LastSeen:   now,
+			SeenCount:  1,
+			Source:     opts.Source,
+			Priority:   sd.calculatePriority(itemType, opts),
 			Properties: opts.Properties,
 		}
-		
+
 		if sd.confidenceScoring {
 			entry.Confidence = sd.calculateInitialConfidence(hash, itemType, opts)
 		}
-		
+
 		// Add Solana-specific metadata
 		if opts.Properties != nil {
 			if slotNum, ok := opts.Properties["slot_number"].(uint64); ok {
@@ -284,22 +284,22 @@ func (sd *SolanaDeduper) IsDuplicate(hash, itemType string, options ...dedup.Ded
 				entry.BlockHeight = blockHeight
 			}
 		}
-		
+
 		sd.seen[key] = entry
 		sd.order = append(sd.order, key)
 	}
-	
+
 	// Update velocity tracking
 	if sd.velocityTracking {
 		sd.updateVelocityTracking(itemType, now, typeStats)
 	}
-	
+
 	// Periodic TTL adjustment with ML optimization
 	if now.Sub(sd.lastAdjust) >= sd.adjustEvery {
 		sd.adjustTTLWithML()
 		sd.lastAdjust = now
 	}
-	
+
 	return false
 }
 
@@ -309,7 +309,7 @@ func (sd *SolanaDeduper) generateKey(hash, itemType string, opts *dedup.DedupeOp
 		// Cross-slot deduplication for blocks and transactions
 		return hash
 	}
-	
+
 	// Slot-specific deduplication
 	slotPrefix := "unknown"
 	if opts.Properties != nil {
@@ -317,7 +317,7 @@ func (sd *SolanaDeduper) generateKey(hash, itemType string, opts *dedup.DedupeOp
 			slotPrefix = fmt.Sprintf("slot_%d", slotNum)
 		}
 	}
-	
+
 	return fmt.Sprintf("%s:%s:%s", slotPrefix, itemType, hash)
 }
 
@@ -334,19 +334,19 @@ func (sd *SolanaDeduper) calculateInitialConfidence(hash, itemType string, opts 
 	if !sd.confidenceScoring {
 		return 1.0
 	}
-	
+
 	confidence := 0.8 // Base confidence
-	
+
 	// Hash quality assessment
 	if len(hash) >= 64 {
 		confidence += 0.1
 	}
-	
+
 	// Source reliability
 	if opts.Source != "" {
 		confidence += 0.05
 	}
-	
+
 	// Type-specific adjustments
 	switch itemType {
 	case "slot":
@@ -356,11 +356,11 @@ func (sd *SolanaDeduper) calculateInitialConfidence(hash, itemType string, opts 
 	case "transaction":
 		confidence -= 0.02 // Transactions can be more variable
 	}
-	
+
 	if confidence > 1.0 {
 		confidence = 1.0
 	}
-	
+
 	return confidence
 }
 
@@ -369,22 +369,22 @@ func (sd *SolanaDeduper) updateConfidence(entry *SolanaEntry, now time.Time) flo
 	if !sd.confidenceScoring {
 		return entry.Confidence
 	}
-	
+
 	// Increase confidence with repeated sightings
 	frequencyBoost := 1.0 + float64(entry.SeenCount)*0.02
 	if frequencyBoost > 1.5 {
 		frequencyBoost = 1.5
 	}
-	
+
 	// Time-based confidence decay
 	timeSinceFirst := now.Sub(entry.FirstSeen)
 	timeDecay := math.Exp(-float64(timeSinceFirst) / float64(time.Hour))
-	
+
 	newConfidence := entry.Confidence * frequencyBoost * timeDecay
 	if newConfidence > 1.0 {
 		newConfidence = 1.0
 	}
-	
+
 	return newConfidence
 }
 
@@ -393,9 +393,9 @@ func (sd *SolanaDeduper) calculatePriority(itemType string, opts *dedup.DedupeOp
 	if !sd.priorityQueuing {
 		return 1
 	}
-	
+
 	priority := 1
-	
+
 	// Type-based priority
 	switch itemType {
 	case "slot":
@@ -405,12 +405,12 @@ func (sd *SolanaDeduper) calculatePriority(itemType string, opts *dedup.DedupeOp
 	case "transaction":
 		priority = 1
 	}
-	
+
 	// Option-based adjustments
 	if opts.Priority > 0 {
 		priority = opts.Priority
 	}
-	
+
 	return priority
 }
 
@@ -418,7 +418,7 @@ func (sd *SolanaDeduper) calculatePriority(itemType string, opts *dedup.DedupeOp
 func (sd *SolanaDeduper) updateVelocityTracking(itemType string, now time.Time, typeStats *SolanaTypeStats) {
 	if !typeStats.LastSeen.IsZero() {
 		timeSinceLast := now.Sub(typeStats.LastSeen)
-		
+
 		// Exponential moving average for time between items
 		alpha := sd.learningRate
 		if typeStats.AvgTimeBetween == 0 {
@@ -426,13 +426,13 @@ func (sd *SolanaDeduper) updateVelocityTracking(itemType string, now time.Time, 
 		} else {
 			typeStats.AvgTimeBetween = time.Duration(float64(typeStats.AvgTimeBetween)*(1-alpha) + float64(timeSinceLast)*alpha)
 		}
-		
+
 		// Calculate velocity (items per second)
 		if typeStats.AvgTimeBetween > 0 {
 			typeStats.Velocity = 1.0 / typeStats.AvgTimeBetween.Seconds()
 		}
 	}
-	
+
 	typeStats.LastSeen = now
 }
 
@@ -441,21 +441,21 @@ func (sd *SolanaDeduper) adjustTTLWithML() {
 	if sd.totalCount < 50 {
 		return
 	}
-	
+
 	// Calculate global duplicate rate
 	globalRate := float64(sd.dupCount) / float64(sd.totalCount)
-	
+
 	// ML-based TTL adjustment
 	if sd.adaptiveLearning {
 		sd.adjustTTLWithAdvancedML(globalRate)
 	} else {
 		sd.adjustTTLBasic(globalRate)
 	}
-	
+
 	// Update metrics
 	solanaAdaptiveTTL.WithLabelValues(sd.tier).Set(sd.ttl.Seconds())
 	solanaDuplicateRate.WithLabelValues("global", sd.tier).Set(globalRate)
-	
+
 	// Reset counters with partial decay
 	sd.totalCount = sd.totalCount / 2
 	sd.dupCount = sd.dupCount / 2
@@ -470,14 +470,14 @@ func (sd *SolanaDeduper) adjustTTLWithAdvancedML(globalRate float64) {
 		velocityFactor := math.Min(2.0, sd.slotVelocity/2.0) // Normalize around 2 slots/sec
 		adaptiveLearningRate *= velocityFactor
 	}
-	
+
 	// Multi-factor TTL adjustment
 	targetRate := 0.3 // Target 30% duplicate rate for optimal performance
 	rateDelta := globalRate - targetRate
-	
+
 	// Calculate TTL adjustment factor
 	adjustmentFactor := 1.0 + (rateDelta * adaptiveLearningRate * 2.0)
-	
+
 	// Velocity-based adjustment
 	if sd.velocityTracking {
 		velocityAdjustment := 1.0
@@ -488,32 +488,32 @@ func (sd *SolanaDeduper) adjustTTLWithAdvancedML(globalRate float64) {
 		}
 		adjustmentFactor *= velocityAdjustment
 	}
-	
+
 	// Apply adjustment
 	newTTL := time.Duration(float64(sd.ttl) * adjustmentFactor)
-	
+
 	// Bounds checking
 	if newTTL < sd.minTTL {
 		newTTL = sd.minTTL
 	} else if newTTL > sd.maxTTL {
 		newTTL = sd.maxTTL
 	}
-	
+
 	// Track adjustment direction
 	if newTTL > sd.ttl {
 		solanaTTLAdjustments.WithLabelValues("increase", sd.tier).Inc()
 	} else if newTTL < sd.ttl {
 		solanaTTLAdjustments.WithLabelValues("decrease", sd.tier).Inc()
 	}
-	
+
 	sd.ttl = newTTL
-	
+
 	// Adjust type-specific TTLs
 	for itemType, typeStats := range sd.typeStats {
 		if typeStats.TotalSeen > 10 {
 			typeRate := float64(typeStats.Duplicates) / float64(typeStats.TotalSeen)
 			typeFactor := 1.0 + (typeRate-targetRate)*adaptiveLearningRate
-			
+
 			// Type-specific adjustments
 			switch itemType {
 			case "slot":
@@ -521,12 +521,12 @@ func (sd *SolanaDeduper) adjustTTLWithAdvancedML(globalRate float64) {
 			case "transaction":
 				typeFactor *= 0.8 // Transactions can have shorter TTL
 			}
-			
+
 			newTypeTTL := time.Duration(float64(sd.ttl) * typeFactor)
 			if newTypeTTL >= sd.minTTL && newTypeTTL <= sd.maxTTL {
 				typeStats.AdaptiveTTL = newTypeTTL
 			}
-			
+
 			// Update type-specific metrics
 			solanaDuplicateRate.WithLabelValues(itemType, sd.tier).Set(typeRate)
 		}
@@ -553,7 +553,7 @@ func (sd *SolanaDeduper) adjustTTLBasic(rate float64) {
 		// Small drift
 		sd.ttl = sd.ttl + 1*time.Second
 	}
-	
+
 	// Bounds checking
 	if sd.ttl < sd.minTTL {
 		sd.ttl = sd.minTTL
@@ -568,7 +568,7 @@ func (sd *SolanaDeduper) evictOldest() {
 	if len(sd.order) == 0 {
 		return
 	}
-	
+
 	if sd.priorityQueuing {
 		sd.evictByPriority()
 	} else {
@@ -584,17 +584,17 @@ func (sd *SolanaDeduper) evictByPriority() {
 	var lowestPriorityKey string
 	lowestPriority := 100
 	oldestTime := time.Now()
-	
+
 	// Find the entry with lowest priority and oldest timestamp
 	for key, entry := range sd.seen {
-		if entry.Priority < lowestPriority || 
-		   (entry.Priority == lowestPriority && entry.LastSeen.Before(oldestTime)) {
+		if entry.Priority < lowestPriority ||
+			(entry.Priority == lowestPriority && entry.LastSeen.Before(oldestTime)) {
 			lowestPriority = entry.Priority
 			oldestTime = entry.LastSeen
 			lowestPriorityKey = key
 		}
 	}
-	
+
 	if lowestPriorityKey != "" {
 		// Remove from order slice
 		for i, key := range sd.order {
@@ -611,33 +611,33 @@ func (sd *SolanaDeduper) evictByPriority() {
 func (sd *SolanaDeduper) GetStats() map[string]interface{} {
 	sd.mu.RLock()
 	defer sd.mu.RUnlock()
-	
+
 	globalRate := 0.0
 	if sd.totalCount > 0 {
 		globalRate = float64(sd.dupCount) / float64(sd.totalCount)
 	}
-	
+
 	stats := map[string]interface{}{
-		"tier":                    sd.tier,
-		"total_seen":              sd.totalCount,
-		"duplicates_found":        sd.dupCount,
-		"global_duplicate_rate":   globalRate,
-		"current_ttl_seconds":     sd.ttl.Seconds(),
-		"min_ttl_seconds":         sd.minTTL.Seconds(),
-		"max_ttl_seconds":         sd.maxTTL.Seconds(),
-		"capacity":                sd.capacity,
-		"current_size":            len(sd.seen),
-		"slot_velocity":           sd.slotVelocity,
-		"block_velocity":          sd.blockVelocity,
-		"adaptive_learning":       sd.adaptiveLearning,
-		"velocity_tracking":       sd.velocityTracking,
-		"confidence_scoring":      sd.confidenceScoring,
-		"priority_queuing":        sd.priorityQueuing,
-		"cross_slot_dedup":        sd.crossSlotDedup,
-		"learning_rate":           sd.learningRate,
-		"confidence_threshold":    sd.confidenceThreshold,
+		"tier":                  sd.tier,
+		"total_seen":            sd.totalCount,
+		"duplicates_found":      sd.dupCount,
+		"global_duplicate_rate": globalRate,
+		"current_ttl_seconds":   sd.ttl.Seconds(),
+		"min_ttl_seconds":       sd.minTTL.Seconds(),
+		"max_ttl_seconds":       sd.maxTTL.Seconds(),
+		"capacity":              sd.capacity,
+		"current_size":          len(sd.seen),
+		"slot_velocity":         sd.slotVelocity,
+		"block_velocity":        sd.blockVelocity,
+		"adaptive_learning":     sd.adaptiveLearning,
+		"velocity_tracking":     sd.velocityTracking,
+		"confidence_scoring":    sd.confidenceScoring,
+		"priority_queuing":      sd.priorityQueuing,
+		"cross_slot_dedup":      sd.crossSlotDedup,
+		"learning_rate":         sd.learningRate,
+		"confidence_threshold":  sd.confidenceThreshold,
 	}
-	
+
 	// Add type-specific statistics
 	typeStatsMap := make(map[string]interface{})
 	for itemType, typeStats := range sd.typeStats {
@@ -645,18 +645,18 @@ func (sd *SolanaDeduper) GetStats() map[string]interface{} {
 		if typeStats.TotalSeen > 0 {
 			typeRate = float64(typeStats.Duplicates) / float64(typeStats.TotalSeen)
 		}
-		
+
 		typeStatsMap[itemType] = map[string]interface{}{
-			"total_seen":              typeStats.TotalSeen,
-			"duplicates":              typeStats.Duplicates,
-			"duplicate_rate":          typeRate,
-			"adaptive_ttl_seconds":    typeStats.AdaptiveTTL.Seconds(),
+			"total_seen":               typeStats.TotalSeen,
+			"duplicates":               typeStats.Duplicates,
+			"duplicate_rate":           typeRate,
+			"adaptive_ttl_seconds":     typeStats.AdaptiveTTL.Seconds(),
 			"avg_time_between_seconds": typeStats.AvgTimeBetween.Seconds(),
-			"velocity":                typeStats.Velocity,
+			"velocity":                 typeStats.Velocity,
 		}
 	}
 	stats["type_statistics"] = typeStatsMap
-	
+
 	return stats
 }
 
@@ -664,10 +664,10 @@ func (sd *SolanaDeduper) GetStats() map[string]interface{} {
 func (sd *SolanaDeduper) Cleanup() {
 	sd.mu.Lock()
 	defer sd.mu.Unlock()
-	
+
 	now := time.Now()
 	keysToDelete := []string{}
-	
+
 	for key, entry := range sd.seen {
 		// Use type-specific TTL
 		typeStats := sd.typeStats[entry.Type]
@@ -675,22 +675,22 @@ func (sd *SolanaDeduper) Cleanup() {
 		if typeStats != nil && typeStats.AdaptiveTTL > 0 {
 			currentTTL = typeStats.AdaptiveTTL
 		}
-		
+
 		// Consider confidence in cleanup decisions
 		adjustedTTL := currentTTL
 		if sd.confidenceScoring && entry.Confidence < sd.confidenceThreshold {
 			adjustedTTL = time.Duration(float64(currentTTL) * entry.Confidence)
 		}
-		
+
 		if now.Sub(entry.LastSeen) > adjustedTTL {
 			keysToDelete = append(keysToDelete, key)
 		}
 	}
-	
+
 	// Remove expired entries
 	for _, key := range keysToDelete {
 		delete(sd.seen, key)
-		
+
 		// Remove from order slice
 		for i, orderKey := range sd.order {
 			if orderKey == key {
@@ -699,7 +699,7 @@ func (sd *SolanaDeduper) Cleanup() {
 			}
 		}
 	}
-	
+
 	if len(keysToDelete) > 0 && sd.logger != nil {
 		sd.logger.Debug("Solana dedup cleanup completed",
 			zap.Int("removed", len(keysToDelete)),
@@ -712,10 +712,10 @@ func (sd *SolanaDeduper) Cleanup() {
 func (sd *SolanaDeduper) SetTier(tier string) {
 	sd.mu.Lock()
 	defer sd.mu.Unlock()
-	
+
 	oldTier := sd.tier
 	sd.tier = tier
-	
+
 	// Update tier-dependent features
 	sd.txDedup = tier == "ENTERPRISE" || tier == "BUSINESS"
 	sd.crossSlotDedup = tier == "ENTERPRISE"
@@ -723,7 +723,7 @@ func (sd *SolanaDeduper) SetTier(tier string) {
 	sd.adaptiveLearning = tier == "ENTERPRISE"
 	sd.confidenceScoring = tier == "ENTERPRISE" || tier == "BUSINESS"
 	sd.priorityQueuing = tier == "ENTERPRISE"
-	
+
 	// Update capacity
 	newCapacity := getSolanaCapacityForTier(tier)
 	if newCapacity != sd.capacity {
@@ -733,7 +733,7 @@ func (sd *SolanaDeduper) SetTier(tier string) {
 			sd.enforceCapacity()
 		}
 	}
-	
+
 	if sd.logger != nil {
 		sd.logger.Info("Solana deduper tier updated",
 			zap.String("old_tier", oldTier),
@@ -772,7 +772,7 @@ func (sd *SolanaDeduper) isDup(key string) bool {
 func (sd *SolanaDeduper) stats() (ttl time.Duration, dupRate float64) {
 	sd.mu.RLock()
 	defer sd.mu.RUnlock()
-	
+
 	ttl = sd.ttl
 	dupRate = 0.0
 	if sd.totalCount > 0 {

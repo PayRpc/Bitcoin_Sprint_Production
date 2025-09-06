@@ -23,8 +23,8 @@ func main() {
 
 	// Create database connection
 	dbConfig := database.Config{
-		Type: "postgres",
-		URL:  dbURL,
+		Type:     "postgres",
+		URL:      dbURL,
 		MaxConns: 10,
 		MinConns: 2,
 	}
@@ -37,7 +37,7 @@ func main() {
 
 	// Test migrations
 	migrationRunner := migrations.NewRunner(db, logger)
-	
+
 	fmt.Println("📊 Migration Status:")
 	status, err := migrationRunner.Status(context.Background())
 	if err != nil {

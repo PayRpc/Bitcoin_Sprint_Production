@@ -9,7 +9,7 @@ import (
 )
 
 type BlockIndex struct {
-	ttl   time.Duration
+	ttl time.Duration
 
 	mu   sync.RWMutex
 	seen map[string]time.Time

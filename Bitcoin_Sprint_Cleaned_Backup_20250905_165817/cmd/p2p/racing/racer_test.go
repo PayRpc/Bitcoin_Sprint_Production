@@ -4,5 +4,5 @@ import "testing"
 
 // TestRacer tests the racing functionality
 func TestRacer(t *testing.T) {
-// TODO: Implement racing tests
+	// TODO: Implement racing tests
 }

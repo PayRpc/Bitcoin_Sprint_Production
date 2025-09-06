@@ -21,30 +21,30 @@ import (
 
 // CircuitBreakerMonitor provides real-time monitoring of circuit breakers
 type CircuitBreakerMonitor struct {
-	breakers    map[string]*circuitbreaker.EnterpriseCircuitBreaker
-	mu          sync.RWMutex
-	upgrader    websocket.Upgrader
-	clients     map[*websocket.Conn]bool
-	clientsMu   sync.RWMutex
-	broadcast   chan MonitorMessage
-	stopChan    chan struct{}
+	breakers  map[string]*circuitbreaker.EnterpriseCircuitBreaker
+	mu        sync.RWMutex
+	upgrader  websocket.Upgrader
+	clients   map[*websocket.Conn]bool
+	clientsMu sync.RWMutex
+	broadcast chan MonitorMessage
+	stopChan  chan struct{}
 }
 
 // MonitorMessage represents a message sent to monitoring clients
 type MonitorMessage struct {
-	Type      string                                   `json:"type"`
-	Timestamp time.Time                                `json:"timestamp"`
-	Data      interface{}                              `json:"data"`
+	Type      string      `json:"type"`
+	Timestamp time.Time   `json:"timestamp"`
+	Data      interface{} `json:"data"`
 }
 
 // CircuitBreakerStatus represents the current status of a circuit breaker
 type CircuitBreakerStatus struct {
-	Name            string                                     `json:"name"`
-	State           string                                     `json:"state"`
-	Metrics         *circuitbreaker.CircuitBreakerMetrics     `json:"metrics"`
-	Health          float64                                    `json:"health"`
-	LastStateChange time.Time                                  `json:"last_state_change"`
-	Configuration   CircuitBreakerConfig                       `json:"configuration"`
+	Name            string                                `json:"name"`
+	State           string                                `json:"state"`
+	Metrics         *circuitbreaker.CircuitBreakerMetrics `json:"metrics"`
+	Health          float64                               `json:"health"`
+	LastStateChange time.Time                             `json:"last_state_change"`
+	Configuration   CircuitBreakerConfig                  `json:"configuration"`
 }
 
 // CircuitBreakerConfig represents configuration summary
@@ -58,11 +58,11 @@ type CircuitBreakerConfig struct {
 
 // AlertMessage represents an alert condition
 type AlertMessage struct {
-	Level       string    `json:"level"`
-	Message     string    `json:"message"`
-	Breaker     string    `json:"breaker"`
-	Timestamp   time.Time `json:"timestamp"`
-	Metadata    map[string]interface{} `json:"metadata"`
+	Level     string                 `json:"level"`
+	Message   string                 `json:"message"`
+	Breaker   string                 `json:"breaker"`
+	Timestamp time.Time              `json:"timestamp"`
+	Metadata  map[string]interface{} `json:"metadata"`
 }
 
 func main() {
@@ -90,7 +90,7 @@ func main() {
 
 	// Setup HTTP server
 	router := mux.NewRouter()
-	
+
 	// API endpoints
 	router.HandleFunc("/api/breakers", monitor.handleGetBreakers).Methods("GET")
 	router.HandleFunc("/api/breakers/{name}", monitor.handleGetBreaker).Methods("GET")
@@ -98,10 +98,10 @@ func main() {
 	router.HandleFunc("/api/breakers/{name}/state", monitor.handleSetState).Methods("POST")
 	router.HandleFunc("/api/breakers/{name}/reset", monitor.handleReset).Methods("POST")
 	router.HandleFunc("/api/alerts", monitor.handleGetAlerts).Methods("GET")
-	
+
 	// WebSocket endpoint for real-time updates
 	router.HandleFunc("/ws", monitor.handleWebSocket)
-	
+
 	// Static file serving for web interface
 	router.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/monitor/")))
 
@@ -158,7 +158,7 @@ func NewCircuitBreakerMonitor() *CircuitBreakerMonitor {
 func (m *CircuitBreakerMonitor) RegisterBreaker(name string, breaker *circuitbreaker.EnterpriseCircuitBreaker) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	m.breakers[name] = breaker
 	log.Printf("Registered circuit breaker: %s", name)
 }
@@ -172,7 +172,7 @@ func (m *CircuitBreakerMonitor) Start(ctx context.Context, interval time.Duratio
 // Stop stops all monitoring operations
 func (m *CircuitBreakerMonitor) Stop() {
 	close(m.stopChan)
-	
+
 	// Close all WebSocket connections
 	m.clientsMu.Lock()
 	for client := range m.clients {
@@ -190,10 +190,10 @@ func (m *CircuitBreakerMonitor) monitoringLoop(ctx context.Context, interval tim
 		select {
 		case <-ticker.C:
 			m.collectAndBroadcastStatus()
-			
+
 		case <-ctx.Done():
 			return
-			
+
 		case <-m.stopChan:
 			return
 		}
@@ -204,10 +204,10 @@ func (m *CircuitBreakerMonitor) monitoringLoop(ctx context.Context, interval tim
 func (m *CircuitBreakerMonitor) collectAndBroadcastStatus() {
 	m.mu.RLock()
 	statuses := make(map[string]CircuitBreakerStatus)
-	
+
 	for name, breaker := range m.breakers {
 		metrics := breaker.GetMetrics()
-		
+
 		status := CircuitBreakerStatus{
 			Name:            name,
 			State:           breaker.State().String(),
@@ -222,9 +222,9 @@ func (m *CircuitBreakerMonitor) collectAndBroadcastStatus() {
 				EnableHealth:     true,
 			},
 		}
-		
+
 		statuses[name] = status
-		
+
 		// Check for alert conditions
 		m.checkAlerts(name, status)
 	}
@@ -258,10 +258,10 @@ func (m *CircuitBreakerMonitor) checkAlerts(name string, status CircuitBreakerSt
 				"state":        status.State,
 			},
 		}
-		
+
 		m.sendAlert(alert)
 	}
-	
+
 	// Circuit open alert
 	if status.State == "open" {
 		alert := AlertMessage{
@@ -270,14 +270,14 @@ func (m *CircuitBreakerMonitor) checkAlerts(name string, status CircuitBreakerSt
 			Breaker:   name,
 			Timestamp: time.Now(),
 			Metadata: map[string]interface{}{
-				"state":               status.State,
+				"state":                status.State,
 				"consecutive_failures": status.Metrics.ConsecutiveFailures,
 			},
 		}
-		
+
 		m.sendAlert(alert)
 	}
-	
+
 	// Low health score alert
 	if status.Health < 0.5 {
 		alert := AlertMessage{
@@ -290,7 +290,7 @@ func (m *CircuitBreakerMonitor) checkAlerts(name string, status CircuitBreakerSt
 				"state":        status.State,
 			},
 		}
-		
+
 		m.sendAlert(alert)
 	}
 }
@@ -323,7 +323,7 @@ func (m *CircuitBreakerMonitor) broadcastLoop() {
 				}
 			}
 			m.clientsMu.RUnlock()
-			
+
 		case <-m.stopChan:
 			return
 		}
@@ -340,7 +340,7 @@ func (m *CircuitBreakerMonitor) handleGetBreakers(w http.ResponseWriter, r *http
 	breakers := make(map[string]CircuitBreakerStatus)
 	for name, breaker := range m.breakers {
 		metrics := breaker.GetMetrics()
-		
+
 		breakers[name] = CircuitBreakerStatus{
 			Name:            name,
 			State:           breaker.State().String(),

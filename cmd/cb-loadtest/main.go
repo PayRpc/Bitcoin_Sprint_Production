@@ -16,32 +16,32 @@ import (
 
 // LoadTestConfig defines configuration for load testing
 type LoadTestConfig struct {
-	Duration         time.Duration
-	Concurrency      int
-	RequestRate      float64
-	FailureRate      float64
-	LatencyMin       time.Duration
-	LatencyMax       time.Duration
-	BreakerConfig    circuitbreaker.Config
-	TestScenario     string
-	OutputFile       string
+	Duration      time.Duration
+	Concurrency   int
+	RequestRate   float64
+	FailureRate   float64
+	LatencyMin    time.Duration
+	LatencyMax    time.Duration
+	BreakerConfig circuitbreaker.Config
+	TestScenario  string
+	OutputFile    string
 }
 
 // TestResult captures the results of a load test
 type TestResult struct {
-	TotalRequests       int64         `json:"total_requests"`
-	SuccessfulRequests  int64         `json:"successful_requests"`
-	FailedRequests      int64         `json:"failed_requests"`
-	CircuitOpenCount    int64         `json:"circuit_open_count"`
-	AverageLatency      time.Duration `json:"average_latency"`
-	MaxLatency          time.Duration `json:"max_latency"`
-	MinLatency          time.Duration `json:"min_latency"`
-	P95Latency          time.Duration `json:"p95_latency"`
-	P99Latency          time.Duration `json:"p99_latency"`
-	ThroughputRPS       float64       `json:"throughput_rps"`
-	Duration            time.Duration `json:"duration"`
-	StateChanges        []StateChange `json:"state_changes"`
-	ErrorTypes          map[string]int64 `json:"error_types"`
+	TotalRequests      int64            `json:"total_requests"`
+	SuccessfulRequests int64            `json:"successful_requests"`
+	FailedRequests     int64            `json:"failed_requests"`
+	CircuitOpenCount   int64            `json:"circuit_open_count"`
+	AverageLatency     time.Duration    `json:"average_latency"`
+	MaxLatency         time.Duration    `json:"max_latency"`
+	MinLatency         time.Duration    `json:"min_latency"`
+	P95Latency         time.Duration    `json:"p95_latency"`
+	P99Latency         time.Duration    `json:"p99_latency"`
+	ThroughputRPS      float64          `json:"throughput_rps"`
+	Duration           time.Duration    `json:"duration"`
+	StateChanges       []StateChange    `json:"state_changes"`
+	ErrorTypes         map[string]int64 `json:"error_types"`
 }
 
 // StateChange records when the circuit breaker changed state
@@ -62,28 +62,28 @@ type RequestLatency struct {
 
 func main() {
 	var (
-		duration     = flag.Duration("duration", time.Minute*5, "Test duration")
-		concurrency  = flag.Int("concurrency", 10, "Number of concurrent workers")
-		requestRate  = flag.Float64("rate", 100.0, "Requests per second")
-		failureRate  = flag.Float64("failure-rate", 0.1, "Simulated failure rate (0.0-1.0)")
-		latencyMin   = flag.Duration("latency-min", time.Millisecond*10, "Minimum simulated latency")
-		latencyMax   = flag.Duration("latency-max", time.Millisecond*100, "Maximum simulated latency")
-		scenario     = flag.String("scenario", "standard", "Test scenario (standard, spike, gradual-failure, recovery)")
-		outputFile   = flag.String("output", "", "Output file for results (JSON format)")
-		tier         = flag.String("tier", "business", "Circuit breaker tier (free, business, enterprise)")
-		configFile   = flag.String("config", "", "Custom circuit breaker configuration file")
+		duration    = flag.Duration("duration", time.Minute*5, "Test duration")
+		concurrency = flag.Int("concurrency", 10, "Number of concurrent workers")
+		requestRate = flag.Float64("rate", 100.0, "Requests per second")
+		failureRate = flag.Float64("failure-rate", 0.1, "Simulated failure rate (0.0-1.0)")
+		latencyMin  = flag.Duration("latency-min", time.Millisecond*10, "Minimum simulated latency")
+		latencyMax  = flag.Duration("latency-max", time.Millisecond*100, "Maximum simulated latency")
+		scenario    = flag.String("scenario", "standard", "Test scenario (standard, spike, gradual-failure, recovery)")
+		outputFile  = flag.String("output", "", "Output file for results (JSON format)")
+		tier        = flag.String("tier", "business", "Circuit breaker tier (free, business, enterprise)")
+		configFile  = flag.String("config", "", "Custom circuit breaker configuration file")
 	)
 	flag.Parse()
 
 	config := LoadTestConfig{
-		Duration:      *duration,
-		Concurrency:   *concurrency,
-		RequestRate:   *requestRate,
-		FailureRate:   *failureRate,
-		LatencyMin:    *latencyMin,
-		LatencyMax:    *latencyMax,
-		TestScenario:  *scenario,
-		OutputFile:    *outputFile,
+		Duration:     *duration,
+		Concurrency:  *concurrency,
+		RequestRate:  *requestRate,
+		FailureRate:  *failureRate,
+		LatencyMin:   *latencyMin,
+		LatencyMax:   *latencyMax,
+		TestScenario: *scenario,
+		OutputFile:   *outputFile,
 	}
 
 	// Create circuit breaker configuration
@@ -180,7 +180,7 @@ func runLoadTest(config LoadTestConfig) (*TestResult, error) {
 	defer cancel()
 
 	startTime := time.Now()
-	
+
 	// Start workers
 	var wg sync.WaitGroup
 	rateLimiter := time.NewTicker(time.Duration(float64(time.Second) / config.RequestRate))
@@ -190,7 +190,7 @@ func runLoadTest(config LoadTestConfig) (*TestResult, error) {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			
+
 			for {
 				select {
 				case <-ctx.Done():
@@ -218,7 +218,7 @@ func runLoadTest(config LoadTestConfig) (*TestResult, error) {
 						atomic.AddInt64(&successfulRequests, 1)
 					} else {
 						atomic.AddInt64(&failedRequests, 1)
-						
+
 						// Check if failure was due to circuit being open
 						if result != nil && result.FailureType == circuitbreaker.FailureTypeCircuit {
 							atomic.AddInt64(&circuitOpenCount, 1)
@@ -293,22 +293,22 @@ func createStandardTestFunction(config LoadTestConfig) func() (interface{}, erro
 // createSpikeTestFunction creates a function that simulates traffic spikes
 func createSpikeTestFunction(config LoadTestConfig) func() (interface{}, error) {
 	var requestCount int64
-	
+
 	return func() (interface{}, error) {
 		count := atomic.AddInt64(&requestCount, 1)
-		
+
 		// Simulate spike in latency and failures every 1000 requests
 		if count%1000 < 50 { // Spike for 50 requests
 			latency := config.LatencyMax * 3 // 3x normal latency during spike
 			time.Sleep(latency)
-			
+
 			if rand.Float64() < config.FailureRate*5 { // 5x failure rate during spike
 				return nil, fmt.Errorf("spike failure")
 			}
 		} else {
 			latency := config.LatencyMin + time.Duration(rand.Float64()*float64(config.LatencyMax-config.LatencyMin))
 			time.Sleep(latency)
-			
+
 			if rand.Float64() < config.FailureRate {
 				return nil, fmt.Errorf("normal failure")
 			}
@@ -321,7 +321,7 @@ func createSpikeTestFunction(config LoadTestConfig) func() (interface{}, error) 
 // createGradualFailureTestFunction creates a function that gradually increases failure rate
 func createGradualFailureTestFunction(config LoadTestConfig) func() (interface{}, error) {
 	startTime := time.Now()
-	
+
 	return func() (interface{}, error) {
 		// Gradually increase failure rate over time
 		elapsed := time.Since(startTime)
@@ -342,11 +342,11 @@ func createGradualFailureTestFunction(config LoadTestConfig) func() (interface{}
 // createRecoveryTestFunction creates a function that simulates recovery scenario
 func createRecoveryTestFunction(config LoadTestConfig) func() (interface{}, error) {
 	startTime := time.Now()
-	
+
 	return func() (interface{}, error) {
 		elapsed := time.Since(startTime)
 		progress := elapsed.Seconds() / config.Duration.Seconds()
-		
+
 		var currentFailureRate float64
 		if progress < 0.3 { // High failure rate for first 30%
 			currentFailureRate = config.FailureRate * 10
@@ -402,7 +402,7 @@ func (r *TestResult) calculateLatencyMetrics(latencies []RequestLatency) {
 	// Calculate percentiles
 	p95Index := int(float64(len(sortedLatencies)) * 0.95)
 	p99Index := int(float64(len(sortedLatencies)) * 0.99)
-	
+
 	if p95Index >= len(sortedLatencies) {
 		p95Index = len(sortedLatencies) - 1
 	}
@@ -419,7 +419,7 @@ func printResults(result *TestResult) {
 	fmt.Println("\n=== Load Test Results ===")
 	fmt.Printf("Duration: %v\n", result.Duration)
 	fmt.Printf("Total Requests: %d\n", result.TotalRequests)
-	fmt.Printf("Successful Requests: %d (%.2f%%)\n", result.SuccessfulRequests, 
+	fmt.Printf("Successful Requests: %d (%.2f%%)\n", result.SuccessfulRequests,
 		float64(result.SuccessfulRequests)/float64(result.TotalRequests)*100)
 	fmt.Printf("Failed Requests: %d (%.2f%%)\n", result.FailedRequests,
 		float64(result.FailedRequests)/float64(result.TotalRequests)*100)
@@ -436,7 +436,7 @@ func printResults(result *TestResult) {
 	if len(result.StateChanges) > 0 {
 		fmt.Println("\n=== State Changes ===")
 		for _, change := range result.StateChanges {
-			fmt.Printf("%s: %s -> %s (%s)\n", 
+			fmt.Printf("%s: %s -> %s (%s)\n",
 				change.Timestamp.Format("15:04:05.000"),
 				change.From, change.To, change.Reason)
 		}
@@ -488,10 +488,10 @@ func getErrorType(err error, result *circuitbreaker.ExecutionResult) string {
 			return "application_error"
 		}
 	}
-	
+
 	if err != nil {
 		return "unknown_error"
 	}
-	
+
 	return "success"
 }

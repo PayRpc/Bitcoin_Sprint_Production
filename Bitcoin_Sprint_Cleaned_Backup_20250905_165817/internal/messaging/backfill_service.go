@@ -525,16 +525,16 @@ func (bs *BackfillService) GetStatus() map[string]interface{} {
 	metrics := bs.GetMetrics()
 
 	return map[string]interface{}{
-		"running":             bs.running,
-		"rpc_enabled":         bs.cfg.RPCEnabled,
-		"last_id":             bs.getLastID(),
-		"processed_tx_count":  bs.GetProcessedTxCount(),
-		"failed_tx_count":     len(bs.GetFailedTxs()),
-		"messages_processed":  metrics.MessagesProcessed,
-		"blocks_processed":    metrics.BlocksProcessed,
-		"txs_processed":       metrics.TxsProcessed,
-		"duplicates_skipped":  metrics.DuplicatesSkipped,
-		"last_backfill_time":  metrics.LastBackfillTime,
-		"backfill_duration":   metrics.BackfillDuration,
+		"running":            bs.running,
+		"rpc_enabled":        bs.cfg.RPCEnabled,
+		"last_id":            bs.getLastID(),
+		"processed_tx_count": bs.GetProcessedTxCount(),
+		"failed_tx_count":    len(bs.GetFailedTxs()),
+		"messages_processed": metrics.MessagesProcessed,
+		"blocks_processed":   metrics.BlocksProcessed,
+		"txs_processed":      metrics.TxsProcessed,
+		"duplicates_skipped": metrics.DuplicatesSkipped,
+		"last_backfill_time": metrics.LastBackfillTime,
+		"backfill_duration":  metrics.BackfillDuration,
 	}
 }

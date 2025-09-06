@@ -45,12 +45,12 @@ type RelayClient interface {
 
 // RelayDispatcher manages multiple relay clients and routes requests
 type RelayDispatcher struct {
-	clients        map[string]RelayClient
-	logger         *zap.Logger
-	cfg            config.Config
-	mu             sync.RWMutex
-	deduper        *BlockDeduper
-	dedupeStop     chan struct{}
+	clients    map[string]RelayClient
+	logger     *zap.Logger
+	cfg        config.Config
+	mu         sync.RWMutex
+	deduper    *BlockDeduper
+	dedupeStop chan struct{}
 }
 
 // NetworkInfo contains network-specific information
@@ -145,7 +145,7 @@ func NewRelayDispatcher(cfg config.Config, logger *zap.Logger) *RelayDispatcher 
 		deduper:    NewBlockDeduper(8192, 5*time.Minute), // 8K capacity with 5min TTL
 		dedupeStop: make(chan struct{}),
 	}
-	
+
 	// Start background cleanup for the deduper
 	go func() {
 		ticker := time.NewTicker(1 * time.Minute)
@@ -159,7 +159,7 @@ func NewRelayDispatcher(cfg config.Config, logger *zap.Logger) *RelayDispatcher 
 			}
 		}
 	}()
-	
+
 	return dispatcher
 }
 

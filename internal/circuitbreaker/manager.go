@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
-	
+
 	"go.uber.org/zap"
 )
 
@@ -20,14 +20,14 @@ const (
 
 // ManagerConfig holds configuration for a circuit breaker manager
 type ManagerConfig struct {
-	Name              string
-	MaxFailures       int
-	ResetTimeout      time.Duration
-	FailureThreshold  float64
-	SuccessThreshold  int
-	Timeout           time.Duration
-	OnStateChange     func(name string, from State, to State)
-	Logger            *zap.Logger
+	Name             string
+	MaxFailures      int
+	ResetTimeout     time.Duration
+	FailureThreshold float64
+	SuccessThreshold int
+	Timeout          time.Duration
+	OnStateChange    func(name string, from State, to State)
+	Logger           *zap.Logger
 }
 
 // Manager manages a circuit breaker
@@ -40,7 +40,7 @@ type Manager struct {
 	timeout          time.Duration
 	onStateChange    func(name string, from State, to State)
 	logger           *zap.Logger
-	
+
 	mu              sync.RWMutex
 	failures        int
 	successes       int
@@ -71,7 +71,7 @@ func NewManager(config ManagerConfig) *Manager {
 	if config.Timeout <= 0 {
 		config.Timeout = 5 * time.Second
 	}
-	
+
 	cb := &Manager{
 		name:             config.Name,
 		maxFailures:      config.MaxFailures,
@@ -84,7 +84,7 @@ func NewManager(config ManagerConfig) *Manager {
 		state:            Closed,
 		lastStateChange:  time.Now(),
 	}
-	
+
 	return cb
 }
 
@@ -93,15 +93,15 @@ func (cb *Manager) Execute(f func() error) error {
 	if !cb.AllowRequest() {
 		return fmt.Errorf("circuit breaker %s is open", cb.name)
 	}
-	
+
 	generation := cb.generation
 	err := f()
-	
+
 	if err != nil {
 		cb.RecordFailure()
 		return err
 	}
-	
+
 	cb.RecordSuccess()
 	return nil
 }
@@ -110,7 +110,7 @@ func (cb *Manager) Execute(f func() error) error {
 func (cb *Manager) AllowRequest() bool {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
-	
+
 	switch cb.state {
 	case Closed:
 		return true
@@ -134,7 +134,7 @@ func (cb *Manager) AllowRequest() bool {
 func (cb *Manager) RecordSuccess() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	
+
 	switch cb.state {
 	case Closed:
 		cb.failures = 0
@@ -150,7 +150,7 @@ func (cb *Manager) RecordSuccess() {
 func (cb *Manager) RecordFailure() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	
+
 	switch cb.state {
 	case Closed:
 		cb.failures++

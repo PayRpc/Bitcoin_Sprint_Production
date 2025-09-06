@@ -117,7 +117,7 @@ func main() {
 		// Success!
 		fmt.Printf("SUCCESS (%dms): Status %s\n", elapsed, resp.Status)
 		success = true
-		
+
 		// Show response details
 		if *showHeaders {
 			fmt.Printf("\nResponse Headers:\n")
@@ -125,7 +125,7 @@ func main() {
 				fmt.Printf("  %s: %s\n", name, strings.Join(values, ", "))
 			}
 		}
-		
+
 		if *showContent {
 			fmt.Printf("\nResponse Content:\n")
 			buf := make([]byte, 8192) // 8KB buffer
@@ -159,7 +159,7 @@ func testTCPConnection(host string, port int, timeout time.Duration) {
 	startTime := time.Now()
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", host, port), timeout)
 	elapsed := time.Since(startTime).Milliseconds()
-	
+
 	if err != nil {
 		fmt.Printf("FAILED (%dms): %v\n", elapsed, err)
 		fmt.Printf("  TCP connection failed - the port may not be open or accessible.\n")

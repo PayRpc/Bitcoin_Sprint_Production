@@ -53,11 +53,11 @@ func (t *CustomRPCTask) Execute(ctx context.Context, helpers engine.EngineHelper
 
 // BatchRPCTask demonstrates batch RPC operations
 type BatchRPCTask struct {
-	id       string
-	rpcURL   string
-	rpcUser  string
-	rpcPass  string
-	queries  []string
+	id      string
+	rpcURL  string
+	rpcUser string
+	rpcPass string
+	queries []string
 }
 
 // NewBatchRPCTask creates a new batch RPC task

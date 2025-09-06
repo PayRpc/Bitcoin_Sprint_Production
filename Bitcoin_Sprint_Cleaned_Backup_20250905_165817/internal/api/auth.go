@@ -38,16 +38,16 @@ type Server struct {
 	httpMux *http.ServeMux
 
 	// Customer key management
-	keyManager       *CustomerKeyManager
-	adminAuth        *AdminAuth
-	wsLimiter        *WebSocketLimiter
-	predictor        *PredictiveAnalytics
-	circuitBreaker   *CircuitBreaker
-	backends         *BackendRegistry
-	ethereumRelay    *relay.EthereumRelay
-	solanaRelay      *relay.SolanaRelay
-	clock            Clock
-	randReader       RandomReader
+	keyManager        *CustomerKeyManager
+	adminAuth         *AdminAuth
+	wsLimiter         *WebSocketLimiter
+	predictor         *PredictiveAnalytics
+	circuitBreaker    *CircuitBreaker
+	backends          *BackendRegistry
+	ethereumRelay     *relay.EthereumRelay
+	solanaRelay       *relay.SolanaRelay
+	clock             Clock
+	randReader        RandomReader
 	enterpriseManager *EnterpriseSecurityManager
 }
 
@@ -57,22 +57,22 @@ func New(cfg config.Config, blockChan chan blocks.BlockEvent, mem *mempool.Mempo
 	randReader := RealRandomReader{}
 
 	server := &Server{
-		cfg:            cfg,
-		blockChan:      blockChan,
-		mem:            mem,
-		logger:         logger,
-		rateLimiter:    NewRateLimiter(clock),
-		keyManager:     NewCustomerKeyManagerWithConfig(cfg, clock, randReader),
-		adminAuth:      NewAdminAuth(),
-		wsLimiter:      NewWebSocketLimiter(cfg.WebSocketMaxGlobal, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
-		predictor:      NewPredictiveAnalytics(clock),
-		circuitBreaker: NewCircuitBreaker(cfg.Tier, clock),
-		backends:       NewBackendRegistry(),
-		httpMux:        http.NewServeMux(), // Initialize HTTP mux
-		ethereumRelay:  relay.NewEthereumRelay(cfg, logger),
-		solanaRelay:    relay.NewSolanaRelay(cfg, logger),
-		clock:          clock,
-		randReader:     randReader,
+		cfg:               cfg,
+		blockChan:         blockChan,
+		mem:               mem,
+		logger:            logger,
+		rateLimiter:       NewRateLimiter(clock),
+		keyManager:        NewCustomerKeyManagerWithConfig(cfg, clock, randReader),
+		adminAuth:         NewAdminAuth(),
+		wsLimiter:         NewWebSocketLimiter(cfg.WebSocketMaxGlobal, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
+		predictor:         NewPredictiveAnalytics(clock),
+		circuitBreaker:    NewCircuitBreaker(cfg.Tier, clock),
+		backends:          NewBackendRegistry(),
+		httpMux:           http.NewServeMux(), // Initialize HTTP mux
+		ethereumRelay:     relay.NewEthereumRelay(cfg, logger),
+		solanaRelay:       relay.NewSolanaRelay(cfg, logger),
+		clock:             clock,
+		randReader:        randReader,
 		enterpriseManager: nil, // Will be initialized in Run()
 	}
 
@@ -94,23 +94,23 @@ func NewWithCache(cfg config.Config, blockChan chan blocks.BlockEvent, mem *memp
 	randReader := RealRandomReader{}
 
 	server := &Server{
-		cfg:         cfg,
-		blockChan:   blockChan,
-		mem:         mem,
-		cache:       cache,
-		logger:      logger,
-		rateLimiter: NewRateLimiter(clock),
-		keyManager:  NewCustomerKeyManagerWithConfig(cfg, clock, randReader),
-		adminAuth:   NewAdminAuth(),
-		wsLimiter:   NewWebSocketLimiter(cfg.WebSocketMaxGlobal, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
-		predictor:   NewPredictiveAnalytics(clock),
-		circuitBreaker: NewCircuitBreaker(cfg.Tier, clock),
-		backends:    NewBackendRegistry(),
-		httpMux:     http.NewServeMux(), // Initialize HTTP mux
-		ethereumRelay: relay.NewEthereumRelay(cfg, logger),
-		solanaRelay: relay.NewSolanaRelay(cfg, logger),
-		clock:       clock,
-		randReader:  randReader,
+		cfg:               cfg,
+		blockChan:         blockChan,
+		mem:               mem,
+		cache:             cache,
+		logger:            logger,
+		rateLimiter:       NewRateLimiter(clock),
+		keyManager:        NewCustomerKeyManagerWithConfig(cfg, clock, randReader),
+		adminAuth:         NewAdminAuth(),
+		wsLimiter:         NewWebSocketLimiter(cfg.WebSocketMaxGlobal, cfg.WebSocketMaxPerIP, cfg.WebSocketMaxPerChain),
+		predictor:         NewPredictiveAnalytics(clock),
+		circuitBreaker:    NewCircuitBreaker(cfg.Tier, clock),
+		backends:          NewBackendRegistry(),
+		httpMux:           http.NewServeMux(), // Initialize HTTP mux
+		ethereumRelay:     relay.NewEthereumRelay(cfg, logger),
+		solanaRelay:       relay.NewSolanaRelay(cfg, logger),
+		clock:             clock,
+		randReader:        randReader,
 		enterpriseManager: nil, // Will be initialized in Run()
 	}
 

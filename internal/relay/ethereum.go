@@ -67,9 +67,9 @@ type EthereumRelay struct {
 	healthMu  sync.RWMutex
 	metrics   *RelayMetrics
 	metricsMu sync.RWMutex
-	
+
 	// Block deduplication
-	deduper    *BlockDeduper
+	deduper *BlockDeduper
 
 	// Request tracking
 	requestID   int64
@@ -484,18 +484,18 @@ func (er *EthereumRelay) removeConnection(wc *wsConn) {
 // scheduleReconnect schedules reconnect with exponential backoff per endpoint
 func (er *EthereumRelay) scheduleReconnect(endpoint string) {
 	er.backoffMu.Lock()
-	
+
 	// Check how many connections we still have
 	er.connMu.RLock()
 	activeConnections := len(er.connections)
 	er.connMu.RUnlock()
-	
+
 	// If this is a Cloudflare or Ankr endpoint and we have at least one working connection,
 	// use a longer backoff to avoid unnecessary reconnection attempts
-	isProblematicEndpoint := strings.Contains(endpoint, "cloudflare") || 
-	                        strings.Contains(endpoint, "ankr") || 
-	                        strings.Contains(endpoint, "infura")
-	
+	isProblematicEndpoint := strings.Contains(endpoint, "cloudflare") ||
+		strings.Contains(endpoint, "ankr") ||
+		strings.Contains(endpoint, "infura")
+
 	var attempt int
 	if isProblematicEndpoint && activeConnections > 0 {
 		// Use higher starting backoff for problematic endpoints if we have other working connections
@@ -510,7 +510,7 @@ func (er *EthereumRelay) scheduleReconnect(endpoint string) {
 			attempt = 6 // Cap at ~32s
 		}
 	}
-	
+
 	er.backoff[endpoint] = attempt
 	er.backoffMu.Unlock()
 
@@ -519,18 +519,18 @@ func (er *EthereumRelay) scheduleReconnect(endpoint string) {
 	jitterPercent := 0.2 // 20% jitter
 	jitter := time.Duration(float64(delay) * jitterPercent * rand.Float64())
 	wait := delay + jitter
-	
-	er.logger.Info("Scheduling reconnect", 
-		zap.String("endpoint", endpoint), 
+
+	er.logger.Info("Scheduling reconnect",
+		zap.String("endpoint", endpoint),
 		zap.Duration("in", wait),
 		zap.Int("active_connections", activeConnections),
 		zap.Int("attempt", attempt))
-	
+
 	time.AfterFunc(wait, func() {
 		// Double check if we still need to reconnect
 		er.connMu.RLock()
 		needToReconnect := true
-		
+
 		// If we have enough connections and this is a problematic endpoint,
 		// we can skip reconnection attempt
 		if isProblematicEndpoint && len(er.connections) >= 1 {
@@ -540,13 +540,13 @@ func (er *EthereumRelay) scheduleReconnect(endpoint string) {
 			}
 		}
 		er.connMu.RUnlock()
-		
+
 		if needToReconnect {
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
 			er.connectToEndpoint(ctx, endpoint)
 		} else {
-			er.logger.Info("Skipping reconnect attempt, enough connections active", 
+			er.logger.Info("Skipping reconnect attempt, enough connections active",
 				zap.String("endpoint", endpoint))
 		}
 	})
@@ -562,9 +562,9 @@ func (er *EthereumRelay) shouldReconnect(err error) bool {
 	if closeErr, ok := err.(*websocket.CloseError); ok {
 		switch closeErr.Code {
 		case websocket.CloseAbnormalClosure,
-			 websocket.CloseGoingAway,
-			 websocket.CloseInternalServerErr,
-			 websocket.CloseTryAgainLater:
+			websocket.CloseGoingAway,
+			websocket.CloseInternalServerErr,
+			websocket.CloseTryAgainLater:
 			return true
 		}
 	}
@@ -572,12 +572,12 @@ func (er *EthereumRelay) shouldReconnect(err error) bool {
 	// Reconnect on network-related errors
 	errStr := err.Error()
 	return strings.Contains(errStr, "timeout") ||
-		   strings.Contains(errStr, "connection reset") ||
-		   strings.Contains(errStr, "broken pipe") ||
-		   strings.Contains(errStr, "bad handshake") ||
-		   strings.Contains(errStr, "tls") ||
-		   strings.Contains(errStr, "lookup") ||
-		   strings.Contains(errStr, "network is unreachable")
+		strings.Contains(errStr, "connection reset") ||
+		strings.Contains(errStr, "broken pipe") ||
+		strings.Contains(errStr, "bad handshake") ||
+		strings.Contains(errStr, "tls") ||
+		strings.Contains(errStr, "lookup") ||
+		strings.Contains(errStr, "network is unreachable")
 }
 
 // updateHealth updates the health status
@@ -634,7 +634,7 @@ func (er *EthereumRelay) connectToEndpoint(ctx context.Context, endpoint string)
 	header.Set("User-Agent", "BitcoinSprint/2.5.0 (+https://bitcoinsprint.com)")
 	header.Set("Pragma", "no-cache")
 	header.Set("Cache-Control", "no-cache")
-	
+
 	// Endpoint-specific configuration
 	if strings.Contains(endpoint, "cloudflare") {
 		// Cloudflare requires specific headers
@@ -681,10 +681,10 @@ func (er *EthereumRelay) connectToEndpoint(ctx context.Context, endpoint string)
 				logger:   er.logger,
 				endpoint: endpoint,
 			}
-			
+
 			// Install ping/pong and heartbeat handlers
 			er.installWSHandlers(wsConn)
-			
+
 			// Add connection to active set
 			er.addConnection(wsConn)
 
@@ -726,23 +726,23 @@ func (er *EthereumRelay) connectToEndpoint(ctx context.Context, endpoint string)
 func (er *EthereumRelay) installWSHandlers(wc *wsConn) {
 	// Set a more aggressive initial read deadline
 	_ = wc.Conn.SetReadDeadline(time.Now().Add(45 * time.Second))
-	
+
 	// Enhanced pong handler with logging
 	wc.Conn.SetPongHandler(func(data string) error {
 		_ = wc.Conn.SetReadDeadline(time.Now().Add(45 * time.Second))
-		er.logger.Debug("Received pong", 
+		er.logger.Debug("Received pong",
 			zap.String("endpoint", wc.endpoint),
 			zap.String("data", data))
 		return nil
 	})
-	
+
 	// Enhanced ping loop with more frequent pings and heartbeat subscription refresh
 	go func() {
-		pingTicker := time.NewTicker(15 * time.Second)  // More frequent pings
+		pingTicker := time.NewTicker(15 * time.Second)      // More frequent pings
 		heartbeatTicker := time.NewTicker(50 * time.Second) // Send heartbeat before timeout
 		defer pingTicker.Stop()
 		defer heartbeatTicker.Stop()
-		
+
 		for {
 			select {
 			case <-pingTicker.C:
@@ -756,25 +756,25 @@ func (er *EthereumRelay) installWSHandlers(wc *wsConn) {
 					}
 				}
 				er.connMu.RUnlock()
-				
+
 				if !alive {
 					return
 				}
-				
+
 				// Send ping with timestamp
 				wc.writeMu.Lock()
 				_ = wc.Conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 				pingData := fmt.Sprintf("ping-%d", time.Now().Unix())
 				err := wc.Conn.WriteControl(websocket.PingMessage, []byte(pingData), time.Now().Add(5*time.Second))
 				wc.writeMu.Unlock()
-				
+
 				if err != nil {
-					er.logger.Warn("Ping failed", 
-						zap.String("endpoint", wc.endpoint), 
+					er.logger.Warn("Ping failed",
+						zap.String("endpoint", wc.endpoint),
 						zap.Error(err))
 					return
 				}
-				
+
 			case <-heartbeatTicker.C:
 				// Send a heartbeat message to keep connection alive
 				er.sendHeartbeat(wc)
@@ -787,18 +787,18 @@ func (er *EthereumRelay) installWSHandlers(wc *wsConn) {
 func (er *EthereumRelay) sendHeartbeat(wc *wsConn) {
 	// For Ethereum connections: eth_blockNumber is very lightweight
 	requestData := []byte(`{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":0}`)
-	
+
 	wc.writeMu.Lock()
 	_ = wc.Conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	err := wc.Conn.WriteMessage(websocket.TextMessage, requestData)
 	wc.writeMu.Unlock()
-	
+
 	if err != nil {
-		er.logger.Warn("Failed to send heartbeat", 
-			zap.String("endpoint", wc.endpoint), 
+		er.logger.Warn("Failed to send heartbeat",
+			zap.String("endpoint", wc.endpoint),
 			zap.Error(err))
 	} else {
-		er.logger.Debug("Sent heartbeat to keep connection alive", 
+		er.logger.Debug("Sent heartbeat to keep connection alive",
 			zap.String("endpoint", wc.endpoint))
 	}
 }
@@ -813,7 +813,7 @@ func (er *EthereumRelay) handleMessages(conn *wsConn) {
 		er.scheduleReconnect(conn.endpoint)
 		// Mark as disconnected when handler exits
 		er.updateHealth(er.IsConnected(), "connection_lost", nil)
-		er.logger.Warn("Ethereum WebSocket handler exited", 
+		er.logger.Warn("Ethereum WebSocket handler exited",
 			zap.String("endpoint", conn.endpoint),
 			zap.Int("remaining_connections", len(er.connections)))
 	}()
@@ -821,13 +821,13 @@ func (er *EthereumRelay) handleMessages(conn *wsConn) {
 	for {
 		// Reset read deadline on each loop iteration
 		_ = conn.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
-		
+
 		_, message, err := conn.ReadMessage()
 		if err != nil {
-			er.logger.Warn("WebSocket read error", 
+			er.logger.Warn("WebSocket read error",
 				zap.String("endpoint", conn.endpoint),
 				zap.Error(err))
-			
+
 			// Don't attempt to reconnect here, let the scheduleReconnect in the defer handle it
 			return
 		}
@@ -938,54 +938,54 @@ func (er *EthereumRelay) handleBlockNotification(notification *EthereumNotificat
 		er.logger.Warn("Received empty Ethereum notification")
 		return
 	}
-	
+
 	// Parse subscription notification
 	var result struct {
-		Subscription string          `json:"subscription"`
-		Result       EthereumBlock   `json:"result"`
+		Subscription string        `json:"subscription"`
+		Result       EthereumBlock `json:"result"`
 	}
-	
+
 	if err := json.Unmarshal(notification.Params, &result); err != nil {
 		er.logger.Warn("Failed to parse Ethereum block notification", zap.Error(err))
 		return
 	}
-	
+
 	// Extract block info
 	blockHash := result.Result.Hash
-	
+
 	// Validate the block hash (should be a proper hex string starting with 0x)
 	if blockHash == "" || blockHash == "0x0000000000000000000000000000000000000000000000000000000000000000" || !strings.HasPrefix(blockHash, "0x") {
-		er.logger.Warn("Received block notification with invalid hash", 
+		er.logger.Warn("Received block notification with invalid hash",
 			zap.String("hash", blockHash),
 			zap.String("number", result.Result.Number))
 		return
 	}
-	
+
 	// Check if we've already seen this block recently via the deduper
 	// Safely handle the deduper
 	if er.deduper != nil {
 		if er.deduper.Seen(blockHash, time.Now(), "ethereum") {
-			er.logger.Debug("Suppressed duplicate Ethereum block", 
+			er.logger.Debug("Suppressed duplicate Ethereum block",
 				zap.String("hash", blockHash),
 				zap.String("number", result.Result.Number))
 			return
 		}
 	} else {
 		// No deduper configured, but let's log this for debugging
-		er.logger.Debug("Deduper not configured, processing all blocks", 
+		er.logger.Debug("Deduper not configured, processing all blocks",
 			zap.String("hash", blockHash))
 	}
-	
+
 	// Convert to BlockEvent
 	blockEvent := er.convertToBlockEvent(&result.Result)
-	
+
 	// Send to block channel
 	select {
 	case er.blockChan <- *blockEvent:
 		// Successfully sent
 	default:
 		// Channel full, drop block
-		er.logger.Warn("Block channel full, dropping block", 
+		er.logger.Warn("Block channel full, dropping block",
 			zap.String("hash", blockHash))
 	}
 }

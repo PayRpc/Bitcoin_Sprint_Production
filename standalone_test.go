@@ -47,9 +47,9 @@ func (m *MockRNG) Float64() float64 {
 type JitterStrategy int
 
 const (
-	JitterNone JitterStrategy = iota // exact delay
-	JitterFull                       // uniform in [0, d)
-	JitterEqual                      // uniform in [0.5d, 1.5d]
+	JitterNone  JitterStrategy = iota // exact delay
+	JitterFull                        // uniform in [0, d)
+	JitterEqual                       // uniform in [0.5d, 1.5d]
 )
 
 // ExponentialBackoff implements exponential backoff with configurable jitter
@@ -131,40 +131,40 @@ func TestExponentialBackoff(t *testing.T) {
 	baseDelay := 100 * time.Millisecond
 	maxDelay := 10 * time.Second
 	multiplier := 2.0
-	
+
 	t.Run("Base behavior", func(t *testing.T) {
 		eb := NewExponentialBackoff(baseDelay, maxDelay, multiplier)
 		eb.SetJitterStrategy(JitterNone) // Disable jitter for predictable testing
-		
+
 		// First delay should be baseDelay
 		if d := eb.NextDelay(); d != baseDelay {
 			t.Errorf("First delay should be %v, got %v", baseDelay, d)
 		}
-		
+
 		// Second delay should be baseDelay * multiplier
 		expected := time.Duration(float64(baseDelay) * multiplier)
 		if d := eb.NextDelay(); d != expected {
 			t.Errorf("Second delay should be %v, got %v", expected, d)
 		}
-		
+
 		// Third delay should be baseDelay * multiplier^2
 		expected = time.Duration(float64(baseDelay) * multiplier * multiplier)
 		if d := eb.NextDelay(); d != expected {
 			t.Errorf("Third delay should be %v, got %v", expected, d)
 		}
-		
+
 		// Reset should return to baseDelay
 		eb.Reset()
 		if d := eb.NextDelay(); d != baseDelay {
 			t.Errorf("After reset, delay should be %v, got %v", baseDelay, d)
 		}
 	})
-	
+
 	t.Run("Jitter strategies", func(t *testing.T) {
 		eb := NewExponentialBackoff(baseDelay, maxDelay, multiplier)
 		mockRng := NewMockRNG([]float64{0.5}) // Always return 0.5
 		eb.SetRNG(mockRng)
-		
+
 		// Test JitterFull (0-100% of delay)
 		eb.SetJitterStrategy(JitterFull)
 		eb.Reset()
@@ -172,7 +172,7 @@ func TestExponentialBackoff(t *testing.T) {
 		if d := eb.NextDelay(); d != expected {
 			t.Errorf("JitterFull should give %v, got %v", expected, d)
 		}
-		
+
 		// Test JitterEqual (50-150% of delay)
 		eb.SetJitterStrategy(JitterEqual)
 		eb.Reset()

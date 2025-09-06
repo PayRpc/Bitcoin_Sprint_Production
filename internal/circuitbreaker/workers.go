@@ -16,23 +16,23 @@ func (cb *EnterpriseCircuitBreaker) startBackgroundWorkers() {
 	// Start metrics collection worker
 	cb.workerGroup.Add(1)
 	go cb.metricsCollectionWorker()
-	
+
 	// Start health monitoring worker
 	if cb.config.EnableHealthScoring {
 		cb.workerGroup.Add(1)
 		go cb.healthMonitoringWorker()
 	}
-	
+
 	// Start adaptive threshold worker
 	if cb.config.EnableAdaptive {
 		cb.workerGroup.Add(1)
 		go cb.adaptiveThresholdWorker()
 	}
-	
+
 	// Start state management worker
 	cb.workerGroup.Add(1)
 	go cb.stateManagementWorker()
-	
+
 	// Start cleanup worker
 	cb.workerGroup.Add(1)
 	go cb.cleanupWorker()
@@ -41,18 +41,18 @@ func (cb *EnterpriseCircuitBreaker) startBackgroundWorkers() {
 // metricsCollectionWorker periodically collects and updates metrics
 func (cb *EnterpriseCircuitBreaker) metricsCollectionWorker() {
 	defer cb.workerGroup.Done()
-	
+
 	ticker := time.NewTicker(time.Second * 30) // Collect metrics every 30 seconds
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
 			cb.collectMetrics()
-			
+
 		case <-cb.shutdownChan:
 			return
-			
+
 		case <-cb.ctx.Done():
 			return
 		}
@@ -62,18 +62,18 @@ func (cb *EnterpriseCircuitBreaker) metricsCollectionWorker() {
 // healthMonitoringWorker monitors system health and updates health scores
 func (cb *EnterpriseCircuitBreaker) healthMonitoringWorker() {
 	defer cb.workerGroup.Done()
-	
+
 	ticker := time.NewTicker(time.Minute) // Check health every minute
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
 			cb.updateSystemHealth()
-			
+
 		case <-cb.shutdownChan:
 			return
-			
+
 		case <-cb.ctx.Done():
 			return
 		}
@@ -83,18 +83,18 @@ func (cb *EnterpriseCircuitBreaker) healthMonitoringWorker() {
 // adaptiveThresholdWorker manages adaptive threshold adjustments
 func (cb *EnterpriseCircuitBreaker) adaptiveThresholdWorker() {
 	defer cb.workerGroup.Done()
-	
+
 	ticker := time.NewTicker(time.Minute * 2) // Adjust thresholds every 2 minutes
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
 			cb.performAdaptiveAdjustment()
-			
+
 		case <-cb.shutdownChan:
 			return
-			
+
 		case <-cb.ctx.Done():
 			return
 		}
@@ -104,18 +104,18 @@ func (cb *EnterpriseCircuitBreaker) adaptiveThresholdWorker() {
 // stateManagementWorker manages circuit breaker state transitions
 func (cb *EnterpriseCircuitBreaker) stateManagementWorker() {
 	defer cb.workerGroup.Done()
-	
+
 	ticker := time.NewTicker(time.Second * 10) // Check state every 10 seconds
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
 			cb.evaluateStateTransitions()
-			
+
 		case <-cb.shutdownChan:
 			return
-			
+
 		case <-cb.ctx.Done():
 			return
 		}
@@ -125,18 +125,18 @@ func (cb *EnterpriseCircuitBreaker) stateManagementWorker() {
 // cleanupWorker performs periodic cleanup of old data
 func (cb *EnterpriseCircuitBreaker) cleanupWorker() {
 	defer cb.workerGroup.Done()
-	
+
 	ticker := time.NewTicker(time.Hour) // Cleanup every hour
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
 			cb.performCleanup()
-			
+
 		case <-cb.shutdownChan:
 			return
-			
+
 		case <-cb.ctx.Done():
 			return
 		}
@@ -147,26 +147,26 @@ func (cb *EnterpriseCircuitBreaker) cleanupWorker() {
 func (cb *EnterpriseCircuitBreaker) collectMetrics() {
 	cb.metrics.mu.Lock()
 	defer cb.metrics.mu.Unlock()
-	
+
 	// Update consecutive failure/success counters
 	cb.metrics.ConsecutiveFailures = cb.consecutiveFailures
 	cb.metrics.ConsecutiveSuccesses = cb.consecutiveSuccesses
 	cb.metrics.LastFailureTime = cb.lastFailureTime
 	cb.metrics.LastSuccessTime = cb.lastSuccessTime
-	
+
 	// Calculate current failure rate
 	totalRequests := atomic.LoadInt64(&cb.metrics.TotalRequests)
 	successfulRequests := atomic.LoadInt64(&cb.metrics.SuccessfulRequests)
-	
+
 	if totalRequests > 0 {
 		cb.metrics.FailureRate = float64(totalRequests-successfulRequests) / float64(totalRequests)
 	}
-	
+
 	// Update health score if enabled
 	if cb.config.EnableHealthScoring {
 		cb.metrics.HealthScore = cb.healthScorer.CalculateHealth()
 	}
-	
+
 	// Log metrics if logger is configured
 	if cb.logger != nil && cb.config.EnableMetrics {
 		cb.logger.Debug("Circuit breaker metrics",
@@ -186,20 +186,20 @@ func (cb *EnterpriseCircuitBreaker) updateSystemHealth() {
 	// Get current system resource utilization
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
-	
+
 	// Calculate resource utilization
 	resourceUtilization := float64(m.Alloc) / float64(m.Sys)
 	if resourceUtilization > 1.0 {
 		resourceUtilization = 1.0
 	}
-	
+
 	// Get current statistics
 	requests, _, failureRate, avgLatency := cb.slidingWindow.GetStatistics()
-	
+
 	// Calculate throughput rate
 	windowDuration := cb.config.WindowSize.Seconds()
 	throughputRate := float64(requests) / windowDuration
-	
+
 	// Update health metrics
 	healthMetrics := HealthMetrics{
 		SuccessRate:         1.0 - failureRate,
@@ -208,12 +208,12 @@ func (cb *EnterpriseCircuitBreaker) updateSystemHealth() {
 		ResourceUtilization: resourceUtilization,
 		ThroughputRate:      throughputRate,
 	}
-	
+
 	cb.healthScorer.UpdateMetrics(healthMetrics)
-	
+
 	// Check if health score indicates need for action
 	healthScore := cb.healthScorer.CalculateHealth()
-	
+
 	if healthScore < cb.config.HealthThreshold && cb.state == StateClosed {
 		if cb.logger != nil {
 			cb.logger.Warn("Low health score detected",
@@ -222,13 +222,13 @@ func (cb *EnterpriseCircuitBreaker) updateSystemHealth() {
 				zap.Float64("threshold", cb.config.HealthThreshold),
 			)
 		}
-		
+
 		// Consider preemptive circuit opening
 		if healthScore < cb.config.HealthThreshold*0.5 {
 			cb.mu.Lock()
 			cb.setState(StateOpen)
 			cb.mu.Unlock()
-			
+
 			if cb.logger != nil {
 				cb.logger.Info("Circuit breaker opened due to low health score",
 					zap.String("name", cb.config.Name),
@@ -244,14 +244,14 @@ func (cb *EnterpriseCircuitBreaker) performAdaptiveAdjustment() {
 	if !cb.config.EnableAdaptive {
 		return
 	}
-	
+
 	// Get current performance metrics
 	_, _, failureRate, _ := cb.slidingWindow.GetStatistics()
 	currentPerformance := 1.0 - failureRate
-	
+
 	// Adjust adaptive threshold
 	newThreshold := cb.adaptiveThreshold.AdjustThreshold(currentPerformance)
-	
+
 	if cb.logger != nil {
 		cb.logger.Debug("Adaptive threshold adjustment",
 			zap.String("name", cb.config.Name),
@@ -268,18 +268,18 @@ func (cb *EnterpriseCircuitBreaker) evaluateStateTransitions() {
 	currentState := cb.state
 	stateTime := time.Since(cb.stateChangedAt)
 	cb.mu.RUnlock()
-	
+
 	switch currentState {
 	case StateOpen:
 		// Check if we should attempt recovery
 		if stateTime >= cb.config.ResetTimeout {
 			recoveryProb := cb.calculateRecoveryProbability()
-			
+
 			if recoveryProb > 0.6 { // 60% threshold for automatic recovery attempt
 				cb.mu.Lock()
 				cb.setState(StateHalfOpen)
 				cb.mu.Unlock()
-				
+
 				if cb.logger != nil {
 					cb.logger.Info("Circuit breaker transitioning to half-open",
 						zap.String("name", cb.config.Name),
@@ -289,7 +289,7 @@ func (cb *EnterpriseCircuitBreaker) evaluateStateTransitions() {
 				}
 			}
 		}
-		
+
 	case StateHalfOpen:
 		// Check if half-open state has been active too long
 		maxHalfOpenTime := cb.config.ResetTimeout * 2
@@ -298,7 +298,7 @@ func (cb *EnterpriseCircuitBreaker) evaluateStateTransitions() {
 			cb.setState(StateOpen)
 			atomic.StoreInt64(&cb.halfOpenCalls, 0)
 			cb.mu.Unlock()
-			
+
 			if cb.logger != nil {
 				cb.logger.Info("Circuit breaker returned to open due to timeout",
 					zap.String("name", cb.config.Name),
@@ -316,7 +316,7 @@ func (cb *EnterpriseCircuitBreaker) performCleanup() {
 		// Keep only the most recent 1000 entries
 		cb.latencyHistory = cb.latencyHistory[len(cb.latencyHistory)-1000:]
 	}
-	
+
 	// Cleanup adaptive threshold history
 	cb.adaptiveThreshold.mu.Lock()
 	if len(cb.adaptiveThreshold.adjustmentHistory) > 200 {
@@ -326,10 +326,10 @@ func (cb *EnterpriseCircuitBreaker) performCleanup() {
 		cb.adaptiveThreshold.performanceHistory = cb.adaptiveThreshold.performanceHistory[len(cb.adaptiveThreshold.performanceHistory)-100:]
 	}
 	cb.adaptiveThreshold.mu.Unlock()
-	
+
 	// Force garbage collection periodically
 	runtime.GC()
-	
+
 	if cb.logger != nil {
 		cb.logger.Debug("Performed periodic cleanup",
 			zap.String("name", cb.config.Name),
@@ -345,62 +345,62 @@ func validateConfig(cfg *Config) error {
 	if cfg.Name == "" {
 		return fmt.Errorf("name is required")
 	}
-	
+
 	if cfg.MaxFailures <= 0 {
 		return fmt.Errorf("max_failures must be positive")
 	}
-	
+
 	if cfg.ResetTimeout <= 0 {
 		return fmt.Errorf("reset_timeout must be positive")
 	}
-	
+
 	if cfg.HalfOpenMaxCalls <= 0 {
 		return fmt.Errorf("half_open_max_calls must be positive")
 	}
-	
+
 	if cfg.FailureThreshold < 0 || cfg.FailureThreshold > 1 {
 		return fmt.Errorf("failure_threshold must be between 0 and 1")
 	}
-	
+
 	if cfg.WindowSize <= 0 {
 		cfg.WindowSize = time.Minute * 5 // Default window size
 	}
-	
+
 	if cfg.MinRequestsThreshold <= 0 {
 		cfg.MinRequestsThreshold = 10 // Default minimum requests
 	}
-	
+
 	if cfg.EnableAdaptive {
 		if cfg.AdaptiveMultiplier <= 0 {
 			cfg.AdaptiveMultiplier = 1.5 // Default multiplier
 		}
-		
+
 		if cfg.MaxAdaptiveTimeout <= 0 {
 			cfg.MaxAdaptiveTimeout = cfg.ResetTimeout * 10 // Default max timeout
 		}
 	}
-	
+
 	if cfg.EnableHealthScoring {
 		if cfg.HealthThreshold <= 0 || cfg.HealthThreshold > 1 {
 			cfg.HealthThreshold = 0.7 // Default health threshold
 		}
 	}
-	
+
 	// Validate tier settings
 	for tierName, tierConfig := range cfg.TierSettings {
 		if tierConfig.FailureThreshold <= 0 {
 			return fmt.Errorf("tier %s: failure_threshold must be positive", tierName)
 		}
-		
+
 		if tierConfig.ResetTimeout <= 0 {
 			return fmt.Errorf("tier %s: reset_timeout must be positive", tierName)
 		}
-		
+
 		if tierConfig.HalfOpenMaxCalls <= 0 {
 			return fmt.Errorf("tier %s: half_open_max_calls must be positive", tierName)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -409,7 +409,7 @@ func validateConfig(cfg *Config) error {
 // DefaultFreeConfig returns a default configuration for free tier
 func DefaultFreeConfig(name string) Config {
 	return Config{
-		Name:                  name,
+		Name:                 name,
 		MaxFailures:          3,
 		ResetTimeout:         time.Minute * 2,
 		HalfOpenMaxCalls:     2,
@@ -438,7 +438,7 @@ func DefaultFreeConfig(name string) Config {
 // DefaultBusinessConfig returns a default configuration for business tier
 func DefaultBusinessConfig(name string) Config {
 	return Config{
-		Name:                  name,
+		Name:                 name,
 		MaxFailures:          10,
 		ResetTimeout:         time.Second * 30,
 		HalfOpenMaxCalls:     5,
@@ -470,7 +470,7 @@ func DefaultBusinessConfig(name string) Config {
 // DefaultEnterpriseConfig returns a default configuration for enterprise tier
 func DefaultEnterpriseConfig(name string) Config {
 	return Config{
-		Name:                  name,
+		Name:                 name,
 		MaxFailures:          20,
 		ResetTimeout:         time.Second * 15,
 		HalfOpenMaxCalls:     10,

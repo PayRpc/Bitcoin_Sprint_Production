@@ -20,16 +20,16 @@ type GCConfig struct {
 // DefaultGCConfig returns optimized GC settings for Bitcoin Sprint
 func DefaultGCConfig() *GCConfig {
 	return &GCConfig{
-		MemoryLimitPercent: 70,                   // Use 70% of available memory
+		MemoryLimitPercent: 70,                     // Use 70% of available memory
 		TargetPause:        125 * time.Microsecond, // Target 100-150µs pauses
-		GCPercent:          50,                   // More frequent GC for lower latency
+		GCPercent:          50,                     // More frequent GC for lower latency
 	}
 }
 
 // InitializeGCTuning applies optimized garbage collection settings
 func InitializeGCTuning(logger *zap.Logger) error {
 	config := DefaultGCConfig()
-	
+
 	// Set GOMEMLIMIT if not already set
 	if os.Getenv("GOMEMLIMIT") == "" {
 		memLimit := getMemoryLimit(config.MemoryLimitPercent)
@@ -38,26 +38,26 @@ func InitializeGCTuning(logger *zap.Logger) error {
 			logger.Info("Set GOMEMLIMIT", zap.Int64("bytes", memLimit), zap.Int("percent", config.MemoryLimitPercent))
 		}
 	}
-	
+
 	// Set GOGC for frequency tuning
 	if os.Getenv("GOGC") == "" {
 		os.Setenv("GOGC", strconv.Itoa(config.GCPercent))
 		logger.Info("Set GOGC", zap.Int("percent", config.GCPercent))
 	}
-	
+
 	// Configure soft memory limit
 	if memLimit := getMemoryLimit(config.MemoryLimitPercent); memLimit > 0 {
 		debug.SetMemoryLimit(memLimit)
 		logger.Info("Set soft memory limit", zap.Int64("bytes", memLimit))
 	}
-	
+
 	// Set GC percent
 	oldGCPercent := debug.SetGCPercent(config.GCPercent)
 	logger.Info("Configured GC percent", zap.Int("old", oldGCPercent), zap.Int("new", config.GCPercent))
-	
+
 	// Log current runtime settings
 	logGCStats(logger)
-	
+
 	return nil
 }
 
@@ -65,11 +65,11 @@ func InitializeGCTuning(logger *zap.Logger) error {
 func getMemoryLimit(percent int) int64 {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
-	
+
 	// Estimate total system memory from current heap
 	// This is a rough approximation - in production you'd use system calls
 	estimatedTotal := int64(m.Sys * 4) // Rough multiplier
-	
+
 	return estimatedTotal * int64(percent) / 100
 }
 
@@ -77,7 +77,7 @@ func getMemoryLimit(percent int) int64 {
 func logGCStats(logger *zap.Logger) {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
-	
+
 	logger.Info("GC Statistics",
 		zap.Uint64("heap_alloc_kb", bToKb(m.HeapAlloc)),
 		zap.Uint64("heap_sys_kb", bToKb(m.HeapSys)),
@@ -87,10 +87,10 @@ func logGCStats(logger *zap.Logger) {
 		zap.Uint64("total_pause_ns", m.PauseTotalNs),
 		zap.Float64("gc_cpu_fraction", m.GCCPUFraction),
 	)
-	
+
 	if m.NumGC > 0 {
 		avgPause := time.Duration(m.PauseTotalNs / uint64(m.NumGC))
-		logger.Info("GC Timing", 
+		logger.Info("GC Timing",
 			zap.Duration("avg_pause", avgPause),
 			zap.Duration("last_pause", time.Duration(m.PauseNs[(m.NumGC+255)%256])),
 		)
@@ -102,7 +102,7 @@ func MonitorGCPerformance(logger *zap.Logger, interval time.Duration) {
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-		
+
 		for range ticker.C {
 			logGCStats(logger)
 		}
@@ -119,7 +119,7 @@ func TriggerGC(logger *zap.Logger) {
 	start := time.Now()
 	runtime.GC()
 	duration := time.Since(start)
-	
+
 	logger.Info("Manual GC triggered", zap.Duration("duration", duration))
 	logGCStats(logger)
 }

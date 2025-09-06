@@ -17,59 +17,59 @@ import (
 
 // TestConfig holds comprehensive cache testing configuration
 type TestConfig struct {
-	MaxBlocks        int           `json:"max_blocks"`
-	TestDuration     time.Duration `json:"test_duration"`
-	ConcurrentUsers  int           `json:"concurrent_users"`
-	WriteRatio       float64       `json:"write_ratio"`
-	EnableCompression bool         `json:"enable_compression"`
-	EnableL2Cache    bool          `json:"enable_l2_cache"`
-	EnableL3Cache    bool          `json:"enable_l3_cache"`
-	TestTiering      bool          `json:"test_tiering"`
-	StressTest       bool          `json:"stress_test"`
+	MaxBlocks         int           `json:"max_blocks"`
+	TestDuration      time.Duration `json:"test_duration"`
+	ConcurrentUsers   int           `json:"concurrent_users"`
+	WriteRatio        float64       `json:"write_ratio"`
+	EnableCompression bool          `json:"enable_compression"`
+	EnableL2Cache     bool          `json:"enable_l2_cache"`
+	EnableL3Cache     bool          `json:"enable_l3_cache"`
+	TestTiering       bool          `json:"test_tiering"`
+	StressTest        bool          `json:"stress_test"`
 }
 
 // TestResults captures comprehensive test metrics
 type TestResults struct {
-	Duration         time.Duration            `json:"duration"`
-	TotalOperations  int64                    `json:"total_operations"`
-	ReadOperations   int64                    `json:"read_operations"`
-	WriteOperations  int64                    `json:"write_operations"`
-	CacheHits        int64                    `json:"cache_hits"`
-	CacheMisses      int64                    `json:"cache_misses"`
-	HitRate          float64                  `json:"hit_rate"`
-	Throughput       float64                  `json:"throughput_ops_per_sec"`
-	AvgLatency       time.Duration            `json:"avg_latency"`
-	P50Latency       time.Duration            `json:"p50_latency"`
-	P95Latency       time.Duration            `json:"p95_latency"`
-	P99Latency       time.Duration            `json:"p99_latency"`
-	MemoryUsage      int64                    `json:"memory_usage"`
-	Compressions     int64                    `json:"compressions"`
-	Decompressions   int64                    `json:"decompressions"`
-	Evictions        int64                    `json:"evictions"`
-	Errors           int64                    `json:"errors"`
-	CacheMetrics     *cache.CacheMetrics      `json:"cache_metrics"`
-	PerformanceGraph []PerformanceDataPoint   `json:"performance_graph"`
+	Duration         time.Duration          `json:"duration"`
+	TotalOperations  int64                  `json:"total_operations"`
+	ReadOperations   int64                  `json:"read_operations"`
+	WriteOperations  int64                  `json:"write_operations"`
+	CacheHits        int64                  `json:"cache_hits"`
+	CacheMisses      int64                  `json:"cache_misses"`
+	HitRate          float64                `json:"hit_rate"`
+	Throughput       float64                `json:"throughput_ops_per_sec"`
+	AvgLatency       time.Duration          `json:"avg_latency"`
+	P50Latency       time.Duration          `json:"p50_latency"`
+	P95Latency       time.Duration          `json:"p95_latency"`
+	P99Latency       time.Duration          `json:"p99_latency"`
+	MemoryUsage      int64                  `json:"memory_usage"`
+	Compressions     int64                  `json:"compressions"`
+	Decompressions   int64                  `json:"decompressions"`
+	Evictions        int64                  `json:"evictions"`
+	Errors           int64                  `json:"errors"`
+	CacheMetrics     *cache.CacheMetrics    `json:"cache_metrics"`
+	PerformanceGraph []PerformanceDataPoint `json:"performance_graph"`
 }
 
 // PerformanceDataPoint represents a point in time performance measurement
 type PerformanceDataPoint struct {
-	Timestamp  time.Time `json:"timestamp"`
-	HitRate    float64   `json:"hit_rate"`
-	Throughput float64   `json:"throughput"`
-	MemoryUsage int64    `json:"memory_usage"`
-	Latency    time.Duration `json:"latency"`
+	Timestamp   time.Time     `json:"timestamp"`
+	HitRate     float64       `json:"hit_rate"`
+	Throughput  float64       `json:"throughput"`
+	MemoryUsage int64         `json:"memory_usage"`
+	Latency     time.Duration `json:"latency"`
 }
 
 // CacheTestSuite provides comprehensive enterprise cache testing
 type CacheTestSuite struct {
-	cache      *cache.EnterpriseCache
-	config     *TestConfig
-	logger     *zap.Logger
-	results    *TestResults
-	latencies  []time.Duration
-	mu         sync.RWMutex
-	ctx        context.Context
-	cancel     context.CancelFunc
+	cache     *cache.EnterpriseCache
+	config    *TestConfig
+	logger    *zap.Logger
+	results   *TestResults
+	latencies []time.Duration
+	mu        sync.RWMutex
+	ctx       context.Context
+	cancel    context.CancelFunc
 }
 
 func main() {
@@ -85,37 +85,37 @@ func main() {
 	// Test configurations
 	configs := []*TestConfig{
 		{
-			MaxBlocks:        1000,
-			TestDuration:     30 * time.Second,
-			ConcurrentUsers:  10,
-			WriteRatio:       0.3,
+			MaxBlocks:         1000,
+			TestDuration:      30 * time.Second,
+			ConcurrentUsers:   10,
+			WriteRatio:        0.3,
 			EnableCompression: true,
-			EnableL2Cache:    false,
-			EnableL3Cache:    false,
-			TestTiering:      false,
-			StressTest:       false,
+			EnableL2Cache:     false,
+			EnableL3Cache:     false,
+			TestTiering:       false,
+			StressTest:        false,
 		},
 		{
-			MaxBlocks:        5000,
-			TestDuration:     60 * time.Second,
-			ConcurrentUsers:  50,
-			WriteRatio:       0.2,
+			MaxBlocks:         5000,
+			TestDuration:      60 * time.Second,
+			ConcurrentUsers:   50,
+			WriteRatio:        0.2,
 			EnableCompression: true,
-			EnableL2Cache:    true,
-			EnableL3Cache:    false,
-			TestTiering:      true,
-			StressTest:       true,
+			EnableL2Cache:     true,
+			EnableL3Cache:     false,
+			TestTiering:       true,
+			StressTest:        true,
 		},
 		{
-			MaxBlocks:        10000,
-			TestDuration:     120 * time.Second,
-			ConcurrentUsers:  100,
-			WriteRatio:       0.1,
+			MaxBlocks:         10000,
+			TestDuration:      120 * time.Second,
+			ConcurrentUsers:   100,
+			WriteRatio:        0.1,
 			EnableCompression: true,
-			EnableL2Cache:    true,
-			EnableL3Cache:    true,
-			TestTiering:      true,
-			StressTest:       true,
+			EnableL2Cache:     true,
+			EnableL3Cache:     true,
+			TestTiering:       true,
+			StressTest:        true,
 		},
 	}
 
@@ -143,7 +143,7 @@ func main() {
 // NewCacheTestSuite creates a new cache test suite
 func NewCacheTestSuite(config *TestConfig, logger *zap.Logger) *CacheTestSuite {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	return &CacheTestSuite{
 		config:    config,
 		logger:    logger,
@@ -229,12 +229,12 @@ func (suite *CacheTestSuite) initializeCache() error {
 	cacheConfig := cache.DefaultCacheConfig()
 	cacheConfig.MaxEntries = suite.config.MaxBlocks
 	cacheConfig.MaxSize = int64(suite.config.MaxBlocks * 1024) // 1KB per block estimate
-	
+
 	if suite.config.EnableCompression {
 		cacheConfig.CompressionType = 1 // Gzip
 		cacheConfig.CompressionThreshold = 512
 	}
-	
+
 	cacheConfig.EnableL2Disk = suite.config.EnableL2Cache
 	cacheConfig.EnableL3Distributed = suite.config.EnableL3Cache
 	cacheConfig.EnableCircuitBreaker = true
@@ -265,7 +265,7 @@ func (suite *CacheTestSuite) testBasicFunctionality() error {
 	}
 
 	if retrievedBlock.Height != testBlock.Height {
-		return fmt.Errorf("retrieved block height mismatch: expected %d, got %d", 
+		return fmt.Errorf("retrieved block height mismatch: expected %d, got %d",
 			testBlock.Height, retrievedBlock.Height)
 	}
 
@@ -289,7 +289,7 @@ func (suite *CacheTestSuite) testBasicFunctionality() error {
 	}
 
 	time.Sleep(200 * time.Millisecond)
-	
+
 	_, found = suite.cache.Get("ttl_test")
 	if found {
 		return fmt.Errorf("TTL entry should have expired but was still found")
@@ -308,11 +308,11 @@ func (suite *CacheTestSuite) testPerformance() error {
 	for i := 0; i < iterations; i++ {
 		block := createTestBlock(uint32(i), "bitcoin")
 		key := fmt.Sprintf("block_%d", i)
-		
+
 		startOp := time.Now()
 		err := suite.cache.Set(key, block, time.Hour)
 		latency := time.Since(startOp)
-		
+
 		if err != nil {
 			suite.results.Errors++
 		} else {
@@ -324,14 +324,14 @@ func (suite *CacheTestSuite) testPerformance() error {
 	// Read test
 	for i := 0; i < iterations; i++ {
 		key := fmt.Sprintf("block_%d", i)
-		
+
 		startOp := time.Now()
 		_, found := suite.cache.Get(key)
 		latency := time.Since(startOp)
-		
+
 		suite.recordLatency(latency)
 		suite.results.ReadOperations++
-		
+
 		if found {
 			suite.results.CacheHits++
 		} else {
@@ -360,10 +360,10 @@ func (suite *CacheTestSuite) testPerformance() error {
 func (suite *CacheTestSuite) testConcurrency() error {
 	const opsPerWorker = 1000
 	workers := suite.config.ConcurrentUsers
-	
+
 	var wg sync.WaitGroup
 	errorsChan := make(chan error, workers)
-	
+
 	start := time.Now()
 
 	// Launch concurrent workers
@@ -371,20 +371,20 @@ func (suite *CacheTestSuite) testConcurrency() error {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			
+
 			for j := 0; j < opsPerWorker; j++ {
 				// Mix of reads and writes based on write ratio
 				if float64(j%100)/100.0 < suite.config.WriteRatio {
 					// Write operation
 					key := fmt.Sprintf("worker_%d_key_%d", workerID, j)
 					block := createTestBlock(uint32(j), "concurrent_test")
-					
+
 					startOp := time.Now()
 					err := suite.cache.Set(key, block, time.Hour)
 					latency := time.Since(startOp)
-					
+
 					suite.recordLatency(latency)
-					
+
 					if err != nil {
 						errorsChan <- err
 						return
@@ -392,13 +392,13 @@ func (suite *CacheTestSuite) testConcurrency() error {
 				} else {
 					// Read operation
 					key := fmt.Sprintf("worker_%d_key_%d", workerID, j/2)
-					
+
 					startOp := time.Now()
 					_, found := suite.cache.Get(key)
 					latency := time.Since(startOp)
-					
+
 					suite.recordLatency(latency)
-					
+
 					if found {
 						suite.results.CacheHits++
 					} else {
@@ -421,7 +421,7 @@ func (suite *CacheTestSuite) testConcurrency() error {
 
 	duration := time.Since(start)
 	totalOps := int64(workers * opsPerWorker)
-	
+
 	suite.logger.Info("✅ Concurrency tests completed",
 		zap.Int("workers", workers),
 		zap.Int64("total_operations", totalOps),
@@ -435,7 +435,7 @@ func (suite *CacheTestSuite) testConcurrency() error {
 func (suite *CacheTestSuite) testCompression() error {
 	// Create large block that should trigger compression
 	largeBlock := createLargeTestBlock(1, "bitcoin", 2048) // 2KB block
-	
+
 	err := suite.cache.SetLatestBlock(largeBlock)
 	if err != nil {
 		return fmt.Errorf("failed to set large block: %w", err)
@@ -466,15 +466,15 @@ func (suite *CacheTestSuite) testCompression() error {
 func (suite *CacheTestSuite) testTieredCaching() error {
 	// This would test L1 -> L2 -> L3 promotion and demotion
 	// For now, just validate that tiered operations don't fail
-	
+
 	for i := 0; i < 100; i++ {
 		key := fmt.Sprintf("tiered_test_%d", i)
 		block := createTestBlock(uint32(i), "tiered")
-		
+
 		if err := suite.cache.Set(key, block, time.Hour); err != nil {
 			return fmt.Errorf("tiered cache set failed: %w", err)
 		}
-		
+
 		if _, found := suite.cache.Get(key); !found {
 			return fmt.Errorf("tiered cache get failed for key %s", key)
 		}
@@ -488,7 +488,7 @@ func (suite *CacheTestSuite) testTieredCaching() error {
 func (suite *CacheTestSuite) testCircuitBreaker() error {
 	// Circuit breaker testing would involve simulating failures
 	// For now, just verify normal operations work
-	
+
 	for i := 0; i < 50; i++ {
 		key := fmt.Sprintf("circuit_test_%d", i)
 		if err := suite.cache.Set(key, "test_value", time.Hour); err != nil {
@@ -504,7 +504,7 @@ func (suite *CacheTestSuite) testCircuitBreaker() error {
 func (suite *CacheTestSuite) testHealthMonitoring() error {
 	// Get initial health metrics
 	metrics := suite.cache.GetMetrics()
-	
+
 	if metrics == nil {
 		return fmt.Errorf("failed to retrieve cache metrics")
 	}
@@ -530,7 +530,7 @@ func (suite *CacheTestSuite) testStressScenarios() error {
 	for i := 0; i < suite.config.MaxBlocks*2; i++ {
 		key := fmt.Sprintf("stress_%d", i)
 		block := createLargeTestBlock(uint32(i), "stress", 1024)
-		
+
 		if err := suite.cache.Set(key, block, time.Hour); err != nil {
 			suite.results.Errors++
 		}
@@ -575,7 +575,7 @@ func (suite *CacheTestSuite) finalizeResults() {
 		// Calculate latency percentiles
 		latencies := make([]time.Duration, len(suite.latencies))
 		copy(latencies, suite.latencies)
-		
+
 		// Simple sort for percentiles
 		for i := 0; i < len(latencies)-1; i++ {
 			for j := i + 1; j < len(latencies); j++ {
@@ -589,7 +589,7 @@ func (suite *CacheTestSuite) finalizeResults() {
 		for _, latency := range latencies {
 			total += latency
 		}
-		
+
 		suite.results.AvgLatency = total / time.Duration(len(latencies))
 		suite.results.P50Latency = latencies[len(latencies)/2]
 		suite.results.P95Latency = latencies[int(float64(len(latencies))*0.95)]
@@ -610,7 +610,7 @@ func (suite *CacheTestSuite) cleanupCache() {
 	if suite.cache != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		
+
 		if err := suite.cache.Shutdown(ctx); err != nil {
 			suite.logger.Error("Failed to shutdown cache cleanly", zap.Error(err))
 		}
@@ -642,7 +642,7 @@ func (suite *CacheTestSuite) PrintResults() {
 	fmt.Printf("   Decompressions:   %d\n", suite.results.Decompressions)
 	fmt.Printf("   Evictions:        %d\n", suite.results.Evictions)
 	fmt.Printf("   Errors:           %d\n", suite.results.Errors)
-	
+
 	if suite.results.CacheMetrics != nil {
 		fmt.Printf("\n🏥 Health Metrics:\n")
 		fmt.Printf("   Health Score:     %.2f\n", suite.results.CacheMetrics.HealthScore)
@@ -651,7 +651,7 @@ func (suite *CacheTestSuite) PrintResults() {
 		fmt.Printf("   L2 Hits:          %d\n", suite.results.CacheMetrics.L2Hits)
 		fmt.Printf("   L3 Hits:          %d\n", suite.results.CacheMetrics.L3Hits)
 	}
-	
+
 	fmt.Printf(strings.Repeat("=", 80) + "\n\n")
 }
 
@@ -688,13 +688,13 @@ func createTestBlock(height uint32, chain string) blocks.BlockEvent {
 // createLargeTestBlock creates a large test block for compression testing
 func createLargeTestBlock(height uint32, chain string, size int) blocks.BlockEvent {
 	block := createTestBlock(height, chain)
-	
+
 	// Add large data to trigger compression
 	largeData := make([]byte, size)
 	for i := range largeData {
 		largeData[i] = byte(i % 256)
 	}
-	
+
 	block.Hash = fmt.Sprintf("large_test_hash_%d_%x", height, largeData[:8])
 	return block
 }

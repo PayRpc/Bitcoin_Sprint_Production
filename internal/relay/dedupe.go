@@ -4,10 +4,10 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/dedup"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/PayRpc/Bitcoin-Sprint/internal/dedup"
+	"go.uber.org/zap"
 )
 
 // Enterprise deduplication metrics
@@ -16,18 +16,18 @@ var (
 		Name: "relay_duplicate_blocks_suppressed_total",
 		Help: "Number of duplicate block announcements dropped by the deduper",
 	}, []string{"network", "source", "tier"})
-	
+
 	deduplicationProcessingLatency = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "relay_deduplication_processing_duration_seconds",
 		Help:    "Time spent processing deduplication requests",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"network", "operation"})
-	
+
 	deduplicationCacheHitRate = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "relay_deduplication_cache_hit_rate",
 		Help: "Cache hit rate for deduplication system",
 	}, []string{"network"})
-	
+
 	deduplicationMemoryPressure = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "relay_deduplication_memory_pressure",
 		Help: "Memory pressure of deduplication cache (0.0-1.0)",
@@ -42,34 +42,34 @@ type BlockDeduper struct {
 	order []string
 	cap   int
 	ttl   time.Duration
-	
+
 	// Enterprise features
-	adaptive          *dedup.AdaptiveBlockDeduper
-	enterpriseMode    bool
-	logger            *zap.Logger
-	tier              string
-	
+	adaptive       *dedup.AdaptiveBlockDeduper
+	enterpriseMode bool
+	logger         *zap.Logger
+	tier           string
+
 	// Performance tracking
 	totalRequests     int64
 	duplicatesFound   int64
 	avgProcessingTime time.Duration
-	
+
 	// Network-specific optimizations
-	networkConfigs    map[string]*NetworkConfig
-	
+	networkConfigs map[string]*NetworkConfig
+
 	// Advanced features
-	crossNetworkDedup bool
+	crossNetworkDedup   bool
 	intelligentEviction bool
-	priorityHandling  bool
+	priorityHandling    bool
 }
 
 // NetworkConfig holds network-specific deduplication configuration
 type NetworkConfig struct {
-	TTL              time.Duration `json:"ttl"`
-	Capacity         int           `json:"capacity"`
-	Priority         int           `json:"priority"`
-	OptimizationLevel int          `json:"optimization_level"`
-	CrossNetworkEnabled bool       `json:"cross_network_enabled"`
+	TTL                 time.Duration `json:"ttl"`
+	Capacity            int           `json:"capacity"`
+	Priority            int           `json:"priority"`
+	OptimizationLevel   int           `json:"optimization_level"`
+	CrossNetworkEnabled bool          `json:"cross_network_enabled"`
 }
 
 // NewBlockDeduper creates a new enterprise-grade deduplication handler
@@ -85,7 +85,7 @@ func NewBlockDeduperWithOptions(capacity int, ttl time.Duration, logger *zap.Log
 	if ttl <= 0 {
 		ttl = getTierTTL(tier)
 	}
-	
+
 	bd := &BlockDeduper{
 		set:                 make(map[string]time.Time, capacity),
 		order:               make([]string, 0, capacity),
@@ -99,11 +99,11 @@ func NewBlockDeduperWithOptions(capacity int, ttl time.Duration, logger *zap.Log
 		intelligentEviction: tier != "FREE",
 		priorityHandling:    tier == "ENTERPRISE" || tier == "BUSINESS",
 	}
-	
+
 	// Initialize adaptive deduper for enterprise mode
 	if enterpriseMode && (tier == "ENTERPRISE" || tier == "BUSINESS") {
 		bd.adaptive = dedup.NewAdaptiveBlockDeduper(capacity*2, ttl, logger)
-		
+
 		// Configure performance mode based on tier
 		switch tier {
 		case "ENTERPRISE":
@@ -114,10 +114,10 @@ func NewBlockDeduperWithOptions(capacity int, ttl time.Duration, logger *zap.Log
 			bd.adaptive.EnableMLOptimization(false)
 		}
 	}
-	
+
 	// Initialize network configurations
 	bd.initializeNetworkConfigs()
-	
+
 	if logger != nil {
 		logger.Info("Enterprise Block Deduper initialized",
 			zap.Int("capacity", capacity),
@@ -126,7 +126,7 @@ func NewBlockDeduperWithOptions(capacity int, ttl time.Duration, logger *zap.Log
 			zap.Bool("enterprise_mode", enterpriseMode),
 			zap.Bool("cross_network", bd.crossNetworkDedup))
 	}
-	
+
 	return bd
 }
 
@@ -161,7 +161,7 @@ func getTierTTL(tier string) time.Duration {
 // initializeNetworkConfigs sets up network-specific configurations
 func (bd *BlockDeduper) initializeNetworkConfigs() {
 	networks := []string{"bitcoin", "ethereum", "solana", "polygon", "avalanche", "bsc"}
-	
+
 	for _, network := range networks {
 		bd.networkConfigs[network] = &NetworkConfig{
 			TTL:                 bd.getTTLForNetwork(network),
@@ -176,7 +176,7 @@ func (bd *BlockDeduper) initializeNetworkConfigs() {
 // getTTLForNetwork returns network-specific TTL
 func (bd *BlockDeduper) getTTLForNetwork(network string) time.Duration {
 	baseTTL := bd.ttl
-	
+
 	// Network-specific adjustments
 	switch network {
 	case "bitcoin":
@@ -215,18 +215,18 @@ func (bd *BlockDeduper) Seen(hash string, now time.Time, network string, options
 		bd.avgProcessingTime = time.Since(start)
 		deduplicationProcessingLatency.WithLabelValues(network, "seen").Observe(time.Since(start).Seconds())
 	}()
-	
+
 	// Input validation
 	if bd == nil {
 		return false // If no deduper, never consider it a duplicate
 	}
-	
+
 	if hash == "" {
 		return false // Empty hashes are never considered duplicates
 	}
-	
+
 	bd.totalRequests++
-	
+
 	// Use adaptive deduplication for enterprise/business tiers
 	if bd.enterpriseMode && bd.adaptive != nil {
 		isDuplicate := bd.adaptive.Seen(hash, now, network, options...)
@@ -234,14 +234,14 @@ func (bd *BlockDeduper) Seen(hash string, now time.Time, network string, options
 			bd.duplicatesFound++
 			duplicateBlocksSuppressed.WithLabelValues(network, bd.getSourceFromOptions(options), bd.tier).Inc()
 		}
-		
+
 		// Update cache hit rate
 		hitRate := float64(bd.duplicatesFound) / float64(bd.totalRequests)
 		deduplicationCacheHitRate.WithLabelValues(network).Set(hitRate)
-		
+
 		return isDuplicate
 	}
-	
+
 	// Legacy mode with enhanced features
 	return bd.seenLegacy(hash, now, network, options)
 }
@@ -250,7 +250,7 @@ func (bd *BlockDeduper) Seen(hash string, now time.Time, network string, options
 func (bd *BlockDeduper) seenLegacy(hash string, now time.Time, network string, options []dedup.DedupeOption) bool {
 	bd.mu.Lock()
 	defer bd.mu.Unlock()
-	
+
 	// Get network-specific configuration
 	netConfig := bd.networkConfigs[network]
 	if netConfig == nil {
@@ -260,10 +260,10 @@ func (bd *BlockDeduper) seenLegacy(hash string, now time.Time, network string, o
 			Priority: 1,
 		}
 	}
-	
+
 	// Generate key (with cross-network support)
 	key := bd.generateKey(hash, network, netConfig)
-	
+
 	if ts, ok := bd.set[key]; ok {
 		if now.Sub(ts) <= netConfig.TTL {
 			bd.duplicatesFound++
@@ -272,20 +272,20 @@ func (bd *BlockDeduper) seenLegacy(hash string, now time.Time, network string, o
 		}
 		// Expired - treat as new (below will refresh ts)
 	}
-	
+
 	// Record new entry
 	bd.set[key] = now
 	bd.order = append(bd.order, key)
-	
+
 	// Intelligent eviction based on priority and tier
 	if len(bd.order) > bd.cap {
 		bd.evictOldest(network)
 	}
-	
+
 	// Update memory pressure metric
 	pressure := float64(len(bd.set)) / float64(bd.cap)
 	deduplicationMemoryPressure.WithLabelValues(network).Set(pressure)
-	
+
 	return false
 }
 
@@ -302,7 +302,7 @@ func (bd *BlockDeduper) evictOldest(currentNetwork string) {
 	if len(bd.order) == 0 {
 		return
 	}
-	
+
 	if bd.intelligentEviction && bd.priorityHandling {
 		// Find lowest priority entry to evict
 		bd.evictByPriority(currentNetwork)
@@ -317,7 +317,7 @@ func (bd *BlockDeduper) evictOldest(currentNetwork string) {
 // evictByPriority implements priority-based eviction
 func (bd *BlockDeduper) evictByPriority(currentNetwork string) {
 	currentPriority := bd.getPriorityForNetwork(currentNetwork)
-	
+
 	// Find entries with lower priority than current network
 	for i, key := range bd.order {
 		network := bd.extractNetworkFromKey(key)
@@ -328,7 +328,7 @@ func (bd *BlockDeduper) evictByPriority(currentNetwork string) {
 			return
 		}
 	}
-	
+
 	// If no lower priority found, remove oldest
 	oldKey := bd.order[0]
 	bd.order = bd.order[1:]
@@ -340,7 +340,7 @@ func (bd *BlockDeduper) extractNetworkFromKey(key string) string {
 	if bd.crossNetworkDedup {
 		return "cross-network"
 	}
-	
+
 	for network := range bd.networkConfigs {
 		if len(key) > len(network)+1 && key[:len(network)] == network && key[len(network)] == ':' {
 			return network
@@ -366,18 +366,18 @@ func (bd *BlockDeduper) Cleanup() {
 	if bd == nil {
 		return
 	}
-	
+
 	start := time.Now()
 	defer func() {
 		deduplicationProcessingLatency.WithLabelValues("all", "cleanup").Observe(time.Since(start).Seconds())
 	}()
-	
+
 	// Use adaptive cleanup for enterprise mode
 	if bd.enterpriseMode && bd.adaptive != nil {
 		// Adaptive deduper handles its own cleanup
 		return
 	}
-	
+
 	// Enhanced legacy cleanup
 	bd.cleanupLegacy()
 }
@@ -387,11 +387,11 @@ func (bd *BlockDeduper) cleanupLegacy() {
 	now := time.Now()
 	bd.mu.Lock()
 	defer bd.mu.Unlock()
-	
+
 	if len(bd.order) == 0 {
 		return
 	}
-	
+
 	// Network-aware cleanup
 	w := 0
 	for _, key := range bd.order {
@@ -402,7 +402,7 @@ func (bd *BlockDeduper) cleanupLegacy() {
 			if netConfig != nil {
 				ttl = netConfig.TTL
 			}
-			
+
 			if now.Sub(ts) <= ttl {
 				bd.order[w] = key
 				w++
@@ -412,7 +412,7 @@ func (bd *BlockDeduper) cleanupLegacy() {
 		delete(bd.set, key)
 	}
 	bd.order = bd.order[:w]
-	
+
 	if bd.logger != nil && w < len(bd.order) {
 		bd.logger.Debug("Legacy cleanup completed",
 			zap.Int("removed", len(bd.order)-w),
@@ -431,29 +431,29 @@ func (bd *BlockDeduper) GetStats() map[string]interface{} {
 		stats["avg_processing_time_ms"] = bd.avgProcessingTime.Milliseconds()
 		return stats
 	}
-	
+
 	// Legacy stats
 	bd.mu.RLock()
 	defer bd.mu.RUnlock()
-	
+
 	hitRate := 0.0
 	if bd.totalRequests > 0 {
 		hitRate = float64(bd.duplicatesFound) / float64(bd.totalRequests)
 	}
-	
+
 	return map[string]interface{}{
-		"mode":                    "legacy",
-		"tier":                    bd.tier,
-		"total_cached":            len(bd.set),
-		"capacity":                bd.cap,
-		"ttl_seconds":             bd.ttl.Seconds(),
-		"total_requests":          bd.totalRequests,
-		"duplicates_found":        bd.duplicatesFound,
-		"hit_rate":                hitRate,
-		"avg_processing_time_ms":  bd.avgProcessingTime.Milliseconds(),
-		"cross_network_enabled":   bd.crossNetworkDedup,
-		"intelligent_eviction":    bd.intelligentEviction,
-		"priority_handling":       bd.priorityHandling,
+		"mode":                   "legacy",
+		"tier":                   bd.tier,
+		"total_cached":           len(bd.set),
+		"capacity":               bd.cap,
+		"ttl_seconds":            bd.ttl.Seconds(),
+		"total_requests":         bd.totalRequests,
+		"duplicates_found":       bd.duplicatesFound,
+		"hit_rate":               hitRate,
+		"avg_processing_time_ms": bd.avgProcessingTime.Milliseconds(),
+		"cross_network_enabled":  bd.crossNetworkDedup,
+		"intelligent_eviction":   bd.intelligentEviction,
+		"priority_handling":      bd.priorityHandling,
 	}
 }
 
@@ -461,15 +461,15 @@ func (bd *BlockDeduper) GetStats() map[string]interface{} {
 func (bd *BlockDeduper) SetTier(tier string) {
 	bd.mu.Lock()
 	defer bd.mu.Unlock()
-	
+
 	oldTier := bd.tier
 	bd.tier = tier
-	
+
 	// Update tier-dependent features
 	bd.crossNetworkDedup = tier == "ENTERPRISE"
 	bd.intelligentEviction = tier != "FREE"
 	bd.priorityHandling = tier == "ENTERPRISE" || tier == "BUSINESS"
-	
+
 	// Update capacity if needed
 	newCap := getTierCapacity(tier)
 	if newCap != bd.cap {
@@ -479,7 +479,7 @@ func (bd *BlockDeduper) SetTier(tier string) {
 			bd.enforceCapacity()
 		}
 	}
-	
+
 	// Update adaptive deduper if exists
 	if bd.adaptive != nil {
 		switch tier {
@@ -494,7 +494,7 @@ func (bd *BlockDeduper) SetTier(tier string) {
 			bd.adaptive.EnableMLOptimization(false)
 		}
 	}
-	
+
 	if bd.logger != nil {
 		bd.logger.Info("Service tier updated",
 			zap.String("old_tier", oldTier),
@@ -516,9 +516,9 @@ func (bd *BlockDeduper) enforceCapacity() {
 func (bd *BlockDeduper) UpdateNetworkConfig(network string, config *NetworkConfig) {
 	bd.mu.Lock()
 	defer bd.mu.Unlock()
-	
+
 	bd.networkConfigs[network] = config
-	
+
 	if bd.logger != nil {
 		bd.logger.Info("Network configuration updated",
 			zap.String("network", network),
@@ -531,7 +531,7 @@ func (bd *BlockDeduper) UpdateNetworkConfig(network string, config *NetworkConfi
 func (bd *BlockDeduper) GetNetworkConfig(network string) *NetworkConfig {
 	bd.mu.RLock()
 	defer bd.mu.RUnlock()
-	
+
 	if config, exists := bd.networkConfigs[network]; exists {
 		// Return a copy to prevent external modification
 		return &NetworkConfig{
@@ -542,7 +542,7 @@ func (bd *BlockDeduper) GetNetworkConfig(network string) *NetworkConfig {
 			CrossNetworkEnabled: config.CrossNetworkEnabled,
 		}
 	}
-	
+
 	return nil
 }
 

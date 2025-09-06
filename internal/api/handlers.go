@@ -468,26 +468,26 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 		zap.String("method", r.Method),
 		zap.String("path", r.URL.Path),
 		zap.String("host", r.Host))
-		
+
 	// Add detailed connection info
 	ethRelayStatus := "disconnected"
 	solRelayStatus := "disconnected"
-	
+
 	if s.ethereumRelay != nil && s.ethereumRelay.IsConnected() {
 		ethRelayStatus = "connected"
 	}
-	
+
 	if s.solanaRelay != nil && s.solanaRelay.IsConnected() {
 		solRelayStatus = "connected"
 	}
-	
+
 	// Include comprehensive diagnostic information in health response
 	resp := map[string]interface{}{
-		"status":       "healthy",
-		"timestamp":    s.clock.Now().UTC().Format(time.RFC3339),
-		"version":      "2.5.0",
-		"service":      "bitcoin-sprint-api",
-		"uptime":       time.Since(s.startTime).String(),
+		"status":    "healthy",
+		"timestamp": s.clock.Now().UTC().Format(time.RFC3339),
+		"version":   "2.5.0",
+		"service":   "bitcoin-sprint-api",
+		"uptime":    time.Since(s.startTime).String(),
 		"server": map[string]interface{}{
 			"addr":         r.Host,
 			"remote_addr":  r.RemoteAddr,
@@ -520,11 +520,11 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 			"p2p":     12, // Placeholder, should use actual count
 			"eth":     s.ethereumRelay != nil && s.ethereumRelay.IsConnected(),
 			"solana":  s.solanaRelay != nil && s.solanaRelay.IsConnected(),
-			"clients": 1,  // This request
+			"clients": 1, // This request
 		},
 		"server_addr": r.Host,
 	}
-	
+
 	s.turboJsonResponse(w, http.StatusOK, resp)
 }
 
@@ -557,7 +557,7 @@ func (s *Server) metricsHandler(w http.ResponseWriter, r *http.Request) {
 	// Add system metrics
 	metrics = append(metrics, "")
 	metrics = append(metrics, "# System metrics")
-	metrics = append(metrics, fmt.Sprintf("api_requests_total %d", 0)) // TODO: Add actual counters
+	metrics = append(metrics, fmt.Sprintf("api_requests_total %d", 0))              // TODO: Add actual counters
 	metrics = append(metrics, fmt.Sprintf("api_requests_duration_seconds %f", 0.0)) // TODO: Add actual histogram
 
 	// Add Ethereum peers metric for testing

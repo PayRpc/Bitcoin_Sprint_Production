@@ -11,15 +11,15 @@ import (
 
 // Recorder implements the DiagnosticRecorder interface
 type Recorder struct {
-	events     []*DiagnosticEvent
-	eventsMu   sync.RWMutex
-	maxEvents  int
-	logger     *zap.Logger
-	stats      *DiagnosticStats
-	statsMu    sync.RWMutex
-	isRunning  bool
-	stopChan   chan struct{}
-	wg         sync.WaitGroup
+	events    []*DiagnosticEvent
+	eventsMu  sync.RWMutex
+	maxEvents int
+	logger    *zap.Logger
+	stats     *DiagnosticStats
+	statsMu   sync.RWMutex
+	isRunning bool
+	stopChan  chan struct{}
+	wg        sync.WaitGroup
 }
 
 // NewRecorder creates a new diagnostic recorder
@@ -36,7 +36,7 @@ func NewRecorder(maxEvents int, logger *zap.Logger) *Recorder {
 			EventsByType:     make(map[string]int64),
 			EventsBySeverity: make(map[Severity]int64),
 		},
-		stopChan: make(chan struct{}),
+		stopChan:  make(chan struct{}),
 		isRunning: true,
 	}
 

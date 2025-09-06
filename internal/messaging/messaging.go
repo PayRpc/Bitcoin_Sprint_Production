@@ -54,12 +54,12 @@ type BitcoinRPCConfig struct {
 // backfillMetrics provides monitoring
 type backfillMetrics struct {
 	messagesBackfilled prometheus.Counter
-	txsSkipped        prometheus.Counter
-	rpcErrors         prometheus.Counter
-	rpcCalls          prometheus.Counter
-	batchRequests     prometheus.Counter
-	processTime       prometheus.Histogram
-	failedTxsTotal    prometheus.Counter
+	txsSkipped         prometheus.Counter
+	rpcErrors          prometheus.Counter
+	rpcCalls           prometheus.Counter
+	batchRequests      prometheus.Counter
+	processTime        prometheus.Histogram
+	failedTxsTotal     prometheus.Counter
 }
 
 // newMetrics initializes Prometheus metrics

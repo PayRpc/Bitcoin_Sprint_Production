@@ -59,73 +59,73 @@ func (bfm *BloomFilterManager) initializeFilter() error {
 		networkName := C.CString("bitcoin")
 		defer C.free(unsafe.Pointer(networkName))
 
-	// Use BloomConfig struct for initialization
-	var config C.BloomConfig
-	config.network = networkName
-	config.size = 100000
-	config.num_hashes = 7
-	config.tweak = 0
-	config.flags = 0
-	config.max_age_seconds = 86400
-	config.batch_size = 8192
-	config.enable_compression = false
-	config.enable_metrics = false
-	var errCode C.BloomFilterErrorCode
-	filterHandle = C.bloom_filter_new(&config, &errCode)
+		// Use BloomConfig struct for initialization
+		var config C.BloomConfig
+		config.network = networkName
+		config.size = 100000
+		config.num_hashes = 7
+		config.tweak = 0
+		config.flags = 0
+		config.max_age_seconds = 86400
+		config.batch_size = 8192
+		config.enable_compression = false
+		config.enable_metrics = false
+		var errCode C.BloomFilterErrorCode
+		filterHandle = C.bloom_filter_new(&config, &errCode)
 
 	case config.TierBusiness:
 		// Balanced configuration for business tier
 		networkName := C.CString("bitcoin")
 		defer C.free(unsafe.Pointer(networkName))
 
-	var config C.BloomConfig
-	config.network = networkName
-	config.size = 50000
-	config.num_hashes = 5
-	config.tweak = 0
-	config.flags = 0
-	config.max_age_seconds = 86400
-	config.batch_size = 4096
-	config.enable_compression = false
-	config.enable_metrics = false
-	var errCode C.BloomFilterErrorCode
-	filterHandle = C.bloom_filter_new(&config, &errCode)
+		var config C.BloomConfig
+		config.network = networkName
+		config.size = 50000
+		config.num_hashes = 5
+		config.tweak = 0
+		config.flags = 0
+		config.max_age_seconds = 86400
+		config.batch_size = 4096
+		config.enable_compression = false
+		config.enable_metrics = false
+		var errCode C.BloomFilterErrorCode
+		filterHandle = C.bloom_filter_new(&config, &errCode)
 
 	case config.TierPro:
 		// Standard configuration for pro tier
 		networkName := C.CString("bitcoin")
 		defer C.free(unsafe.Pointer(networkName))
 
-	var config C.BloomConfig
-	config.network = networkName
-	config.size = 36000
-	config.num_hashes = 5
-	config.tweak = 0
-	config.flags = 0
-	config.max_age_seconds = 86400
-	config.batch_size = 2048
-	config.enable_compression = false
-	config.enable_metrics = false
-	var errCode C.BloomFilterErrorCode
-	filterHandle = C.bloom_filter_new(&config, &errCode)
+		var config C.BloomConfig
+		config.network = networkName
+		config.size = 36000
+		config.num_hashes = 5
+		config.tweak = 0
+		config.flags = 0
+		config.max_age_seconds = 86400
+		config.batch_size = 2048
+		config.enable_compression = false
+		config.enable_metrics = false
+		var errCode C.BloomFilterErrorCode
+		filterHandle = C.bloom_filter_new(&config, &errCode)
 
 	default: // Free tier
 		// Memory-optimized configuration for free tier
 		networkName := C.CString("bitcoin")
 		defer C.free(unsafe.Pointer(networkName))
 
-	var config C.BloomConfig
-	config.network = networkName
-	config.size = 18000
-	config.num_hashes = 3
-	config.tweak = 0
-	config.flags = 0
-	config.max_age_seconds = 86400
-	config.batch_size = 1024
-	config.enable_compression = false
-	config.enable_metrics = false
-	var errCode C.BloomFilterErrorCode
-	filterHandle = C.bloom_filter_new(&config, &errCode)
+		var config C.BloomConfig
+		config.network = networkName
+		config.size = 18000
+		config.num_hashes = 3
+		config.tweak = 0
+		config.flags = 0
+		config.max_age_seconds = 86400
+		config.batch_size = 1024
+		config.enable_compression = false
+		config.enable_metrics = false
+		var errCode C.BloomFilterErrorCode
+		filterHandle = C.bloom_filter_new(&config, &errCode)
 	}
 
 	if filterHandle == nil {

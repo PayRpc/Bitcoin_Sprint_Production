@@ -21,8 +21,8 @@ import (
 
 const (
 	// Default endpoints for testing
-	defaultEthWSEndpoint = "wss://eth-mainnet.g.alchemy.com/v2/demo"
-	defaultSolWSEndpoint = "wss://api.mainnet-beta.solana.com"
+	defaultEthWSEndpoint  = "wss://eth-mainnet.g.alchemy.com/v2/demo"
+	defaultSolWSEndpoint  = "wss://api.mainnet-beta.solana.com"
 	defaultEthRPCEndpoint = "https://cloudflare-eth.com"
 	defaultSolRPCEndpoint = "https://api.mainnet-beta.solana.com"
 )
@@ -148,7 +148,7 @@ func main() {
 	fmt.Printf("Total tests: %d\n", totalTests)
 	fmt.Printf("Successful: %d\n", successCount)
 	fmt.Printf("Failed: %d\n", totalTests-successCount)
-	
+
 	if successCount < totalTests {
 		os.Exit(1)
 	}
@@ -171,7 +171,7 @@ func testJSONRPC(ctx context.Context, name, endpoint string, payloads []string, 
 	start := time.Now()
 	ips, err := net.LookupIP(u.Hostname())
 	dnsLatency := time.Since(start)
-	
+
 	if err != nil {
 		results <- testResult{
 			Endpoint: fmt.Sprintf("%s (DNS)", name),
@@ -196,11 +196,11 @@ func testJSONRPC(ctx context.Context, name, endpoint string, payloads []string, 
 			port = "80"
 		}
 	}
-	
+
 	start = time.Now()
 	conn, err := net.DialTimeout("tcp", u.Hostname()+":"+port, 5*time.Second)
 	tcpLatency := time.Since(start)
-	
+
 	if err != nil {
 		results <- testResult{
 			Endpoint: fmt.Sprintf("%s (TCP)", name),
@@ -210,7 +210,7 @@ func testJSONRPC(ctx context.Context, name, endpoint string, payloads []string, 
 		return
 	}
 	conn.Close()
-	
+
 	results <- testResult{
 		Endpoint: fmt.Sprintf("%s (TCP)", name),
 		Success:  true,
@@ -242,13 +242,13 @@ func testJSONRPC(ctx context.Context, name, endpoint string, payloads []string, 
 			}
 			continue
 		}
-		
+
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("User-Agent", "Bitcoin-Sprint/1.0 Network-Diagnostics")
-		
+
 		resp, err := client.Do(req)
 		latency := time.Since(start)
-		
+
 		if err != nil {
 			results <- testResult{
 				Endpoint: fmt.Sprintf("%s (Payload %d)", name, i+1),
@@ -261,7 +261,7 @@ func testJSONRPC(ctx context.Context, name, endpoint string, payloads []string, 
 
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
-		
+
 		if err != nil {
 			results <- testResult{
 				Endpoint:   fmt.Sprintf("%s (Payload %d)", name, i+1),
@@ -281,7 +281,7 @@ func testJSONRPC(ctx context.Context, name, endpoint string, payloads []string, 
 				responseMsg = fmt.Sprintf("%s\n%s", responseMsg, string(body))
 			}
 		}
-		
+
 		results <- testResult{
 			Endpoint:    fmt.Sprintf("%s (Payload %d)", name, i+1),
 			Success:     resp.StatusCode >= 200 && resp.StatusCode < 300,
@@ -310,7 +310,7 @@ func testWebSocket(ctx context.Context, name, endpoint string, payloads []string
 	start := time.Now()
 	ips, err := net.LookupIP(u.Hostname())
 	dnsLatency := time.Since(start)
-	
+
 	if err != nil {
 		results <- testResult{
 			Endpoint: fmt.Sprintf("%s (DNS)", name),
@@ -333,14 +333,14 @@ func testWebSocket(ctx context.Context, name, endpoint string, payloads []string
 			InsecureSkipVerify: false,
 		},
 	}
-	
+
 	headers := http.Header{}
 	headers.Add("User-Agent", "Bitcoin-Sprint/1.0 Network-Diagnostics")
-	
+
 	start = time.Now()
 	c, _, err := dialer.DialContext(ctx, endpoint, headers)
 	wsLatency := time.Since(start)
-	
+
 	if err != nil {
 		results <- testResult{
 			Endpoint: fmt.Sprintf("%s (Connection)", name),
@@ -351,7 +351,7 @@ func testWebSocket(ctx context.Context, name, endpoint string, payloads []string
 		return
 	}
 	defer c.Close()
-	
+
 	results <- testResult{
 		Endpoint: fmt.Sprintf("%s (Connection)", name),
 		Success:  true,
@@ -374,10 +374,10 @@ func testWebSocket(ctx context.Context, name, endpoint string, payloads []string
 			}
 			continue
 		}
-		
+
 		_, message, err := c.ReadMessage()
 		latency := time.Since(start)
-		
+
 		if err != nil {
 			results <- testResult{
 				Endpoint: fmt.Sprintf("%s (Payload %d)", name, i+1),
@@ -396,7 +396,7 @@ func testWebSocket(ctx context.Context, name, endpoint string, payloads []string
 				responseMsg = fmt.Sprintf("%s\n%s", responseMsg, string(message))
 			}
 		}
-		
+
 		results <- testResult{
 			Endpoint:    fmt.Sprintf("%s (Payload %d)", name, i+1),
 			Success:     true,
@@ -417,12 +417,12 @@ func testWebSocket(ctx context.Context, name, endpoint string, payloads []string
 		}
 		return
 	}
-	
+
 	// Read messages until we get a pong or timeout
 	c.SetReadDeadline(time.Now().Add(5 * time.Second))
 	messageType, message, err := c.ReadMessage()
 	pingLatency := time.Since(start)
-	
+
 	if err != nil {
 		results <- testResult{
 			Endpoint: fmt.Sprintf("%s (Ping)", name),
@@ -456,7 +456,7 @@ func testWebSocket(ctx context.Context, name, endpoint string, payloads []string
 		}
 		return
 	}
-	
+
 	results <- testResult{
 		Endpoint: fmt.Sprintf("%s (Close)", name),
 		Success:  true,
@@ -475,7 +475,7 @@ func testNetworkLatency(ctx context.Context, ethEndpoint, solEndpoint string, re
 		}
 		return
 	}
-	
+
 	solURL, err := url.Parse(solEndpoint)
 	if err != nil {
 		results <- testResult{
@@ -488,7 +488,7 @@ func testNetworkLatency(ctx context.Context, ethEndpoint, solEndpoint string, re
 
 	// Test Ethereum endpoint latency
 	testEndpointLatency(ctx, "Ethereum", ethURL.Hostname(), results)
-	
+
 	// Test Solana endpoint latency
 	testEndpointLatency(ctx, "Solana", solURL.Hostname(), results)
 }
@@ -497,7 +497,7 @@ func testEndpointLatency(ctx context.Context, name, hostname string, results cha
 	// Perform multiple TCP connection tests to measure latency
 	var latencies []time.Duration
 	totalTests := 5
-	
+
 	for i := 0; i < totalTests; i++ {
 		select {
 		case <-ctx.Done():
@@ -510,19 +510,19 @@ func testEndpointLatency(ctx context.Context, name, hostname string, results cha
 		default:
 			start := time.Now()
 			port := "443" // Default to HTTPS port
-			
+
 			conn, err := net.DialTimeout("tcp", hostname+":"+port, 5*time.Second)
 			elapsed := time.Since(start)
-			
+
 			if err == nil {
 				conn.Close()
 				latencies = append(latencies, elapsed)
 			}
-			
+
 			time.Sleep(500 * time.Millisecond) // Wait between tests
 		}
 	}
-	
+
 	if len(latencies) == 0 {
 		results <- testResult{
 			Endpoint: fmt.Sprintf("%s Latency", name),
@@ -531,14 +531,14 @@ func testEndpointLatency(ctx context.Context, name, hostname string, results cha
 		}
 		return
 	}
-	
+
 	// Calculate average latency
 	var totalLatency time.Duration
 	for _, latency := range latencies {
 		totalLatency += latency
 	}
 	avgLatency := totalLatency / time.Duration(len(latencies))
-	
+
 	// Calculate min/max latency
 	minLatency := latencies[0]
 	maxLatency := latencies[0]
@@ -550,12 +550,12 @@ func testEndpointLatency(ctx context.Context, name, hostname string, results cha
 			maxLatency = latency
 		}
 	}
-	
+
 	results <- testResult{
 		Endpoint: fmt.Sprintf("%s Latency", name),
 		Success:  true,
-		Message:  fmt.Sprintf("Avg: %d ms, Min: %d ms, Max: %d ms", 
+		Message: fmt.Sprintf("Avg: %d ms, Min: %d ms, Max: %d ms",
 			avgLatency.Milliseconds(), minLatency.Milliseconds(), maxLatency.Milliseconds()),
-		Latency:  avgLatency,
+		Latency: avgLatency,
 	}
 }
