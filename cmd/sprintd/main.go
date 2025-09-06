@@ -44,6 +44,7 @@ import (
 	"github.com/PayRpc/Bitcoin-Sprint/internal/ratelimit"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/relay"
 	gctuning "github.com/PayRpc/Bitcoin-Sprint/internal/runtime"
+	runtimeopt "github.com/PayRpc/Bitcoin-Sprint/internal/runtime"
 	"github.com/PayRpc/Bitcoin-Sprint/internal/throttle"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -92,6 +93,9 @@ type ServiceManager struct {
 	apiServer       *api.Server
 	backfillService *messaging.BackfillService
 	rateLimiter     *ratelimit.RateLimiter
+
+	// Runtime optimization
+	runtimeOptimizer *runtimeopt.SystemOptimizer
 
 	// Lifecycle management
 	ctx           context.Context
@@ -336,6 +340,17 @@ func (sm *ServiceManager) Shutdown(ctx context.Context) error {
 		}
 	}
 
+	// Restore runtime optimization settings
+	if sm.runtimeOptimizer != nil {
+		sm.logger.Info("Restoring runtime optimization settings")
+		if err := sm.runtimeOptimizer.Restore(); err != nil {
+			sm.logger.Warn("Failed to restore runtime settings", zap.Error(err))
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("runtime optimizer restore: %w", err))
+		} else {
+			sm.logger.Info("Runtime settings restored successfully")
+		}
+	}
+
 	if len(shutdownErrors) > 0 {
 		return fmt.Errorf("shutdown completed with %d errors: %v", len(shutdownErrors), shutdownErrors)
 	}
@@ -345,8 +360,44 @@ func (sm *ServiceManager) Shutdown(ctx context.Context) error {
 
 // initializeRuntime sets up GC tuning and performance monitoring
 func (sm *ServiceManager) initializeRuntime() error {
+	// Initialize legacy GC tuning for backward compatibility
 	if err := gctuning.InitializeGCTuning(sm.logger, sm.cfg.GCTuning); err != nil {
 		return fmt.Errorf("GC tuning initialization failed: %w", err)
+	}
+
+	// Initialize new runtime optimization system
+	sm.logger.Info("Initializing advanced runtime optimization system")
+	
+	// Determine optimization level based on configuration
+	var optConfig *runtimeopt.SystemOptimizationConfig
+	if sm.cfg.Tier == config.TierEnterprise {
+		optConfig = runtimeopt.EnterpriseConfig()
+		sm.logger.Info("Using Enterprise optimization level")
+	} else if sm.cfg.Tier == config.TierTurbo {
+		optConfig = runtimeopt.TurboConfig()
+		sm.logger.Info("Using Turbo optimization level")
+	} else if sm.cfg.Tier == config.TierBusiness {
+		optConfig = runtimeopt.AggressiveConfig()
+		sm.logger.Info("Using Aggressive optimization level")
+	} else if sm.cfg.OptimizeSystem {
+		optConfig = runtimeopt.DefaultConfig()
+		sm.logger.Info("Using Default optimization level")
+	} else {
+		optConfig = runtimeopt.BasicConfig()
+		sm.logger.Info("Using Basic optimization level")
+	}
+	
+	// Apply runtime optimizations
+	sm.runtimeOptimizer = runtimeopt.NewSystemOptimizer(optConfig, sm.logger)
+	if err := sm.runtimeOptimizer.Apply(); err != nil {
+		sm.logger.Warn("Failed to apply runtime optimizations", zap.Error(err))
+		// Continue startup even if optimizations fail
+	} else {
+		sm.logger.Info("Runtime optimizations applied successfully",
+			zap.String("level", optConfig.Level),
+			zap.Bool("cpu_pinning", optConfig.EnableCPUPinning),
+			zap.Bool("memory_locking", optConfig.EnableMemoryLocking),
+			zap.Bool("rt_priority", optConfig.EnableRTPriority))
 	}
 
 	// Set soft memory limit if configured
@@ -363,6 +414,13 @@ func (sm *ServiceManager) initializeRuntime() error {
 	go func() {
 		defer sm.wg.Done()
 		gctuning.MonitorGCPerformance(sm.logger, 5*time.Minute)
+	}()
+
+	// Start runtime optimization monitoring
+	sm.wg.Add(1)
+	go func() {
+		defer sm.wg.Done()
+		sm.monitorRuntimeOptimization()
 	}()
 
 	return nil
@@ -1383,4 +1441,47 @@ func mustInitLogger() *zap.Logger {
 	}
 
 	return logger
+}
+
+// monitorRuntimeOptimization monitors runtime optimization performance
+func (sm *ServiceManager) monitorRuntimeOptimization() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-sm.ctx.Done():
+			return
+		case <-ticker.C:
+			if sm.runtimeOptimizer != nil {
+				stats := sm.runtimeOptimizer.GetStats()
+				
+				// Update metrics if available
+				if sm.metrics != nil {
+					if val, ok := stats["heap_alloc_mb"].(uint64); ok {
+						sm.metrics.SetGauge("runtime_heap_mb", float64(val))
+					}
+					if val, ok := stats["num_goroutine"].(int); ok {
+						sm.metrics.SetGauge("runtime_goroutines", float64(val))
+					}
+					if val, ok := stats["gc_cpu_fraction"].(float64); ok {
+						sm.metrics.SetGauge("runtime_gc_cpu_fraction", val)
+					}
+					if val, ok := stats["applied"].(bool); ok {
+						if val {
+							sm.metrics.SetGauge("runtime_optimization_active", 1)
+						} else {
+							sm.metrics.SetGauge("runtime_optimization_active", 0)
+						}
+					}
+				}
+				
+				// Log periodic runtime stats
+				if applied, ok := stats["applied"].(bool); ok && applied {
+					sm.logger.Debug("Runtime optimization stats",
+						zap.Any("stats", stats))
+				}
+			}
+		}
+	}
 }

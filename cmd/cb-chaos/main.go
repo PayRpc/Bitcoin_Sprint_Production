@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	"bitcoin-sprint/internal/circuitbreaker"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/circuitbreaker"
 )
 
 // FailureInjectionTool provides chaos engineering capabilities for circuit breakers

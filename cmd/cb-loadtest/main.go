@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"bitcoin-sprint/internal/circuitbreaker"
+	"github.com/PayRpc/Bitcoin-Sprint/internal/circuitbreaker"
 )
 
 // LoadTestConfig defines configuration for load testing
