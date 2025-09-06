@@ -1,0 +1,19 @@
+version: '3.8'
+
+networks:
+  sprint-net:
+    external: true
+
+services:
+  solana-exporter:
+    image: python:3.9-alpine
+    container_name: solana-exporter
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./monitoring/sample-metrics.py:/app/sample-metrics.py
+    working_dir: /app
+    command: python sample-metrics.py
+    networks:
+      - sprint-net
+    restart: unless-stopped

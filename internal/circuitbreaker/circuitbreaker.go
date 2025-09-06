@@ -155,7 +155,7 @@ type CircuitBreakerMetrics struct {
 // EnterpriseCircuitBreaker implements comprehensive circuit breaker functionality
 type EnterpriseCircuitBreaker struct {
 	// Core configuration
-	config *Config
+	config *EnterpriseConfig
 	logger *zap.Logger
 
 	// State management
@@ -194,20 +194,45 @@ type EnterpriseCircuitBreaker struct {
 	shutdownChan chan struct{}
 }
 
-// NewCircuitBreaker creates an enterprise-grade circuit breaker
-func NewCircuitBreaker(cfg Config) (*EnterpriseCircuitBreaker, error) {
+// NewEnterpriseCircuitBreaker creates a new enterprise circuit breaker instance  
+func NewEnterpriseCircuitBreaker(cfg Config) (*EnterpriseCircuitBreaker, error) {
 	if err := validateConfig(&cfg); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Type assert TierSettings to proper type
+	var tierConfigs map[string]TierConfig
+	if cfg.TierSettings != nil {
+		if tc, ok := cfg.TierSettings.(map[string]TierConfig); ok {
+			tierConfigs = tc
+		} else {
+			// Initialize with empty map if type assertion fails
+			tierConfigs = make(map[string]TierConfig)
+		}
+	} else {
+		tierConfigs = make(map[string]TierConfig)
+	}
+
+	// Create an EnterpriseConfig with defaults from base Config
+	enterpriseConfig := &EnterpriseConfig{
+		Name:             cfg.Name,
+		FailureThreshold: cfg.FailureThreshold,
+		MaxFailures:      int(cfg.FailureThreshold * 10), // Convert to count
+		ResetTimeout:     cfg.Timeout,
+		HalfOpenMaxCalls: cfg.HalfOpenMaxConcurrency,
+		Timeout:          cfg.Timeout,
+		MinSamples:       cfg.MinSamples,
+		TierSettings:     tierConfigs,
+	}
+
 	cb := &EnterpriseCircuitBreaker{
-		config:         &cfg,
+		config:         enterpriseConfig,
 		logger:         zap.NewNop(), // Default logger
 		state:          StateClosed,
 		stateChangedAt: time.Now(),
-		tierConfigs:    cfg.TierSettings,
+		tierConfigs:    tierConfigs,
 		ctx:            ctx,
 		cancel:         cancel,
 		shutdownChan:   make(chan struct{}),
@@ -471,12 +496,26 @@ func (cb *EnterpriseCircuitBreaker) recordResult(result *ExecutionResult) {
 
 	// Update sliding window
 	if cb.slidingWindow != nil {
-		cb.slidingWindow.Record(result.Success, result.Duration)
+		cb.slidingWindow.AddRequest(result.Success, result.Duration)
 	}
 
 	// Update health scorer
 	if cb.healthScorer != nil {
-		cb.healthScorer.RecordResult(result.Success, result.Duration)
+		// Create metrics from result and update health scorer
+		metrics := HealthMetrics{
+			SuccessRate:    1.0,
+			ErrorRate:      0.0,
+			AvgLatency:     result.Duration,
+			P50Latency:     result.Duration,
+			P95Latency:     result.Duration,
+			P99Latency:     result.Duration,
+			ThroughputRate: 1.0,
+		}
+		if !result.Success {
+			metrics.SuccessRate = 0.0
+			metrics.ErrorRate = 1.0
+		}
+		cb.healthScorer.UpdateMetrics(metrics)
 	}
 }
 

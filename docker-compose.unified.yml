@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  solana-exporter:
+    image: python:3.9-slim
+    container_name: solana-exporter
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./monitoring/sample-metrics.py:/app/metrics.py
+    working_dir: /app
+    command: python metrics.py
+    networks:
+      - monitoring_network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus-simple.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - monitoring_network
+    depends_on:
+      - solana-exporter
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    networks:
+      - monitoring_network
+    depends_on:
+      - prometheus
+
+networks:
+  monitoring_network:
+    driver: bridge

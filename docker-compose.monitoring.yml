@@ -1,0 +1,49 @@
+version: "3.8"
+
+networks:
+  sprint-net:
+    external: true
+
+services:
+  solana-exporter:
+    image: blockworksfoundation/solana-exporter:latest
+    container_name: solana-exporter
+    networks: [sprint-net]
+    environment:
+      # Use public RPC - no Alchemy/Infura as requested
+      RPC_URL: "https://api.mainnet-beta.solana.com"
+      # Optional: pick clusters: mainnet-beta | devnet | testnet
+      CLUSTER: "mainnet-beta"
+    ports:
+      - "8080:8080"   # optional; Prometheus can reach it via Docker DNS
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/metrics | head -n1 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: sprint-prometheus
+    networks: [sprint-net]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+    command: ["--config.file=/etc/prometheus/prometheus.yml","--web.enable-lifecycle"]
+    ports:
+      - "9090:9090"
+    depends_on:
+      solana-exporter:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: sprint-grafana
+    networks: [sprint-net]
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=sprint123
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus

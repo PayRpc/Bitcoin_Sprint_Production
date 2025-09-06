@@ -1,0 +1,155 @@
+# Emergency Resource Limits Override
+# This file applies strict CPU and memory limits to prevent system overload
+# Use with: docker-compose -f config/docker-compose.yml -f docker-compose.resource-limits.yml up -d
+
+version: '3.8'
+
+services:
+  # ===== CRITICAL: Bitcoin Sprint API - Guaranteed Resources =====
+  bitcoin-sprint-api:
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'      # Max 2 CPU cores
+          memory: 2G       # Max 2GB RAM
+        reservations:
+          cpus: '1.0'      # Guaranteed 1 CPU core
+          memory: 1G       # Guaranteed 1GB RAM
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===== MONITORING - Light Resources =====
+  grafana:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'      # Max 0.5 CPU cores
+          memory: 512M     # Max 512MB RAM
+        reservations:
+          cpus: '0.1'      # Guaranteed 0.1 CPU cores
+          memory: 128M     # Guaranteed 128MB RAM
+
+  prometheus:
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'      # Max 1 CPU core
+          memory: 1G       # Max 1GB RAM
+        reservations:
+          cpus: '0.2'      # Guaranteed 0.2 CPU cores
+          memory: 256M     # Guaranteed 256MB RAM
+
+  # ===== SOLANA VALIDATORS - Reduced Limits =====
+  solana-validator:
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'      # Max 1.5 CPU cores per validator
+          memory: 1.5G     # Max 1.5GB RAM per validator
+        reservations:
+          cpus: '0.5'      # Guaranteed 0.5 CPU cores
+          memory: 512M     # Guaranteed 512MB RAM
+
+  solana-validator-2:
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1.5G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  solana-validator-3:
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1.5G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ===== SCALE DOWN VALIDATORS =====
+  # Disable extra validators to reduce load
+  solana-validator-4:
+    deploy:
+      replicas: 0  # Disabled
+
+  solana-validator-5:
+    deploy:
+      replicas: 0  # Disabled
+
+  solana-validator-6:
+    deploy:
+      replicas: 0  # Disabled
+
+  solana-validator-7:
+    deploy:
+      replicas: 0  # Disabled
+
+  # ===== INFRASTRUCTURE =====
+  redis:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+  nginx:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+  postgres:
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.2'
+          memory: 256M
+
+  # ===== EXPORTERS - Minimal Resources =====
+  bitcoin-exporter:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
+
+  solana-exporter:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
+
+  ethereum-exporter:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 32M

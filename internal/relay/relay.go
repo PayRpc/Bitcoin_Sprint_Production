@@ -154,6 +154,8 @@ func NewRelayDispatcher(cfg config.Config, logger *zap.Logger) *RelayDispatcher 
 		deduper:    NewBlockDeduper(8192, 5*time.Minute), // 8K capacity with 5min TTL
 		dedupeStop: make(chan struct{}),
 	}
+	
+	return dispatcher
 }
 
 // MetricsProvider defines the interface for metrics collection
@@ -196,14 +198,19 @@ func NewRelayDispatcherWithMetricsAndConfig(config Config, cfg config.Config, lo
 			case <-ticker.C:
 				for network, client := range dispatcher.clients {
 					if health, err := client.GetHealth(); err == nil {
-						metrics.RecordGauge("relay_health", float64(health.Score),
+						// Use a simple health score based on connection state and errors
+						healthScore := 0.0
+						if health.IsHealthy {
+							healthScore = 1.0
+						}
+						metrics.RecordGauge("relay_health", healthScore,
 							map[string]string{"network": network})
 					}
 
 					if relayMetrics, err := client.GetMetrics(); err == nil {
-						metrics.RecordGauge("relay_blocks_processed", float64(relayMetrics.BlocksProcessed),
+						metrics.RecordGauge("relay_blocks_processed", float64(relayMetrics.BlocksReceived),
 							map[string]string{"network": network})
-						metrics.RecordGauge("relay_tx_processed", float64(relayMetrics.TransactionsProcessed),
+						metrics.RecordGauge("relay_bytes_received", float64(relayMetrics.BytesReceived),
 							map[string]string{"network": network})
 					}
 				}
@@ -214,22 +221,6 @@ func NewRelayDispatcherWithMetricsAndConfig(config Config, cfg config.Config, lo
 	}()
 
 	return dispatcher, nil
-
-	// Start background cleanup for the deduper
-	go func() {
-		ticker := time.NewTicker(1 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				dispatcher.deduper.Cleanup()
-			case <-dispatcher.dedupeStop:
-				return
-			}
-		}
-	}()
-
-	return dispatcher
 }
 
 // RegisterClient registers a relay client for a specific network

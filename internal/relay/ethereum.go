@@ -129,13 +129,44 @@ type EthereumNetworkInfo struct {
 
 // NewEthereumRelay creates a new Ethereum relay client
 func NewEthereumRelay(cfg config.Config, logger *zap.Logger) *EthereumRelay {
+	// Get endpoints from config with fallbacks
+	wsEndpoints := cfg.GetStringSlice("ETH_WS_ENDPOINTS")
+	if len(wsEndpoints) == 0 {
+		// Fallback to working endpoints
+		wsEndpoints = []string{
+			"wss://eth.llamarpc.com",
+			"wss://ethereum.blockpi.network/v1/ws/public",
+		}
+		logger.Info("Using fallback Ethereum WebSocket endpoints", zap.Strings("endpoints", wsEndpoints))
+	}
+
+	timeout := cfg.GetDuration("ETH_TIMEOUT")
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
+
+	maxConnections := cfg.GetInt("ETH_MAX_CONNECTIONS")
+	if maxConnections == 0 {
+		maxConnections = 4
+	}
+
+	retryAttempts := cfg.GetInt("MAX_RETRY_ATTEMPTS")
+	if retryAttempts == 0 {
+		retryAttempts = 3
+	}
+
+	retryDelay := cfg.GetDuration("RETRY_DELAY_SECONDS") * time.Second
+	if retryDelay == 0 {
+		retryDelay = 2 * time.Second
+	}
+
 	relayConfig := RelayConfig{
 		Network:           "ethereum",
-		Endpoints:         []string{"wss://ethereum.publicnode.com", "wss://cloudflare-eth.com", "wss://rpc.ankr.com/eth/ws"},
-		Timeout:           30 * time.Second,
-		RetryAttempts:     3,
-		RetryDelay:        5 * time.Second,
-		MaxConcurrency:    4,
+		Endpoints:         wsEndpoints,
+		Timeout:           timeout,
+		RetryAttempts:     retryAttempts,
+		RetryDelay:        retryDelay,
+		MaxConcurrency:    maxConnections,
 		BufferSize:        1000,
 		EnableCompression: true,
 	}

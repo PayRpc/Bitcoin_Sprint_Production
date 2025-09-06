@@ -1,0 +1,203 @@
+{
+	"dashboard": {
+		"id": null,
+		"title": "Bitcoin Sprint - Blockchain Monitoring",
+		"tags": [
+			"bitcoin",
+			"ethereum",
+			"blockchain"
+		],
+		"style": "dark",
+		"timezone": "browser",
+		"panels": [
+			{
+				"id": 1,
+				"title": "Active P2P Connections",
+				"type": "stat",
+				"targets": [
+					{
+						"expr": "bitcoin_sprint_active_connections",
+						"refId": "A"
+					}
+				],
+				"gridPos": {
+					"h": 8,
+					"w": 6,
+					"x": 0,
+					"y": 0
+				},
+				"fieldConfig": {
+					"defaults": {
+						"color": {
+							"mode": "thresholds"
+						},
+						"thresholds": {
+							"steps": [
+								{
+									"color": "red",
+									"value": null
+								},
+								{
+									"color": "yellow",
+									"value": 1
+								},
+								{
+									"color": "green",
+									"value": 3
+								}
+							]
+						}
+					}
+				}
+			},
+			{
+				"id": 2,
+				"title": "System Uptime",
+				"type": "stat",
+				"targets": [
+					{
+						"expr": "bitcoin_sprint_uptime_seconds",
+						"refId": "A"
+					}
+				],
+				"gridPos": {
+					"h": 8,
+					"w": 6,
+					"x": 6,
+					"y": 0
+				}
+			},
+			{
+				"id": 3,
+				"title": "Memory Usage",
+				"type": "stat",
+				"targets": [
+					{
+						"expr": "go_memstats_heap_alloc_bytes / 1024 / 1024",
+						"refId": "A"
+					}
+				],
+				"gridPos": {
+					"h": 8,
+					"w": 6,
+					"x": 12,
+					"y": 0
+				},
+				"fieldConfig": {
+					"defaults": {
+						"unit": "bytes"
+					}
+				}
+			},
+			{
+				"id": 4,
+				"title": "Goroutines",
+				"type": "stat",
+				"targets": [
+					{
+						"expr": "go_goroutines",
+						"refId": "A"
+					}
+				],
+				"gridPos": {
+					"h": 8,
+					"w": 6,
+					"x": 18,
+					"y": 0
+				}
+			},
+			{
+				"id": 5,
+				"title": "P2P Connections Over Time",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "bitcoin_sprint_active_connections",
+						"refId": "A",
+						"legendFormat": "Bitcoin Connections"
+					}
+				],
+				"gridPos": {
+					"h": 9,
+					"w": 12,
+					"x": 0,
+					"y": 8
+				}
+			},
+			{
+				"id": 6,
+				"title": "Memory Usage Over Time",
+				"type": "graph",
+				"targets": [
+					{
+						"expr": "go_memstats_heap_alloc_bytes",
+						"refId": "A",
+						"legendFormat": "Heap Memory"
+					}
+				],
+				"gridPos": {
+					"h": 9,
+					"w": 12,
+					"x": 12,
+					"y": 8
+				}
+			},
+			{
+				"id": 7,
+				"title": "RTC Active Connections",
+				"type": "stat",
+				"targets": [
+					{
+						"expr": "rtc_active_connections",
+						"refId": "A"
+					}
+				],
+				"gridPos": {
+					"h": 8,
+					"w": 6,
+					"x": 0,
+					"y": 17
+				}
+			},
+			{
+				"id": 8,
+				"title": "Solana Active Connections",
+				"type": "stat",
+				"targets": [
+					{
+						"expr": "solana_active_connections",
+						"refId": "A"
+					}
+				],
+				"gridPos": {
+					"h": 8,
+					"w": 6,
+					"x": 6,
+					"y": 17
+				}
+			},
+			{
+				"id": 9,
+				"title": "Ethereum Active Connections",
+				"type": "stat",
+				"targets": [
+					{
+						"expr": "ethereum_active_connections",
+						"refId": "A"
+					}
+				],
+				"gridPos": {
+					"h": 8,
+					"w": 6,
+					"x": 12,
+					"y": 17
+				}
+			}
+		],
+		"time": {
+			"from": "now-5m",
+			"to": "now"
+		},
+		"refresh": "5s"
+	}
+}

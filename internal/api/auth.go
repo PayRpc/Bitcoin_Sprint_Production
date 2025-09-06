@@ -5,8 +5,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -221,6 +223,9 @@ func NewCustomerKeyManagerWithConfig(cfg config.Config, clock Clock, randReader 
 	}
 	manager.keyHashes[defaultKey] = hash
 
+	// Load API keys from shared data file (created by web frontend)
+	manager.loadSharedApiKeys()
+
 	return manager
 }
 
@@ -322,6 +327,114 @@ func (ckm *CustomerKeyManager) getRateLimitForTier(tier config.Tier) int {
 		return 50000
 	default:
 		return 100
+	}
+}
+
+// loadSharedApiKeys loads API keys from shared data file created by web frontend
+func (ckm *CustomerKeyManager) loadSharedApiKeys() {
+	dataPath := filepath.Join("data", "api_keys.json")
+	
+	// Check if file exists
+	if _, err := os.Stat(dataPath); os.IsNotExist(err) {
+		// File doesn't exist, that's ok - no keys to load
+		return
+	}
+
+	// Read the file
+	data, err := os.ReadFile(dataPath)
+	if err != nil {
+		// Log error but don't fail startup
+		return
+	}
+
+	// Parse JSON
+	var sharedKeys []map[string]interface{}
+	if err := json.Unmarshal(data, &sharedKeys); err != nil {
+		// Log error but don't fail startup
+		return
+	}
+
+	// Process each key
+	for _, keyData := range sharedKeys {
+		key, ok := keyData["key"].(string)
+		if !ok {
+			continue
+		}
+
+		tierStr, ok := keyData["tier"].(string)
+		if !ok {
+			continue
+		}
+
+		// Convert tier string to config.Tier
+		var tier config.Tier
+		switch tierStr {
+		case "FREE":
+			tier = config.TierFree
+		case "PRO":
+			tier = config.TierPro
+		case "BUSINESS":
+			tier = config.TierBusiness
+		case "TURBO":
+			tier = config.TierTurbo
+		case "ENTERPRISE":
+			tier = config.TierEnterprise
+		case "ENTERPRISE_PLUS":
+			tier = config.TierEnterprise // Map to highest tier
+		default:
+			tier = config.TierFree
+		}
+
+		// Parse dates
+		createdAtStr, _ := keyData["created_at"].(string)
+		expiresAtStr, _ := keyData["expires_at"].(string)
+		
+		createdAt := ckm.clock.Now()
+		expiresAt := ckm.clock.Now().AddDate(1, 0, 0)
+		
+		if createdAtStr != "" {
+			if parsed, err := time.Parse(time.RFC3339, createdAtStr); err == nil {
+				createdAt = parsed
+			}
+		}
+		
+		if expiresAtStr != "" {
+			if parsed, err := time.Parse(time.RFC3339, expiresAtStr); err == nil {
+				expiresAt = parsed
+			}
+		}
+
+		// Parse usage stats
+		requests := int64(0)
+		if reqFloat, ok := keyData["requests"].(float64); ok {
+			requests = int64(reqFloat)
+		}
+
+		// Check if key is revoked
+		revoked := false
+		if revokedVal, ok := keyData["revoked"].(bool); ok {
+			revoked = revokedVal
+		}
+
+		// Skip revoked or expired keys
+		if revoked || ckm.clock.Now().After(expiresAt) {
+			continue
+		}
+
+		// Create customer key entry
+		hash := ckm.hashKey(key)
+		ckm.keyHashes[key] = hash
+		ckm.keys[hash] = CustomerKey{
+			Hash:               hash,
+			Tier:               tier,
+			CreatedAt:          createdAt,
+			ExpiresAt:          expiresAt,
+			LastUsed:           createdAt, // Initialize with creation time
+			RequestCount:       requests,
+			RateLimitRemaining: ckm.getRateLimitForTier(tier),
+			ClientIP:           "",
+			UserAgent:          "",
+		}
 	}
 }
 

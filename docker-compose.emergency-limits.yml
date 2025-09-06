@@ -1,0 +1,56 @@
+# Emergency Resource Limits - Fixes 678% CPU oversubscription crisis
+
+services:
+  # --- Bitcoin Sprint API (PRIORITY - protect this) ---
+  bitcoin-sprint:
+    cpu_shares: 2048        # wins CPU contention
+    cpus: "2.00"            # 2 cores max
+    mem_limit: "2g"         # 2GB max
+    mem_reservation: "768m" # 768MB guaranteed
+    pids_limit: 4096
+    environment:
+      GOMAXPROCS: "2"        # matches cpus
+      GOMEMLIMIT: "1800MiB"  # Go memory limiter
+
+  # --- Grafana (tiny limits) ---
+  grafana:
+    cpu_shares: 64
+    cpus: "0.25"            # 1/4 core max
+    mem_limit: "384m"       # 384MB max
+    mem_reservation: "128m" # 128MB guaranteed
+    pids_limit: 512
+
+  # --- Solana validators (1 core each, max 3 running) ---
+  solana-validator:
+    cpu_shares: 256
+    cpus: "1.00"            # 1 core max
+    mem_limit: "1750m"      # 1.75GB max
+    mem_reservation: "1024m" # 1GB guaranteed
+    pids_limit: 2048
+
+  solana-validator-2:
+    cpu_shares: 256
+    cpus: "1.00"
+    mem_limit: "1750m"
+    mem_reservation: "1024m"
+    pids_limit: 2048
+
+  solana-validator-3:
+    cpu_shares: 256
+    cpus: "1.00"
+    mem_limit: "1750m"
+    mem_reservation: "1024m"
+    pids_limit: 2048
+
+  # DISABLE extra validators to reduce load (set scale to 0)
+  solana-validator-4:
+    scale: 0
+
+  solana-validator-5:
+    scale: 0
+
+  solana-validator-6:
+    scale: 0
+
+  solana-validator-7:
+    scale: 0

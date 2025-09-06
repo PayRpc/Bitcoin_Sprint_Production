@@ -126,21 +126,50 @@ type SolanaVersion struct {
 
 // NewSolanaRelay creates a new Solana relay client
 func NewSolanaRelay(cfg config.Config, logger *zap.Logger) *SolanaRelay {
+	// Get endpoints from config with fallbacks
+	wsEndpoints := cfg.GetStringSlice("SOLANA_WS_ENDPOINTS")
+	if len(wsEndpoints) == 0 {
+		// Fallback to working endpoints
+		wsEndpoints = []string{
+			"wss://solana.blockpi.network/v1/ws/public",
+		}
+		logger.Info("Using fallback Solana WebSocket endpoints", zap.Strings("endpoints", wsEndpoints))
+	}
+
+	timeout := cfg.GetDuration("SOLANA_TIMEOUT")
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
+
+	maxConnections := cfg.GetInt("SOLANA_MAX_CONNECTIONS")
+	if maxConnections == 0 {
+		maxConnections = 8
+	}
+
+	retryAttempts := cfg.GetInt("MAX_RETRY_ATTEMPTS")
+	if retryAttempts == 0 {
+		retryAttempts = 3
+	}
+
+	retryDelay := cfg.GetDuration("RETRY_DELAY_SECONDS") * time.Second
+	if retryDelay == 0 {
+		retryDelay = 2 * time.Second
+	}
+
 	relayConfig := RelayConfig{
 		Network:           "solana",
-		Endpoints:         []string{"wss://api.mainnet-beta.solana.com", "wss://solana.publicnode.com", "wss://rpc.ankr.com/solana"},
-		Timeout:           30 * time.Second,
-		RetryAttempts:     3,
-		RetryDelay:        2 * time.Second,
-		MaxConcurrency:    8,
+		Endpoints:         wsEndpoints,
+		Timeout:           timeout,
+		RetryAttempts:     retryAttempts,
+		RetryDelay:        retryDelay,
+		MaxConcurrency:    maxConnections,
 		BufferSize:        2000,
 		EnableCompression: true,
 	}
 
 	// Add any custom endpoints from config if available
 	if customEndpoints := cfg.GetStringSlice("SOLANA_RPC_ENDPOINTS"); len(customEndpoints) > 0 {
-		relayConfig.Endpoints = append(relayConfig.Endpoints, customEndpoints...)
-		logger.Info("Added custom Solana endpoints from config",
+		logger.Info("Custom Solana RPC endpoints configured",
 			zap.Strings("custom_endpoints", customEndpoints))
 	}
 

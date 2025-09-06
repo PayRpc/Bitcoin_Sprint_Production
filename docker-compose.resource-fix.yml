@@ -1,0 +1,102 @@
+# docker-compose.override.yml - EMERGENCY RESOURCE LIMITS
+# Fixes critical CPU oversubscription (678% -> controlled limits)
+
+x-logging: &logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  # --- Bitcoin Sprint API (PRIORITY - protect this) ---
+  bitcoin_sprint:
+    logging: *logging
+    cpu_shares: 2048        # wins CPU contention
+    cpus: "2.00"
+    mem_limit: "2g"
+    mem_reservation: "768m"
+    pids_limit: 4096
+    restart: unless-stopped
+    environment:
+      GOMAXPROCS: "2"        # matches cpus
+      GOMEMLIMIT: "1800MiB"  # Go 1.20+ memory limiter
+
+  # --- Config container (throttle hard - was consuming 678% CPU) ---
+  config:
+    logging: *logging
+    cpu_shares: 128
+    cpus: "0.50"          # 1/2 core max
+    mem_limit: "512m"
+    mem_reservation: "256m"
+    pids_limit: 512
+    restart: unless-stopped
+
+  # --- Solana validators (1 core each) ---
+  solana-validator-1:
+    logging: *logging
+    cpu_shares: 256
+    cpus: "1.00"          # 1 core per validator
+    mem_limit: "1750m"
+    mem_reservation: "1024m"
+    pids_limit: 2048
+    restart: unless-stopped
+
+  solana-validator-2:
+    logging: *logging
+    cpu_shares: 256
+    cpus: "1.00"
+    mem_limit: "1750m"
+    mem_reservation: "1024m"
+    pids_limit: 2048
+    restart: unless-stopped
+
+  solana-validator-3:
+    logging: *logging
+    cpu_shares: 256
+    cpus: "1.00"
+    mem_limit: "1750m"
+    mem_reservation: "1024m"
+    pids_limit: 2048
+    restart: unless-stopped
+
+  # DISABLE extra validators to reduce load
+  solana-validator-4:
+    logging: *logging
+    cpu_shares: 64
+    cpus: "0.25"
+    mem_limit: "512m"
+    restart: "no"        # Disabled
+
+  solana-validator-5:
+    logging: *logging
+    cpu_shares: 64
+    cpus: "0.25"
+    mem_limit: "512m"
+    restart: "no"        # Disabled
+
+  solana-validator-6:
+    logging: *logging
+    cpu_shares: 64
+    cpus: "0.25"
+    mem_limit: "512m"
+    restart: "no"        # Disabled
+
+  # --- Grafana (tiny limits) ---
+  sprint-grafana:
+    logging: *logging
+    cpu_shares: 64
+    cpus: "0.25"
+    mem_limit: "384m"
+    mem_reservation: "128m"
+    pids_limit: 512
+    restart: unless-stopped
+
+  # --- Prometheus (controlled limits) ---
+  sprint-prometheus:
+    logging: *logging
+    cpu_shares: 256
+    cpus: "0.75"
+    mem_limit: "1g"
+    mem_reservation: "512m"
+    pids_limit: 1024
+    restart: unless-stopped

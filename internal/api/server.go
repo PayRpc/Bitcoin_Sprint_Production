@@ -19,24 +19,25 @@ func (s *Server) RegisterSprintValueRoutes() {
 
 	// Core value proposition endpoints
 	if s.httpMux != nil {
-		// Universal chain endpoint - single API for all chains
-		s.httpMux.HandleFunc("/api/v1/universal/", s.universalChainHandler)
+		// Universal chain endpoint - single API for all chains (with auth)
+		s.httpMux.HandleFunc("/api/v1/universal/", s.auth(s.universalChainHandler))
 
-		// Performance monitoring endpoints
-		s.httpMux.HandleFunc("/api/v1/sprint/latency-stats", s.latencyStatsHandler)
-		s.httpMux.HandleFunc("/api/v1/sprint/cache-stats", s.cacheStatsHandler)
-		s.httpMux.HandleFunc("/api/v1/sprint/tier-comparison", s.tierComparisonHandler)
+		// Performance monitoring endpoints (with auth)
+		s.httpMux.HandleFunc("/api/v1/sprint/latency-stats", s.auth(s.latencyStatsHandler))
+		s.httpMux.HandleFunc("/api/v1/sprint/cache-stats", s.auth(s.cacheStatsHandler))
+		s.httpMux.HandleFunc("/api/v1/sprint/tier-comparison", s.auth(s.tierComparisonHandler))
 
-		// Simple endpoints for inlined components
-		s.httpMux.HandleFunc("/api/v1/latency", s.simpleLatencyHandler)
-		s.httpMux.HandleFunc("/api/v1/cache", s.simpleCacheHandler)
-		s.httpMux.HandleFunc("/api/v1/tiers", s.simpleTiersHandler)
+		// Simple endpoints for inlined components (with auth)
+		s.httpMux.HandleFunc("/api/v1/latency", s.auth(s.simpleLatencyHandler))
+		s.httpMux.HandleFunc("/api/v1/cache", s.auth(s.simpleCacheHandler))
+		s.httpMux.HandleFunc("/api/v1/tiers", s.auth(s.simpleTiersHandler))
 
-		// Value demonstration endpoint
-		s.httpMux.HandleFunc("/api/v1/sprint/value", SprintValueHandler)
+		// Value demonstration endpoint (with auth)
+		s.httpMux.HandleFunc("/api/v1/sprint/value", s.auth(SprintValueHandler))
 
-		s.logger.Info("Sprint competitive advantage routes registered",
+		s.logger.Info("Sprint competitive advantage routes registered with authentication",
 			zap.String("universal_endpoint", "/api/v1/universal/{chain}/{method}"),
+			zap.String("auth_required", "true"),
 			zap.String("value_props", "flat_p99,unified_api,predictive_cache,enterprise_tiers"))
 	}
 }

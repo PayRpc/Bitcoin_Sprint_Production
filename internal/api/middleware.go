@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -124,6 +125,10 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 
 		// Update key usage statistics
 		s.keyManager.UpdateKeyUsage(apiKey, getClientIP(r), r.UserAgent())
+
+		// Add customer tier to request context for handlers to use
+		ctx := context.WithValue(r.Context(), "customer_tier", customerKey.Tier)
+		r = r.WithContext(ctx)
 
 		// Use custom response writer to ensure status code is always set
 		customWriter := &responseWriter{
