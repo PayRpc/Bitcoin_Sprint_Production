@@ -1200,21 +1200,9 @@ pub unsafe extern "C" fn bloom_filter_insert(filter: *mut c_void, data: *const u
     let filter = &*(filter as *mut bloom_filter::UniversalBloomFilter);
     let slice = std::slice::from_raw_parts(data, len);
     
-    // Create a dummy transaction ID from the data for now
-    if slice.len() >= 32 {
-        let txid = bloom_filter::TransactionId::new("bitcoin", &slice[0..32]);
-        let vout = if slice.len() >= 36 {
-            u32::from_le_bytes([slice[32], slice[33], slice[34], slice[35]])
-        } else {
-            0
-        };
-        
-        match filter.insert_utxo(&txid, vout) {
-            Ok(_) => 0,
-            Err(_) => -1,
-        }
-    } else {
-        -1
+    match filter.insert_data(slice) {
+        Ok(_) => 0,
+        Err(_) => -1,
     }
 }
 
@@ -1228,21 +1216,9 @@ pub unsafe extern "C" fn bloom_filter_contains(filter: *mut c_void, data: *const
     let filter = &*(filter as *mut bloom_filter::UniversalBloomFilter);
     let slice = std::slice::from_raw_parts(data, len);
     
-    // Create a dummy transaction ID from the data for now
-    if slice.len() >= 32 {
-        let txid = bloom_filter::TransactionId::new("bitcoin", &slice[0..32]);
-        let vout = if slice.len() >= 36 {
-            u32::from_le_bytes([slice[32], slice[33], slice[34], slice[35]])
-        } else {
-            0
-        };
-        
-        match filter.contains_utxo(&txid, vout) {
-            Ok(result) => if result { 1 } else { 0 },
-            Err(_) => -1,
-        }
-    } else {
-        -1
+    match filter.contains_data(slice) {
+        Ok(result) => if result { 1 } else { 0 },
+        Err(_) => -1,
     }
 }
 
@@ -1266,13 +1242,6 @@ pub unsafe extern "C" fn bloom_filter_false_positive_rate(filter: *mut c_void) -
     
     let filter = &*(filter as *mut bloom_filter::UniversalBloomFilter);
     filter.get_false_positive_count()
-}
-    
-    if items > 0.0 {
-        false_positives / items
-    } else {
-        0.0
-    }
 }
 
 /// C FFI: Free bloom filter
@@ -1430,13 +1399,9 @@ pub unsafe extern "C" fn securebuffer_get_compliance_report(buffer: *mut c_void)
         return std::ptr::null_mut();
     }
     let buffer = &*(buffer as *mut SecureBuffer);
-    match buffer.get_compliance_report() {
-        Ok(report) => {
-            match CString::new(report) {
-                Ok(c_str) => c_str.into_raw(),
-                Err(_) => std::ptr::null_mut(),
-            }
-        },
+    let report = buffer.get_compliance_report();
+    match CString::new(report) {
+        Ok(c_str) => c_str.into_raw(),
         Err(_) => std::ptr::null_mut(),
     }
 }

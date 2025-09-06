@@ -7,7 +7,7 @@ package securebuf
 // This file provides a bridge to the Rust-based secure buffer implementation
 
 /*
-#cgo LDFLAGS: -lsecurebuffer
+#cgo LDFLAGS: -L../../secure/rust/target/x86_64-pc-windows-gnu/release -lsecurebuffer
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>

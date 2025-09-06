@@ -7,7 +7,7 @@ package securebuf
 // This file provides access to all enterprise features from the Rust library
 
 /*
-#cgo LDFLAGS: -lsecurebuffer
+#cgo LDFLAGS: -L../../secure/rust/target/x86_64-pc-windows-gnu/release -lsecurebuffer
 #include "../../secure/rust/include/securebuffer.h"
 #include <stdlib.h>
 #include <stdint.h>
