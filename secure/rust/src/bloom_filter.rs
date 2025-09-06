@@ -539,6 +539,32 @@ impl UniversalBloomFilter {
             Ok(false)
         }
     }
+
+    /// Get current item count (thread-safe)
+    pub fn get_item_count(&self) -> usize {
+        self.item_count.load(Ordering::Relaxed) as usize
+    }
+
+    /// Get false positive count (thread-safe)
+    pub fn get_false_positive_count(&self) -> f64 {
+        let items = self.item_count.load(Ordering::Relaxed) as f64;
+        let false_positives = self.false_positive_count.load(Ordering::Relaxed) as f64;
+        if items > 0.0 {
+            false_positives / items
+        } else {
+            0.0
+        }
+    }
+
+    /// Generic insert method for C FFI
+    pub fn insert_data(&self, data: &[u8]) -> Result<(), BloomFilterError> {
+        self.insert(data)
+    }
+
+    /// Generic contains method for C FFI  
+    pub fn contains_data(&self, data: &[u8]) -> Result<bool, BloomFilterError> {
+        self.contains(data)
+    }
 }
 
 /// Performance and security statistics
